@@ -37,45 +37,19 @@ function Stat({ label, value, ok }: { label: string; value: string; ok?: boolean
 }
 
 export function CaptureProbe({ controller }: { controller: AudioCaptureController }) {
-  const { state, micLevel, sysLevel, frames, bytes, sampleRate, sysTrack, error, start, stop } =
-    controller;
-  const running = state === 'running';
-  const busy = state === 'starting' || state === 'stopping';
+  const { state, micLevel, sysLevel, frames, bytes, sampleRate, sysTrack, error } = controller;
   const rateWarning = sampleRate !== null && sampleRate !== 16000;
 
   return (
-    <div className="w-full max-w-xl rounded-lg border border-neutral-800 bg-neutral-900 p-6">
-      <div className="mb-5 flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold tracking-wide text-neutral-200">
-          Audio capture probe
-        </h2>
+    <div className="w-full rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+      <div className="mb-4 flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold tracking-wide text-neutral-200">Capture diagnostics</h2>
         <span className="text-[11px] tracking-wide text-neutral-600">M1</span>
       </div>
 
-      <div className="mb-6 grid gap-4">
+      <div className="mb-5 grid gap-4">
         <Meter label="CH0 — MIC (you)" level={micLevel} accent={MIC_ACCENT} />
         <Meter label="CH1 — SYSTEM (others)" level={sysLevel} accent={SYS_ACCENT} />
-      </div>
-
-      <div className="mb-6">
-        {running ? (
-          <button
-            type="button"
-            onClick={() => void stop()}
-            className="rounded-md bg-red-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-400"
-          >
-            Stop
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => void start()}
-            disabled={busy}
-            className="rounded-md bg-emerald-400 px-5 py-2.5 text-sm font-semibold text-neutral-950 hover:bg-emerald-300 disabled:opacity-50"
-          >
-            {state === 'starting' ? 'Starting…' : 'Start capture'}
-          </button>
-        )}
       </div>
 
       <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-neutral-800 bg-neutral-800">

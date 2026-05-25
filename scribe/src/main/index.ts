@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { setupAudioCapture } from './audio/loopback';
 import { initDb, closeDb } from './db';
 import { registerIpcHandlers } from './ipc';
+import { disposeTranscription } from './ipc/transcription';
 import { logger } from './logger';
 
 // electron-vite sets this only in dev (renderer served by the Vite dev server).
@@ -86,5 +87,6 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
+  void disposeTranscription();
   closeDb();
 });

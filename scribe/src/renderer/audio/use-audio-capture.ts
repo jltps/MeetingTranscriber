@@ -14,13 +14,21 @@ export type AudioCaptureController = {
   stop: () => Promise<void>;
 };
 
+export type UseAudioCaptureOptions = {
+  // Called for each frame's interleaved PCM. M2 forwards it to the main process
+  // for transcription; the buffer is never stored locally (PRODUCT_SPEC.md §6.4).
+  onPcm?: (pcm: ArrayBuffer) => void;
+};
+
 // React glue over AudioCapture. Owns the meter peak-hold/decay and the frame/byte
-// counters. The PCM buffer in each frame is read for its size and then dropped —
-// it is never stored anywhere (PRODUCT_SPEC.md §6.4). Unmount tears capture down.
-export function useAudioCapture(): AudioCaptureController {
+// counters. The PCM buffer in each frame is read for its size, optionally handed
+// to onPcm, and then dropped — never stored. Unmount tears capture down.
+export function useAudioCapture(options: UseAudioCaptureOptions = {}): AudioCaptureController {
   const captureRef = useRef<AudioCapture | null>(null);
   const micPeak = useRef(0);
   const sysPeak = useRef(0);
+  const onPcmRef = useRef(options.onPcm);
+  onPcmRef.current = options.onPcm;
 
   const [state, setState] = useState<CaptureState>('idle');
   const [micLevel, setMicLevel] = useState(0);
@@ -39,7 +47,9 @@ export function useAudioCapture(): AudioCaptureController {
     setSysLevel(sysPeak.current);
     setFrames((n) => n + 1);
     setBytes((n) => n + frame.pcm.byteLength);
-    // frame.pcm is intentionally dropped here — no audio is ever persisted.
+    // Forward to transcription if a consumer is listening, then drop the buffer.
+    // It is never written to disk (PRODUCT_SPEC.md §6.4).
+    onPcmRef.current?.(frame.pcm);
   }, []);
 
   useEffect(() => {
