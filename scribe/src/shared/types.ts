@@ -20,3 +20,21 @@ export type EnhancedNotes = {
     sourceSegmentIds: number[];
   }>;
 };
+
+export type MeetingStatus = 'draft' | 'transcribing' | 'ended';
+
+/** Row-level meeting metadata for the sidebar list (PRODUCT_SPEC.md §11). */
+export type MeetingSummary = {
+  id: number;
+  title: string;
+  status: MeetingStatus;
+  createdAt: number;
+  startedAt: number | null;
+  endedAt: number | null;
+};
+
+/** A meeting plus its notes, for the open editor. */
+export type MeetingDetail = MeetingSummary & {
+  rawUserMd: string;
+  enhancedJson: string | null;
+};

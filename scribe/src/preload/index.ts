@@ -25,6 +25,18 @@ const api: ScribeApi = {
     ipcRenderer.on(IPC.transcriptionStatus, listener);
     return () => ipcRenderer.removeListener(IPC.transcriptionStatus, listener);
   },
+  meetings: {
+    list: () => ipcRenderer.invoke(IPC.meetingsList),
+    create: () => ipcRenderer.invoke(IPC.meetingsCreate),
+    get: (id) => ipcRenderer.invoke(IPC.meetingsGet, id),
+    getTranscript: (id) => ipcRenderer.invoke(IPC.meetingsGetTranscript, id),
+    saveNotes: (id, markdown) => ipcRenderer.invoke(IPC.meetingsSaveNotes, { id, markdown }),
+    updateTitle: (id, title) => ipcRenderer.invoke(IPC.meetingsUpdateTitle, { id, title }),
+    start: (id) => ipcRenderer.invoke(IPC.meetingsStart, id),
+    end: (id) => ipcRenderer.invoke(IPC.meetingsEnd, id),
+    remove: (id) => ipcRenderer.invoke(IPC.meetingsDelete, id),
+    search: (query) => ipcRenderer.invoke(IPC.meetingsSearch, query),
+  },
 };
 
 contextBridge.exposeInMainWorld('api', api);

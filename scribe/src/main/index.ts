@@ -10,6 +10,12 @@ import { logger } from './logger';
 const devUrl = process.env.ELECTRON_RENDERER_URL;
 const isDev = !!devUrl;
 
+// Lets the e2e smoke test point at a throwaway userData dir so it never touches
+// the real local database. Must be set before any path is resolved.
+if (process.env.SCRIBE_USER_DATA) {
+  app.setPath('userData', process.env.SCRIBE_USER_DATA);
+}
+
 // Strict production CSP (CLAUDE.md §1.3, PRODUCT_SPEC.md §7). 'unsafe-inline' is
 // kept only for styles (React/Tailwind inject inline styles); scripts are locked
 // to 'self'. In dev the Vite HMR client needs inline/eval, so the dev CSP comes
