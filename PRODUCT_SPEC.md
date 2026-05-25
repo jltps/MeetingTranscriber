@@ -121,9 +121,13 @@ We need two simultaneous audio sources:
    Use Electron's display-media loopback support. In the **main process**:
 
    ```ts
+   // Chromium requires a video source to be offered for getDisplayMedia, so we
+   // hand it a screen source and let the renderer discard the video track. We
+   // cannot pass `video: undefined` as earlier drafts suggested.
    session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
-     // Grant loopback system audio without a video source.
-     callback({ video: undefined, audio: 'loopback' });
+     desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
+       callback({ video: sources[0], audio: 'loopback' }); // 'loopback' = WASAPI system mix
+     });
    }, { useSystemPicker: false });
    ```
 
@@ -191,11 +195,19 @@ Enable Deepgram options: `multichannel=true`, `diarize=true`, `punctuate=true`,
 we physically know which channel is the mic.
 
 The renderer:
-1. Creates one `AudioContext`.
+1. Creates one `AudioContext` **forced to 16 kHz** (`new AudioContext({ sampleRate:
+   16000 })`). The browser resamples both inputs, so **no manual resampler is
+   needed**. Rare drivers refuse the rate — detect `ctx.sampleRate !== 16000` and
+   surface it rather than emitting bad PCM; M2 can add a worklet-side fallback
+   resampler behind the same interface.
 2. Wraps mic stream and system stream in `MediaStreamAudioSourceNode`s.
-3. Routes them into a `ChannelMergerNode` (mic → channel 0, system → channel 1).
-4. An `AudioWorkletProcessor` resamples to **16 kHz** and emits interleaved 16-bit
-   PCM frames (~100 ms each).
+3. Feeds them into a **2-input `AudioWorkletProcessor`** (mic → input 0 → channel 0,
+   system → input 1 → channel 1). This replaces the `ChannelMergerNode` of earlier
+   drafts: it keeps the mic and system signals cleanly separated with fewer moving
+   parts.
+4. The worklet **interleaves** the two inputs into 16-bit PCM (`[mic, sys, mic, sys,
+   …]`, the layout Deepgram multichannel `linear16` expects) and emits ~100 ms
+   frames. No resampling happens here — the 16 kHz context already did it.
 5. Frames are sent to the transcription session. **Key decision:** the Deepgram
    WebSocket should be opened from the **main process** (renderer posts PCM frames
    over IPC) so the API key never reaches the renderer. Acceptable alternative for

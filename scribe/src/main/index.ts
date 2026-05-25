@@ -1,5 +1,6 @@
 import { app, BrowserWindow, session } from 'electron';
 import { join } from 'node:path';
+import { setupAudioCapture } from './audio/loopback';
 import { initDb, closeDb } from './db';
 import { registerIpcHandlers } from './ipc';
 import { logger } from './logger';
@@ -19,6 +20,8 @@ const PROD_CSP = [
   "img-src 'self' data:",
   "font-src 'self'",
   "connect-src 'self'",
+  // The AudioWorklet module (/pcm-framer.worklet.js) loads as a worker-context script.
+  "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
   "frame-src 'none'",
@@ -64,6 +67,7 @@ app
   .whenReady()
   .then(() => {
     hardenSession();
+    setupAudioCapture(session.defaultSession);
     initDb();
     registerIpcHandlers();
     createWindow();
