@@ -4,7 +4,7 @@
 // preload bridge wires window.api methods to these channel names. The one
 // exception is the audio frame channel, a raw ArrayBuffer not validated per-frame.
 import { z } from 'zod';
-import type { MeetingDetail, MeetingSummary, TranscriptSegment } from './types';
+import type { EnhancedNotes, MeetingDetail, MeetingSummary, TranscriptSegment } from './types';
 
 export const IPC = {
   appGetStatus: 'app:getStatus',
@@ -25,6 +25,9 @@ export const IPC = {
   meetingsEnd: 'meetings:end',
   meetingsDelete: 'meetings:delete',
   meetingsSearch: 'meetings:search',
+  meetingsSaveEnhanced: 'meetings:saveEnhanced',
+
+  enhancerEnhance: 'enhancer:enhance',
 } as const;
 
 export const AppStatusSchema = z.object({
@@ -63,6 +66,22 @@ export const UpdateTitleSchema = z.object({ id: MeetingIdSchema, title: z.string
 export type UpdateTitleInput = z.infer<typeof UpdateTitleSchema>;
 export const SearchQuerySchema = z.string();
 
+export const EnhancedNotesSchema = z.object({
+  blocks: z.array(
+    z.object({
+      type: z.enum(['heading', 'paragraph', 'bullet', 'action_item']),
+      text: z.string(),
+      origin: z.enum(['user', 'ai']),
+      sourceSegmentIds: z.array(z.number()),
+    }),
+  ),
+}) satisfies z.ZodType<EnhancedNotes>;
+
+export const SaveEnhancedSchema = z.object({ id: MeetingIdSchema, notes: EnhancedNotesSchema });
+export type SaveEnhancedInput = z.infer<typeof SaveEnhancedSchema>;
+
+export type EnhanceResult = { notes: EnhancedNotes; degraded: boolean };
+
 export interface MeetingsApi {
   list(): Promise<MeetingSummary[]>;
   create(): Promise<MeetingSummary>;
@@ -74,6 +93,7 @@ export interface MeetingsApi {
   end(id: number): Promise<MeetingSummary>;
   remove(id: number): Promise<void>;
   search(query: string): Promise<MeetingSummary[]>;
+  saveEnhanced(id: number, notes: EnhancedNotes): Promise<void>;
 }
 
 /** The typed surface exposed to the renderer as window.api. */
@@ -85,4 +105,5 @@ export interface ScribeApi {
   onTranscriptSegment(cb: (seg: TranscriptSegment) => void): () => void;
   onTranscriptionStatus(cb: (status: TranscriptionStatus) => void): () => void;
   meetings: MeetingsApi;
+  enhance(meetingId: number): Promise<EnhanceResult>;
 }

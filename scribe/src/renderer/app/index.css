@@ -77,3 +77,13 @@ body {
   height: 0;
   pointer-events: none;
 }
+
+/* my-notes vs AI-notes distinction (PRODUCT_SPEC.md §8.3): user text reads
+   bright/primary, AI-added text reads dimmed. Editing AI text flips it to
+   .note-user via the EnhancedOwnership plugin. */
+.notes-editor :where(.note-user) {
+  color: #e5e5e5;
+}
+.notes-editor :where(.note-ai) {
+  color: #8b97a6;
+}

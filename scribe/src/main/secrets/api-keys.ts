@@ -29,3 +29,9 @@ export function getDeepgramKey(): string | null {
   const key = process.env.DEEPGRAM_API_KEY?.trim();
   return key ? key : null;
 }
+
+export function getAnthropicKey(): string | null {
+  ensureEnvLoaded();
+  const key = process.env.ANTHROPIC_API_KEY?.trim();
+  return key ? key : null;
+}

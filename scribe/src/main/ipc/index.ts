@@ -1,4 +1,5 @@
 import { registerAppIpc } from './app';
+import { registerEnhancerIpc } from './enhancer';
 import { registerMeetingsIpc } from './meetings';
 import { registerTranscriptionIpc } from './transcription';
 
@@ -7,4 +8,5 @@ export function registerIpcHandlers(): void {
   registerAppIpc();
   registerMeetingsIpc();
   registerTranscriptionIpc();
+  registerEnhancerIpc();
 }

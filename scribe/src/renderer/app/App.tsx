@@ -1,17 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
-import type { MeetingDetail, TranscriptSegment } from '../../shared/types';
+import type { EnhancedNotes, MeetingDetail, TranscriptSegment } from '../../shared/types';
+import { EnhancedNotesSchema } from '../../shared/ipc-contract';
 import { useAudioCapture } from '../audio/use-audio-capture';
 import { useTranscription } from '../features/transcript/use-transcription';
 import { TranscriptPanel } from '../features/transcript/TranscriptPanel';
 import { useMeetings } from '../features/meetings/use-meetings';
 import { MeetingSidebar } from '../features/meetings/MeetingSidebar';
 import { NotesEditor } from '../features/notes/NotesEditor';
+import { EnhancedNotesEditor } from '../features/notes/EnhancedNotesEditor';
 import { useDebouncedCallback } from '../lib/debounce';
 import { CaptureProbe } from './CaptureProbe';
 
-// M3 ties it together: a meeting list with lifecycle, a TipTap notes editor that
-// autosaves Markdown, a live/persisted transcript, and FTS search. One Start/Stop
-// drives capture + transcription on the selected meeting and persists finals.
+function parseEnhanced(json: string | null): EnhancedNotes | null {
+  if (!json) return null;
+  try {
+    const result = EnhancedNotesSchema.safeParse(JSON.parse(json));
+    return result.success ? result.data : null;
+  } catch {
+    return null;
+  }
+}
+
+// M4 adds enhancement: on Stop (or via the Enhance button) the meeting's notes +
+// transcript go to Claude, which returns structured notes. The enhanced view
+// renders user vs AI text distinctly; editing AI text flips it to user-owned.
 export function App() {
   const meetings = useMeetings();
   const transcription = useTranscription();
@@ -22,6 +34,12 @@ export function App() {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const [enhanced, setEnhanced] = useState<EnhancedNotes | null>(null);
+  const [degraded, setDegraded] = useState(false);
+  const [view, setView] = useState<'original' | 'enhanced'>('original');
+  const [enhancing, setEnhancing] = useState(false);
+  const [enhanceError, setEnhanceError] = useState<string | null>(null);
 
   const connectedRef = useRef(false);
   connectedRef.current = transcription.connected;
@@ -35,13 +53,12 @@ export function App() {
   const showingActive = running && selectedId === activeId;
   const error = transcription.error ?? capture.error;
 
-  // Load the selected meeting's notes + persisted transcript (not while it is the
-  // live, actively-transcribing meeting — that view comes from the live stream).
   useEffect(() => {
     if (selectedId === null) {
       setDetail(null);
       setLoadedSegments([]);
       setTitle('');
+      setEnhanced(null);
       return;
     }
     let cancelled = false;
@@ -54,6 +71,11 @@ export function App() {
       setDetail(d);
       setLoadedSegments(segs);
       setTitle(d?.title ?? '');
+      const parsed = parseEnhanced(d?.enhancedJson ?? null);
+      setEnhanced(parsed);
+      setDegraded(false);
+      setEnhanceError(null);
+      setView(parsed ? 'enhanced' : 'original');
     })();
     return () => {
       cancelled = true;
@@ -63,6 +85,21 @@ export function App() {
   const saveTitle = useDebouncedCallback((id: number, value: string) => {
     void window.api.meetings.updateTitle(id, value).then(() => meetings.refresh());
   }, 500);
+
+  const enhanceMeeting = async (id: number): Promise<void> => {
+    setEnhancing(true);
+    setEnhanceError(null);
+    try {
+      const result = await window.api.enhance(id);
+      setEnhanced(result.notes);
+      setDegraded(result.degraded);
+      setView('enhanced');
+    } catch (e) {
+      setEnhanceError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEnhancing(false);
+    }
+  };
 
   const onNewNote = async (): Promise<void> => {
     const meeting = await meetings.create();
@@ -95,15 +132,18 @@ export function App() {
 
   const stop = async (): Promise<void> => {
     setBusy(true);
+    const endedId = activeId;
+    let endedSegments: TranscriptSegment[] = [];
     try {
       await capture.stop();
       await transcription.stop();
-      if (activeId !== null) {
-        await window.api.meetings.end(activeId);
+      if (endedId !== null) {
+        await window.api.meetings.end(endedId);
         const [d, segs] = await Promise.all([
-          window.api.meetings.get(activeId),
-          window.api.meetings.getTranscript(activeId),
+          window.api.meetings.get(endedId),
+          window.api.meetings.getTranscript(endedId),
         ]);
+        endedSegments = segs;
         setDetail(d);
         setLoadedSegments(segs);
         setTitle(d?.title ?? '');
@@ -113,11 +153,16 @@ export function App() {
     } finally {
       setBusy(false);
     }
+    // Auto-enhance once the meeting has ended and a transcript exists (§4).
+    if (endedId !== null && endedSegments.length > 0) {
+      await enhanceMeeting(endedId);
+    }
   };
 
   const list = meetings.results ?? meetings.meetings;
   const finals = showingActive ? transcription.finals : loadedSegments;
   const interims = showingActive ? transcription.interims : [];
+  const hasEnhanced = enhanced !== null;
 
   return (
     <div className="flex h-full bg-neutral-950 text-neutral-200">
@@ -156,44 +201,85 @@ export function App() {
                     Recording
                   </span>
                 )}
-                {transcription.connected && (
-                  <span className="shrink-0 text-[11px] text-emerald-400">transcribing</span>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {hasEnhanced && (
+                  <div className="flex overflow-hidden rounded-md border border-neutral-700 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setView('original')}
+                      className={`px-2.5 py-1 ${view === 'original' ? 'bg-neutral-700 text-neutral-100' : 'text-neutral-400'}`}
+                    >
+                      Original
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setView('enhanced')}
+                      className={`px-2.5 py-1 ${view === 'enhanced' ? 'bg-neutral-700 text-neutral-100' : 'text-neutral-400'}`}
+                    >
+                      Enhanced
+                    </button>
+                  </div>
+                )}
+                {!running && (
+                  <button
+                    type="button"
+                    onClick={() => void enhanceMeeting(detail.id)}
+                    disabled={enhancing}
+                    className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm font-medium text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+                  >
+                    {enhancing ? 'Enhancing…' : 'Enhance'}
+                  </button>
+                )}
+                {running ? (
+                  <button
+                    type="button"
+                    onClick={() => void stop()}
+                    className="rounded-md bg-red-500 px-4 py-1.5 text-sm font-semibold text-white hover:bg-red-400"
+                  >
+                    Stop
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void start()}
+                    disabled={busy}
+                    className="rounded-md bg-emerald-400 px-4 py-1.5 text-sm font-semibold text-neutral-950 hover:bg-emerald-300 disabled:opacity-50"
+                  >
+                    {busy ? 'Starting…' : 'Start'}
+                  </button>
                 )}
               </div>
-              {running ? (
-                <button
-                  type="button"
-                  onClick={() => void stop()}
-                  className="shrink-0 rounded-md bg-red-500 px-4 py-1.5 text-sm font-semibold text-white hover:bg-red-400"
-                >
-                  Stop
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void start()}
-                  disabled={busy}
-                  className="shrink-0 rounded-md bg-emerald-400 px-4 py-1.5 text-sm font-semibold text-neutral-950 hover:bg-emerald-300 disabled:opacity-50"
-                >
-                  {busy ? 'Starting…' : 'Start'}
-                </button>
-              )}
             </header>
 
-            {error && (
+            {(error || enhanceError) && (
               <div className="border-b border-red-500/30 bg-red-500/10 px-6 py-2 text-xs text-red-300">
-                {error}
+                {error ?? enhanceError}
+              </div>
+            )}
+            {view === 'enhanced' && degraded && (
+              <div className="border-b border-amber-500/30 bg-amber-500/10 px-6 py-2 text-xs text-amber-300">
+                Degraded result: structured enhancement failed, so this is a plain-text fallback.
               </div>
             )}
 
             <div className="flex flex-1 overflow-hidden">
               <section className="flex-1 overflow-y-auto border-r border-neutral-800 p-6">
-                <NotesEditor
-                  key={detail.id}
-                  meetingId={detail.id}
-                  initialMarkdown={detail.rawUserMd}
-                  onSave={(id, markdown) => void window.api.meetings.saveNotes(id, markdown)}
-                />
+                {view === 'enhanced' && enhanced ? (
+                  <EnhancedNotesEditor
+                    key={`enhanced-${detail.id}`}
+                    meetingId={detail.id}
+                    notes={enhanced}
+                    onSave={(id, notes) => void window.api.meetings.saveEnhanced(id, notes)}
+                  />
+                ) : (
+                  <NotesEditor
+                    key={detail.id}
+                    meetingId={detail.id}
+                    initialMarkdown={detail.rawUserMd}
+                    onSave={(id, markdown) => void window.api.meetings.saveNotes(id, markdown)}
+                  />
+                )}
               </section>
               <section className="flex w-[42%] shrink-0 flex-col overflow-hidden p-6">
                 <div className="min-h-0 flex-1">

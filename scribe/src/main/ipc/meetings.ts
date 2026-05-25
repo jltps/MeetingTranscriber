@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import {
   IPC,
   MeetingIdSchema,
+  SaveEnhancedSchema,
   SaveNotesSchema,
   SearchQuerySchema,
   UpdateTitleSchema,
@@ -32,4 +33,8 @@ export function registerMeetingsIpc(): void {
   ipcMain.handle(IPC.meetingsSearch, (_event, raw) =>
     meetings.searchMeetings(SearchQuerySchema.parse(raw)),
   );
+  ipcMain.handle(IPC.meetingsSaveEnhanced, (_event, raw) => {
+    const input = SaveEnhancedSchema.parse(raw);
+    meetings.saveEnhancedNotes(input.id, JSON.stringify(input.notes));
+  });
 }

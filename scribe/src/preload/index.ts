@@ -36,7 +36,9 @@ const api: ScribeApi = {
     end: (id) => ipcRenderer.invoke(IPC.meetingsEnd, id),
     remove: (id) => ipcRenderer.invoke(IPC.meetingsDelete, id),
     search: (query) => ipcRenderer.invoke(IPC.meetingsSearch, query),
+    saveEnhanced: (id, notes) => ipcRenderer.invoke(IPC.meetingsSaveEnhanced, { id, notes }),
   },
+  enhance: (meetingId) => ipcRenderer.invoke(IPC.enhancerEnhance, meetingId),
 };
 
 contextBridge.exposeInMainWorld('api', api);

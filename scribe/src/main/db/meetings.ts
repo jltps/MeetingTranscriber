@@ -5,6 +5,7 @@ import type {
   MeetingSummary,
   TranscriptSegment,
 } from '../../shared/types';
+import type { EnhancerSegment } from '../enhancer/enhancer';
 
 // All meeting/notes/transcript persistence (PRODUCT_SPEC.md §11). better-sqlite3
 // is synchronous and main-process only. The FTS index (search_fts) is rebuilt for
@@ -134,6 +135,29 @@ export function insertTranscriptSegment(meetingId: number, seg: TranscriptSegmen
       Math.round(seg.startMs),
       Math.round(seg.endMs),
     );
+}
+
+export function saveEnhancedNotes(id: number, enhancedJson: string): void {
+  getDb()
+    .prepare(`UPDATE notes SET enhanced_json = ?, enhanced_at = ? WHERE meeting_id = ?`)
+    .run(enhancedJson, Date.now(), id);
+}
+
+export function getEnhancerSegments(meetingId: number): EnhancerSegment[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, channel, speaker_label, text, start_ms, end_ms
+       FROM transcript_segments WHERE meeting_id = ? ORDER BY start_ms, id`,
+    )
+    .all(meetingId) as Array<SegmentRow & { id: number }>;
+  return rows.map((r) => ({
+    id: r.id,
+    channel: r.channel === 0 ? 0 : 1,
+    speakerLabel: r.speaker_label,
+    text: r.text,
+    startMs: r.start_ms,
+    endMs: r.end_ms,
+  }));
 }
 
 export function getTranscript(meetingId: number): TranscriptSegment[] {
