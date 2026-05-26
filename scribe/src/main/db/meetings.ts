@@ -3,9 +3,12 @@ import type {
   MeetingDetail,
   MeetingStatus,
   MeetingSummary,
+  MeetingUsage,
   PersistedSegment,
   TranscriptSegment,
 } from '../../shared/types';
+import type { UsageTotals } from '../../shared/ipc-contract';
+import { estimateCost } from '../enhancer/pricing';
 import type { EnhancerSegment } from '../enhancer/enhancer';
 
 // All meeting/notes/transcript persistence (PRODUCT_SPEC.md §11). better-sqlite3
@@ -20,6 +23,9 @@ type MeetingRow = {
   started_at: number | null;
   ended_at: number | null;
   template_id: number | null;
+  deepgram_audio_ms: number;
+  claude_input_tokens: number;
+  claude_output_tokens: number;
 };
 
 type SegmentRow = {
@@ -42,7 +48,16 @@ function toSummary(row: MeetingRow): MeetingSummary {
   };
 }
 
-const SUMMARY_COLUMNS = 'id, title, status, created_at, started_at, ended_at, template_id';
+function rowToUsage(row: MeetingRow): MeetingUsage {
+  return {
+    deepgramAudioMs: row.deepgram_audio_ms ?? 0,
+    claudeInputTokens: row.claude_input_tokens ?? 0,
+    claudeOutputTokens: row.claude_output_tokens ?? 0,
+  };
+}
+
+const SUMMARY_COLUMNS =
+  'id, title, status, created_at, started_at, ended_at, template_id, deepgram_audio_ms, claude_input_tokens, claude_output_tokens';
 
 function getSummary(id: number): MeetingSummary {
   const row = getDb()
@@ -86,6 +101,58 @@ export function getMeeting(id: number): MeetingDetail | null {
     enhancedJson: note?.enhanced_json ?? null,
     templateId: row.template_id,
     enhancedLang: note?.enhanced_lang ?? null,
+    usage: rowToUsage(row),
+  };
+}
+
+/**
+ * Persist usage stats after transcription stops (Deepgram side) or after
+ * enhancement (Claude side). Called with partial updates — columns not in the
+ * update are left untouched via column-specific UPDATEs.
+ */
+export function saveDeepgramUsage(id: number, deepgramAudioMs: number): void {
+  getDb()
+    .prepare(`UPDATE meetings SET deepgram_audio_ms = deepgram_audio_ms + ? WHERE id = ?`)
+    .run(Math.round(deepgramAudioMs), id);
+}
+
+export function saveClaudeUsage(
+  id: number,
+  inputTokens: number,
+  outputTokens: number,
+): void {
+  getDb()
+    .prepare(
+      `UPDATE meetings
+       SET claude_input_tokens  = claude_input_tokens  + ?,
+           claude_output_tokens = claude_output_tokens + ?
+       WHERE id = ?`,
+    )
+    .run(inputTokens, outputTokens, id);
+}
+
+/**
+ * Aggregate usage totals across all meetings for the Settings "Usage & Cost" section.
+ */
+export function getUsageTotals(): UsageTotals {
+  const row = getDb()
+    .prepare(
+      `SELECT
+         COALESCE(SUM(deepgram_audio_ms),    0) AS deepgramAudioMs,
+         COALESCE(SUM(claude_input_tokens),  0) AS claudeInputTokens,
+         COALESCE(SUM(claude_output_tokens), 0) AS claudeOutputTokens
+       FROM meetings`,
+    )
+    .get() as { deepgramAudioMs: number; claudeInputTokens: number; claudeOutputTokens: number };
+  return {
+    deepgramAudioMs: row.deepgramAudioMs,
+    claudeInputTokens: row.claudeInputTokens,
+    claudeOutputTokens: row.claudeOutputTokens,
+    estimatedCostUsd: estimateCost(
+      row.deepgramAudioMs,
+      row.claudeInputTokens,
+      row.claudeOutputTokens,
+    ),
   };
 }
 

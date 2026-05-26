@@ -232,6 +232,19 @@ Rules:
       );
     `,
   },
+  {
+    version: 6,
+    name: 'usage-tracking',
+    // Per-meeting usage columns for cost visibility (ROADMAP_01 §3).
+    // Additive ALTER TABLEs — existing rows default to 0 (no cost recorded).
+    // deepgram_audio_ms: total captured audio in milliseconds (both channels).
+    // claude_input/output_tokens: tokens consumed by the Anthropic enhancement call.
+    sql: `
+      ALTER TABLE meetings ADD COLUMN deepgram_audio_ms    INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE meetings ADD COLUMN claude_input_tokens  INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE meetings ADD COLUMN claude_output_tokens INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 export function runMigrations(db: Database): void {

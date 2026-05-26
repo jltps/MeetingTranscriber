@@ -14,6 +14,7 @@ import { PrivacyNotice } from '../features/settings/PrivacyNotice';
 import { TemplatePickerModal } from '../features/templates/TemplatePickerModal';
 import { useDebouncedCallback } from '../lib/debounce';
 import { CaptureProbe } from './CaptureProbe';
+import { estimateCost, formatAudioDuration, formatCost } from '../../shared/pricing';
 
 function parseEnhanced(json: string | null): EnhancedNotes | null {
   if (!json) return null;
@@ -67,9 +68,13 @@ export function App() {
 
   const connectedRef = useRef(false);
   connectedRef.current = transcription.connected;
+  // Also push audio while reconnecting — the main-process session buffers frames
+  // in RAM during the gap and flushes them on reconnect (ROADMAP_01 §A).
+  const reconnectingRef = useRef(false);
+  reconnectingRef.current = transcription.reconnecting;
   const capture = useAudioCapture({
     onPcm: (pcm) => {
-      if (connectedRef.current) window.api.pushAudioFrame(pcm);
+      if (connectedRef.current || reconnectingRef.current) window.api.pushAudioFrame(pcm);
     },
     micDeviceId: settings?.micDeviceId ?? null,
   });
@@ -324,8 +329,26 @@ export function App() {
                     )}
                   </span>
                 )}
+                {running && transcription.reconnecting && (
+                  <span className="flex shrink-0 items-center gap-1.5 rounded bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400">
+                    <span className="h-2 w-2 animate-spin rounded-full border border-amber-400 border-t-transparent" />
+                    Reconnecting…
+                  </span>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                {/* Per-meeting cost chip — shown once transcription or enhancement has been used */}
+                {!running && detail && (detail.usage.deepgramAudioMs > 0 || detail.usage.claudeInputTokens > 0) && (
+                  <span
+                    title={`Deepgram: ${formatAudioDuration(detail.usage.deepgramAudioMs)} · Claude: ${(detail.usage.claudeInputTokens + detail.usage.claudeOutputTokens).toLocaleString()} tokens`}
+                    className="rounded bg-neutral-800 px-2 py-0.5 text-[10px] tabular-nums text-neutral-500"
+                  >
+                    ~{formatCost(estimateCost(detail.usage.deepgramAudioMs, detail.usage.claudeInputTokens, detail.usage.claudeOutputTokens))}
+                    {detail.usage.deepgramAudioMs > 0 && (
+                      <> · {formatAudioDuration(detail.usage.deepgramAudioMs)}</>
+                    )}
+                  </span>
+                )}
                 {hasEnhanced && (
                   <div className="flex overflow-hidden rounded-md border border-neutral-700 text-xs">
                     <button

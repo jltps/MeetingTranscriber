@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { AppStatusSchema } from '../src/shared/ipc-contract';
+import { AppStatusSchema, TranscriptionStatusSchema } from '../src/shared/ipc-contract';
 
 describe('AppStatusSchema', () => {
   it('accepts a valid status payload', () => {
@@ -15,5 +15,22 @@ describe('AppStatusSchema', () => {
 
   it('rejects a payload missing required fields', () => {
     expect(() => AppStatusSchema.parse({ platform: 'win32' })).toThrow();
+  });
+});
+
+describe('TranscriptionStatusSchema', () => {
+  it('accepts all four valid states', () => {
+    for (const state of ['open', 'closed', 'error', 'reconnecting'] as const) {
+      expect(() => TranscriptionStatusSchema.parse({ state })).not.toThrow();
+    }
+  });
+
+  it('accepts a message with the payload', () => {
+    expect(TranscriptionStatusSchema.parse({ state: 'reconnecting', message: 'Attempt 1 of 5…' }))
+      .toEqual({ state: 'reconnecting', message: 'Attempt 1 of 5…' });
+  });
+
+  it('rejects an unknown state', () => {
+    expect(() => TranscriptionStatusSchema.parse({ state: 'unknown' })).toThrow();
   });
 });

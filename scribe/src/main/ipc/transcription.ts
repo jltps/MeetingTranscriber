@@ -3,7 +3,7 @@ import type { WebContents } from 'electron';
 import { IPC, TranscriptionStartSchema } from '../../shared/ipc-contract';
 import { createTranscriptionSession } from '../transcription';
 import type { TranscriptionSession } from '../transcription/session';
-import { insertTranscriptSegment } from '../db/meetings';
+import { insertTranscriptSegment, saveDeepgramUsage } from '../db/meetings';
 import { logger } from '../logger';
 
 // One active session at a time. Control messages (start/stop) are Zod-validated;
@@ -22,12 +22,22 @@ export function getDetectedLanguage(): string | null {
   return detectedLanguage;
 }
 
+// Audio duration tracking for Deepgram cost estimation (ROADMAP_01 §3).
+// PCM frames are Int16Array (2 bytes/sample), channels = audioChannels.
+// Duration (ms) = (byteLength / 2 / channels / sampleRate) * 1000
+let audioSampleRate = 0;
+let audioChannels = 0;
+let audioMs = 0;
+
 export function registerTranscriptionIpc(): void {
   ipcMain.handle(IPC.transcriptionStart, async (event, raw) => {
     const opts = TranscriptionStartSchema.parse(raw);
     target = event.sender;
     meetingId = opts.meetingId;
     detectedLanguage = null; // reset for new session
+    audioSampleRate = opts.sampleRate;
+    audioChannels = opts.channels;
+    audioMs = 0;
     if (session) {
       await session.stop();
       session = null;
@@ -51,12 +61,25 @@ export function registerTranscriptionIpc(): void {
   ipcMain.handle(IPC.transcriptionStop, async () => {
     await session?.stop();
     session = null;
+    // Save accumulated Deepgram audio duration to the DB for cost tracking.
+    if (meetingId !== null && audioMs > 0) {
+      try {
+        saveDeepgramUsage(meetingId, audioMs);
+      } catch (e) {
+        logger.info('failed to save deepgram usage', String(e));
+      }
+    }
     meetingId = null;
+    audioMs = 0;
     logger.info('transcription stopped');
   });
 
   ipcMain.on(IPC.transcriptionPushFrame, (_event, buf: ArrayBuffer) => {
     if (!session) return;
+    // Accumulate audio duration for cost estimation (ROADMAP_01 §3).
+    if (audioSampleRate > 0 && audioChannels > 0) {
+      audioMs += (buf.byteLength / 2 / audioChannels / audioSampleRate) * 1000;
+    }
     session.pushAudio(new Int16Array(buf));
   });
 }
@@ -64,5 +87,13 @@ export function registerTranscriptionIpc(): void {
 export async function disposeTranscription(): Promise<void> {
   await session?.stop();
   session = null;
+  if (meetingId !== null && audioMs > 0) {
+    try {
+      saveDeepgramUsage(meetingId, audioMs);
+    } catch {
+      /* best effort */
+    }
+  }
   meetingId = null;
+  audioMs = 0;
 }

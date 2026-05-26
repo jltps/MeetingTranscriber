@@ -21,9 +21,7 @@ export function createTranscriptionSession(
     apiKey: getDeepgramKey() ?? '',
     languageSetting: getLanguage(),
     onLanguageDetected: config.onLanguageDetected,
-    onOpen: () => config.onStatus({ state: 'open' }),
-    onClose: () => config.onStatus({ state: 'closed' }),
-    onError: (error) => config.onStatus({ state: 'error', message: error.message }),
+    onStatus: config.onStatus,
   });
   session.onPartial(config.onSegment);
   session.onFinal(config.onSegment);

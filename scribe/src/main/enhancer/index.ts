@@ -1,13 +1,20 @@
 import { AnthropicEnhancer } from './anthropic';
 import { getAnthropicKey } from '../secrets/api-keys';
 import { getGlobalInstructions } from '../db/settings';
-import type { EnhanceInput } from './enhancer';
-import type { EnhanceResult } from '../../shared/ipc-contract';
+import type { EnhanceInput, EnhancerUsage } from './enhancer';
+import type { EnhancedNotes } from '../../shared/types';
+
+/** Full result from runEnhancement, including token usage for cost tracking. */
+export type RunEnhancementResult = {
+  notes: EnhancedNotes;
+  degraded: boolean;
+  usage: EnhancerUsage;
+};
 
 // Orchestrates enhancement behind the Enhancer interface (CLAUDE.md §8). On
 // strict-JSON failure (after the in-method retry) it falls back to a plain
 // Markdown enhancement and marks the result degraded for the UI.
-export async function runEnhancement(input: EnhanceInput): Promise<EnhanceResult> {
+export async function runEnhancement(input: EnhanceInput): Promise<RunEnhancementResult> {
   const apiKey = getAnthropicKey();
   if (!apiKey) {
     throw new Error('Anthropic API key not set. Set ANTHROPIC_API_KEY (env or .env) before enhancing.');
@@ -20,8 +27,10 @@ export async function runEnhancement(input: EnhanceInput): Promise<EnhanceResult
     globalInstructions: input.globalInstructions ?? (getGlobalInstructions() || undefined),
   };
   try {
-    return { notes: await enhancer.enhance(fullInput), degraded: false };
+    const result = await enhancer.enhance(fullInput);
+    return { notes: result.notes, degraded: false, usage: result.usage };
   } catch {
-    return { notes: await enhancer.enhanceFallback(fullInput), degraded: true };
+    const result = await enhancer.enhanceFallback(fullInput);
+    return { notes: result.notes, degraded: true, usage: result.usage };
   }
 }

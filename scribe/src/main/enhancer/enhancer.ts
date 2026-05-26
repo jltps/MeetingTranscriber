@@ -26,8 +26,21 @@ export type EnhanceInput = {
   globalInstructions?: string;
 };
 
+/** Token consumption for a single enhancement call (ROADMAP_01 §3). */
+export type EnhancerUsage = {
+  inputTokens: number;
+  outputTokens: number;
+};
+
+/** Result of a successful enhancement, including token usage for cost tracking. */
+export type EnhanceResult = {
+  notes: EnhancedNotes;
+  usage: EnhancerUsage;
+};
+
 // The enhancement provider interface (PRODUCT_SPEC.md §9). UI/IPC code depends on
 // the factory in ./index, never on a concrete provider (CLAUDE.md §8).
 export interface Enhancer {
-  enhance(input: EnhanceInput): Promise<EnhancedNotes>;
+  enhance(input: EnhanceInput): Promise<EnhanceResult>;
+  enhanceFallback(input: EnhanceInput): Promise<EnhanceResult>;
 }

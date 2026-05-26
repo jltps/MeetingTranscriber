@@ -47,6 +47,14 @@ export type MeetingSummary = {
   templateId: number | null;
 };
 
+/** Per-meeting usage snapshot (ROADMAP_01 §3). Figures are cumulative totals. */
+export type MeetingUsage = {
+  /** Total captured audio in milliseconds (single stream; cost is 2× for Deepgram's 2-channel billing). */
+  deepgramAudioMs: number;
+  claudeInputTokens: number;
+  claudeOutputTokens: number;
+};
+
 /** A meeting plus its notes, for the open editor. */
 export type MeetingDetail = MeetingSummary & {
   rawUserMd: string;
@@ -55,6 +63,8 @@ export type MeetingDetail = MeetingSummary & {
   templateId: number | null;
   /** BCP-47 of the language the last enhancement was written in (FEATURES §A2, §C). */
   enhancedLang: string | null;
+  /** Usage stats for cost display (ROADMAP_01 §3). */
+  usage: MeetingUsage;
 };
 
 /** How a template resolves its language (FEATURES §C1). */

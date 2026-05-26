@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { LanguageSetting, Template, TemplateCreate } from '../../../shared/types';
 import type { SettingsView, TestProvider, TestResult } from '../../../shared/ipc-contract';
 import { TemplateEditorModal } from '../templates/TemplateEditorModal';
+import { estimateCost, formatAudioDuration, formatCost } from '../../../shared/pricing';
 
 const LANGUAGE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'auto', label: 'Auto-detect' },
@@ -310,6 +311,61 @@ export function SettingsModal({
                   </div>
                 ))}
               </div>
+            </section>
+
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                Usage &amp; Cost
+              </h3>
+              {(() => {
+                const t = settings.usageTotals;
+                const hasAny = t.deepgramAudioMs > 0 || t.claudeInputTokens > 0;
+                if (!hasAny) {
+                  return (
+                    <p className="text-[11px] text-neutral-500">
+                      No usage recorded yet. Cost will appear after your first transcription and enhancement.
+                    </p>
+                  );
+                }
+                const deepgramCost = estimateCost(t.deepgramAudioMs, 0, 0);
+                const claudeCost = estimateCost(0, t.claudeInputTokens, t.claudeOutputTokens);
+                return (
+                  <div className="space-y-2">
+                    <div className="rounded-md border border-neutral-800 divide-y divide-neutral-800 text-xs">
+                      {t.deepgramAudioMs > 0 && (
+                        <div className="flex items-center justify-between px-3 py-2">
+                          <span className="text-neutral-400">
+                            Deepgram transcription
+                            <span className="ml-1.5 text-neutral-600">
+                              {formatAudioDuration(t.deepgramAudioMs)}
+                            </span>
+                          </span>
+                          <span className="tabular-nums text-neutral-300">{formatCost(deepgramCost)}</span>
+                        </div>
+                      )}
+                      {t.claudeInputTokens > 0 && (
+                        <div className="flex items-center justify-between px-3 py-2">
+                          <span className="text-neutral-400">
+                            Claude enhancement
+                            <span className="ml-1.5 text-neutral-600">
+                              {(t.claudeInputTokens + t.claudeOutputTokens).toLocaleString()} tokens
+                            </span>
+                          </span>
+                          <span className="tabular-nums text-neutral-300">{formatCost(claudeCost)}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between px-3 py-2 font-medium">
+                        <span className="text-neutral-300">Total</span>
+                        <span className="tabular-nums text-neutral-200">{formatCost(t.estimatedCostUsd)}</span>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-neutral-600">
+                      Estimates based on standard list pricing. Actual charges depend on your Deepgram
+                      and Anthropic account terms.
+                    </p>
+                  </div>
+                );
+              })()}
             </section>
 
             <section className="space-y-3">

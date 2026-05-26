@@ -16,6 +16,7 @@ import {
   setSetting,
   wipeAllData,
 } from '../db/settings';
+import { getUsageTotals } from '../db/meetings';
 import {
   getAnthropicKey,
   getDeepgramKey,
@@ -36,6 +37,7 @@ export function registerSettingsIpc(): void {
     language: getLanguage(),
     globalInstructions: getGlobalInstructions(),
     privacyAccepted: getSetting('privacy_accepted') === '1',
+    usageTotals: getUsageTotals(),
   }));
 
   ipcMain.handle(IPC.settingsSetKeys, (_event, raw) => {

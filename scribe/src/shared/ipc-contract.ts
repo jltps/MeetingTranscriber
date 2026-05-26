@@ -82,7 +82,7 @@ export const TranscriptSegmentSchema = z.object({
 }) satisfies z.ZodType<TranscriptSegment>;
 
 export const TranscriptionStatusSchema = z.object({
-  state: z.enum(['open', 'closed', 'error']),
+  state: z.enum(['open', 'closed', 'error', 'reconnecting']),
   message: z.string().optional(),
 });
 export type TranscriptionStatus = z.infer<typeof TranscriptionStatusSchema>;
@@ -138,6 +138,14 @@ export const TestRequestSchema = z.object({
   key: z.string().optional(),
 });
 
+/** Aggregate usage across all meetings — for the Settings "Usage & Cost" section. */
+export type UsageTotals = {
+  deepgramAudioMs: number;
+  claudeInputTokens: number;
+  claudeOutputTokens: number;
+  estimatedCostUsd: number;
+};
+
 export type SettingsView = {
   deepgramKeySet: boolean;
   anthropicKeySet: boolean;
@@ -146,6 +154,8 @@ export type SettingsView = {
   /** Free-text instructions appended to every enhancement (FEATURES §B1). */
   globalInstructions: string;
   privacyAccepted: boolean;
+  /** Aggregate usage totals across all meetings (ROADMAP_01 §3). */
+  usageTotals: UsageTotals;
 };
 export type TestResult = { ok: boolean; message?: string };
 

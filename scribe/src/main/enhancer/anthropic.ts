@@ -1,7 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { EnhancedNotesSchema } from '../../shared/ipc-contract';
-import type { EnhancedNotes } from '../../shared/types';
-import type { EnhanceInput, Enhancer, EnhancerSegment } from './enhancer';
+import type { EnhanceInput, EnhanceResult, Enhancer, EnhancerSegment, EnhancerUsage } from './enhancer';
 import {
   FALLBACK_SYSTEM_PROMPT,
   SUMMARY_SYSTEM_PROMPT,
@@ -71,9 +70,15 @@ export class AnthropicEnhancer implements Enhancer {
     this.client = new Anthropic({ apiKey });
   }
 
-  async enhance(input: EnhanceInput): Promise<EnhancedNotes> {
-    const transcriptText = await this.prepareTranscript(input.transcript);
+  async enhance(input: EnhanceInput): Promise<EnhanceResult> {
+    const { text: transcriptText, usage: summaryUsage } = await this.prepareTranscript(input.transcript);
     const userContent = buildUserContent(input.userNotes, transcriptText);
+
+    // Accumulated tokens across retries and chunk-summarization.
+    const totalUsage: EnhancerUsage = {
+      inputTokens: summaryUsage.inputTokens,
+      outputTokens: summaryUsage.outputTokens,
+    };
 
     let lastError: unknown;
     // Strict JSON via forced tool use; retry once on parse/validation failure (§8).
@@ -97,12 +102,14 @@ export class AnthropicEnhancer implements Enhancer {
           tools: [ENHANCE_TOOL],
           tool_choice: { type: 'tool', name: ENHANCE_TOOL.name },
         });
+        totalUsage.inputTokens += response.usage.input_tokens;
+        totalUsage.outputTokens += response.usage.output_tokens;
         const toolUse = response.content.find(
           (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === ENHANCE_TOOL.name,
         );
         const parsed = EnhancedNotesSchema.safeParse(toolUse?.input);
-        if (parsed.success) return parsed.data;
-        lastError = parsed.success ? undefined : parsed.error;
+        if (parsed.success) return { notes: parsed.data, usage: totalUsage };
+        lastError = parsed.error;
       } catch (err) {
         lastError = err;
       }
@@ -113,8 +120,8 @@ export class AnthropicEnhancer implements Enhancer {
   }
 
   // Degraded path: plain-Markdown enhancement wrapped into EnhancedNotes (§8).
-  async enhanceFallback(input: EnhanceInput): Promise<EnhancedNotes> {
-    const transcriptText = await this.prepareTranscript(input.transcript);
+  async enhanceFallback(input: EnhanceInput): Promise<EnhanceResult> {
+    const { text: transcriptText, usage: summaryUsage } = await this.prepareTranscript(input.transcript);
     const response = await this.client.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,
@@ -123,18 +130,32 @@ export class AnthropicEnhancer implements Enhancer {
       ],
       messages: [{ role: 'user', content: buildUserContent(input.userNotes, transcriptText) }],
     });
-    return markdownFallbackToNotes(input.userNotes, textOf(response.content).trim());
+    const usage: EnhancerUsage = {
+      inputTokens: summaryUsage.inputTokens + response.usage.input_tokens,
+      outputTokens: summaryUsage.outputTokens + response.usage.output_tokens,
+    };
+    return {
+      notes: markdownFallbackToNotes(input.userNotes, textOf(response.content).trim()),
+      usage,
+    };
   }
 
   // For very long meetings: summarize each chunk, then merge (CLAUDE.md §8).
   // Segment ids are not preserved through summarization, so source links degrade
   // for those blocks — acceptable, and far better than truncating the transcript.
-  private async prepareTranscript(segments: EnhancerSegment[]): Promise<string> {
+  // Returns the merged transcript text AND cumulative token usage for all summary calls.
+  private async prepareTranscript(
+    segments: EnhancerSegment[],
+  ): Promise<{ text: string; usage: EnhancerUsage }> {
     const full = segmentsToText(segments);
-    if (full.length <= CHUNK_THRESHOLD_CHARS) return full;
+    if (full.length <= CHUNK_THRESHOLD_CHARS) {
+      return { text: full, usage: { inputTokens: 0, outputTokens: 0 } };
+    }
 
     const chunks = chunkByLines(full, CHUNK_SIZE_CHARS);
     const summaries: string[] = [];
+    let inputTokens = 0;
+    let outputTokens = 0;
     for (const chunk of chunks) {
       const response = await this.client.messages.create({
         model: MODEL,
@@ -144,9 +165,11 @@ export class AnthropicEnhancer implements Enhancer {
         ],
         messages: [{ role: 'user', content: chunk }],
       });
+      inputTokens += response.usage.input_tokens;
+      outputTokens += response.usage.output_tokens;
       summaries.push(textOf(response.content));
     }
-    return summaries.join('\n\n');
+    return { text: summaries.join('\n\n'), usage: { inputTokens, outputTokens } };
   }
 }
 

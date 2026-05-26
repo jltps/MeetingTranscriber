@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { IPC, MeetingIdSchema } from '../../shared/ipc-contract';
-import { getEnhancerSegments, getMeeting, saveEnhancedNotes } from '../db/meetings';
+import { getEnhancerSegments, getMeeting, saveClaudeUsage, saveEnhancedNotes } from '../db/meetings';
 import { getTemplate } from '../db/templates';
 import { getGlobalInstructions, getLanguage } from '../db/settings';
 import { runEnhancement } from '../enhancer';
@@ -48,13 +48,21 @@ export function registerEnhancerIpc(): void {
       globalInstructions: getGlobalInstructions() || undefined,
     });
     saveEnhancedNotes(id, JSON.stringify(result.notes), outputLanguage ?? null);
+    // Persist Claude token usage for cost tracking (ROADMAP_01 §3).
+    try {
+      saveClaudeUsage(id, result.usage.inputTokens, result.usage.outputTokens);
+    } catch (e) {
+      logger.info('failed to save claude usage', String(e));
+    }
     logger.info(
       'enhancement complete',
       `meeting=${id}`,
       `degraded=${result.degraded}`,
+      `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out`,
       outputLanguage ? `lang=${outputLanguage}` : '',
       template ? `template=${template.name}` : '',
     );
-    return result;
+    // Return only the IPC-shaped result (notes + degraded); usage stays main-process-only.
+    return { notes: result.notes, degraded: result.degraded };
   });
 }

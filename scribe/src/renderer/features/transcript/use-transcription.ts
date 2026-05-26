@@ -6,6 +6,8 @@ export type TranscriptionController = {
   finals: TranscriptSegment[];
   interims: TranscriptSegment[]; // current in-progress lines, at most one per channel
   connected: boolean;
+  /** True while the session is attempting to reconnect after an unexpected drop. */
+  reconnecting: boolean;
   error: string | null;
   start: (opts: TranscriptionStart) => Promise<void>;
   stop: () => Promise<void>;
@@ -20,6 +22,7 @@ export function useTranscription(): TranscriptionController {
   const [finals, setFinals] = useState<TranscriptSegment[]>([]);
   const [interims, setInterims] = useState<TranscriptSegment[]>([]);
   const [connected, setConnected] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const interimByChannel = useRef<Map<0 | 1, TranscriptSegment>>(new Map());
 
@@ -37,11 +40,19 @@ export function useTranscription(): TranscriptionController {
     const offStatus = window.api.onTranscriptionStatus((status) => {
       if (status.state === 'open') {
         setConnected(true);
+        setReconnecting(false);
+        setError(null);
+      } else if (status.state === 'reconnecting') {
+        setConnected(false);
+        setReconnecting(true);
         setError(null);
       } else if (status.state === 'closed') {
         setConnected(false);
+        setReconnecting(false);
       } else {
+        // 'error' — unrecoverable
         setConnected(false);
+        setReconnecting(false);
         setError(status.message ?? 'Transcription error');
       }
     });
@@ -73,7 +84,8 @@ export function useTranscription(): TranscriptionController {
     setInterims([]);
     setFinals([]);
     setError(null);
+    setReconnecting(false);
   }, []);
 
-  return { finals, interims, connected, error, start, stop, reset };
+  return { finals, interims, connected, reconnecting, error, start, stop, reset };
 }
