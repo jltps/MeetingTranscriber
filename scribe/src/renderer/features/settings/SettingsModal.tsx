@@ -111,6 +111,7 @@ type SettingsModalProps = {
 
 export function SettingsModal({ settings, onClose, onChanged, onWiped }: SettingsModalProps) {
   const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
+  const [instructions, setInstructions] = useState(settings.globalInstructions);
 
   useEffect(() => {
     const load = (): void => {
@@ -198,6 +199,32 @@ export function SettingsModal({ settings, onClose, onChanged, onWiped }: Setting
               <p className="text-[11px] text-neutral-500">
                 Auto-detect uses nova-3 multilingual mode. For Portuguese or other languages,
                 selecting a fixed language gives the most accurate results.
+              </p>
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              Enhancement
+            </h3>
+            <div className="space-y-1.5">
+              <label className="text-sm text-neutral-300">Custom instructions</label>
+              <textarea
+                value={instructions}
+                onChange={(e) => setInstructions(e.target.value)}
+                onBlur={() => {
+                  void window.api.settings.setGlobalInstructions(instructions).then(onChanged);
+                }}
+                rows={4}
+                placeholder={
+                  'e.g. "Always list action items with an owner and due date." ' +
+                  '"Write in European Portuguese." "Executive summary, no preamble."'
+                }
+                className="w-full resize-none rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none"
+              />
+              <p className="text-[11px] text-neutral-500">
+                Applied to every enhancement as advisory guidance. Cannot change the output format
+                or remove source-linking (those are enforced by the system).
               </p>
             </div>
           </section>

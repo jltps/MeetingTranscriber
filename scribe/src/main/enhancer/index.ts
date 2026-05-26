@@ -1,5 +1,6 @@
 import { AnthropicEnhancer } from './anthropic';
 import { getAnthropicKey } from '../secrets/api-keys';
+import { getGlobalInstructions } from '../db/settings';
 import type { EnhanceInput } from './enhancer';
 import type { EnhanceResult } from '../../shared/ipc-contract';
 
@@ -12,9 +13,14 @@ export async function runEnhancement(input: EnhanceInput): Promise<EnhanceResult
     throw new Error('Anthropic API key not set. Set ANTHROPIC_API_KEY (env or .env) before enhancing.');
   }
   const enhancer = new AnthropicEnhancer(apiKey);
+  // Merge global instructions unless the caller already provided (template) instructions.
+  const fullInput: EnhanceInput = {
+    ...input,
+    globalInstructions: input.globalInstructions ?? (getGlobalInstructions() || undefined),
+  };
   try {
-    return { notes: await enhancer.enhance(input), degraded: false };
+    return { notes: await enhancer.enhance(fullInput), degraded: false };
   } catch {
-    return { notes: await enhancer.enhanceFallback(input), degraded: true };
+    return { notes: await enhancer.enhanceFallback(fullInput), degraded: true };
   }
 }

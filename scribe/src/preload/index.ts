@@ -56,6 +56,8 @@ const api: ScribeApi = {
     setKeys: (keys) => ipcRenderer.invoke(IPC.settingsSetKeys, keys),
     setMicDevice: (deviceId) => ipcRenderer.invoke(IPC.settingsSetMicDevice, deviceId),
     setLanguage: (language) => ipcRenderer.invoke(IPC.settingsSetLanguage, language),
+    setGlobalInstructions: (instructions) =>
+      ipcRenderer.invoke(IPC.settingsSetGlobalInstructions, instructions),
     test: (provider, key) => ipcRenderer.invoke(IPC.settingsTest, { provider, key }),
     acceptPrivacy: () => ipcRenderer.invoke(IPC.settingsAcceptPrivacy),
     wipe: () => ipcRenderer.invoke(IPC.settingsWipe),

@@ -41,6 +41,7 @@ export const IPC = {
   settingsSetKeys: 'settings:setKeys',
   settingsSetMicDevice: 'settings:setMicDevice',
   settingsSetLanguage: 'settings:setLanguage',
+  settingsSetGlobalInstructions: 'settings:setGlobalInstructions',
   settingsTest: 'settings:test',
   settingsAcceptPrivacy: 'settings:acceptPrivacy',
   settingsWipe: 'settings:wipe',
@@ -114,6 +115,9 @@ export const SetLanguageSchema = z.discriminatedUnion('mode', [
 export const TranscriptionLanguageSchema = z.object({ bcp47: z.string() });
 export type TranscriptionLanguage = z.infer<typeof TranscriptionLanguageSchema>;
 
+/** Global enhancement instructions entered by the user in Settings (FEATURES §B). */
+export const SetGlobalInstructionsSchema = z.string().max(4000);
+
 export const TestProviderSchema = z.enum(['deepgram', 'anthropic']);
 export type TestProvider = z.infer<typeof TestProviderSchema>;
 // `key` lets the UI test the just-typed (unsaved) key; when omitted, the stored
@@ -128,6 +132,8 @@ export type SettingsView = {
   anthropicKeySet: boolean;
   micDeviceId: string | null;
   language: LanguageSetting;
+  /** Free-text instructions appended to every enhancement (FEATURES §B1). */
+  globalInstructions: string;
   privacyAccepted: boolean;
 };
 export type TestResult = { ok: boolean; message?: string };
@@ -151,6 +157,7 @@ export interface SettingsApi {
   setKeys(keys: SetKeysInput): Promise<void>;
   setMicDevice(deviceId: string | null): Promise<void>;
   setLanguage(language: LanguageSetting): Promise<void>;
+  setGlobalInstructions(instructions: string): Promise<void>;
   test(provider: TestProvider, key?: string): Promise<TestResult>;
   acceptPrivacy(): Promise<void>;
   wipe(): Promise<void>;

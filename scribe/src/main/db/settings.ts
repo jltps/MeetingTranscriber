@@ -41,6 +41,11 @@ export function getLanguage(): LanguageSetting {
   }
 }
 
+/** Global custom instructions appended to every enhancement prompt (FEATURES §B). */
+export function getGlobalInstructions(): string {
+  return getSetting('global_instructions') ?? '';
+}
+
 // Leaves nothing behind (PRODUCT_SPEC.md §7): meetings + children + FTS + every
 // setting, including the encrypted API keys.
 export function wipeAllData(): void {

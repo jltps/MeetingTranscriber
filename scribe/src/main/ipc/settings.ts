@@ -1,13 +1,21 @@
 import { ipcMain } from 'electron';
 import {
   IPC,
+  SetGlobalInstructionsSchema,
   SetKeysSchema,
   SetLanguageSchema,
   SetMicDeviceSchema,
   TestRequestSchema,
 } from '../../shared/ipc-contract';
 import type { SettingsView, TestResult } from '../../shared/ipc-contract';
-import { deleteSetting, getLanguage, getSetting, setSetting, wipeAllData } from '../db/settings';
+import {
+  deleteSetting,
+  getGlobalInstructions,
+  getLanguage,
+  getSetting,
+  setSetting,
+  wipeAllData,
+} from '../db/settings';
 import {
   getAnthropicKey,
   getDeepgramKey,
@@ -26,6 +34,7 @@ export function registerSettingsIpc(): void {
     anthropicKeySet: getAnthropicKey() !== null,
     micDeviceId: getSetting('mic_device_id'),
     language: getLanguage(),
+    globalInstructions: getGlobalInstructions(),
     privacyAccepted: getSetting('privacy_accepted') === '1',
   }));
 
@@ -44,6 +53,10 @@ export function registerSettingsIpc(): void {
   ipcMain.handle(IPC.settingsSetLanguage, (_event, raw) => {
     // Store as JSON so getLanguage() can parse the structured object.
     setSetting('language', JSON.stringify(SetLanguageSchema.parse(raw)));
+  });
+
+  ipcMain.handle(IPC.settingsSetGlobalInstructions, (_event, raw) => {
+    setSetting('global_instructions', SetGlobalInstructionsSchema.parse(raw));
   });
 
   ipcMain.handle(IPC.settingsAcceptPrivacy, () => {
