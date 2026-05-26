@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import type {
   EnhancedNotes,
+  LanguageSetting,
   MeetingDetail,
   MeetingSummary,
   PersistedSegment,
@@ -20,6 +21,7 @@ export const IPC = {
   transcriptionPushFrame: 'transcription:pushFrame', // renderer -> main, raw PCM
   transcriptionSegment: 'transcription:segment', // main -> renderer
   transcriptionStatus: 'transcription:status', // main -> renderer
+  transcriptionLanguageDetected: 'transcription:languageDetected', // main -> renderer
 
   meetingsList: 'meetings:list',
   meetingsCreate: 'meetings:create',
@@ -102,7 +104,16 @@ export const SetKeysSchema = z.object({
 });
 export type SetKeysInput = z.infer<typeof SetKeysSchema>;
 export const SetMicDeviceSchema = z.string().nullable();
-export const SetLanguageSchema = z.string();
+/** Structured language preference (FEATURES §A). Replaces the old plain-string schema. */
+export const SetLanguageSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('auto') }),
+  z.object({ mode: z.literal('fixed'), bcp47: z.string() }),
+]) satisfies z.ZodType<LanguageSetting>;
+
+/** Push payload when Deepgram (or the LLM layer) detects the transcript language. */
+export const TranscriptionLanguageSchema = z.object({ bcp47: z.string() });
+export type TranscriptionLanguage = z.infer<typeof TranscriptionLanguageSchema>;
+
 export const TestProviderSchema = z.enum(['deepgram', 'anthropic']);
 export type TestProvider = z.infer<typeof TestProviderSchema>;
 // `key` lets the UI test the just-typed (unsaved) key; when omitted, the stored
@@ -116,7 +127,7 @@ export type SettingsView = {
   deepgramKeySet: boolean;
   anthropicKeySet: boolean;
   micDeviceId: string | null;
-  language: string;
+  language: LanguageSetting;
   privacyAccepted: boolean;
 };
 export type TestResult = { ok: boolean; message?: string };
@@ -139,7 +150,7 @@ export interface SettingsApi {
   get(): Promise<SettingsView>;
   setKeys(keys: SetKeysInput): Promise<void>;
   setMicDevice(deviceId: string | null): Promise<void>;
-  setLanguage(language: string): Promise<void>;
+  setLanguage(language: LanguageSetting): Promise<void>;
   test(provider: TestProvider, key?: string): Promise<TestResult>;
   acceptPrivacy(): Promise<void>;
   wipe(): Promise<void>;
@@ -153,6 +164,8 @@ export interface ScribeApi {
   pushAudioFrame(pcm: ArrayBuffer): void;
   onTranscriptSegment(cb: (seg: TranscriptSegment) => void): () => void;
   onTranscriptionStatus(cb: (status: TranscriptionStatus) => void): () => void;
+  /** Fires once when Deepgram (or LLM layer) identifies the transcript language. */
+  onTranscriptionLanguage(cb: (lang: TranscriptionLanguage) => void): () => void;
   meetings: MeetingsApi;
   enhance(meetingId: number): Promise<EnhanceResult>;
   settings: SettingsApi;

@@ -47,6 +47,13 @@ export function App() {
 
   const [showSettings, setShowSettings] = useState(false);
   const [highlight, setHighlight] = useState<TranscriptHighlight | null>(null);
+  /** BCP-47 code detected by Deepgram during the current/last auto-detect session. */
+  const [detectedLang, setDetectedLang] = useState<string | null>(null);
+
+  // Subscribe to language detection events for the lifetime of the app.
+  useEffect(() => {
+    return window.api.onTranscriptionLanguage(({ bcp47 }) => setDetectedLang(bcp47));
+  }, []);
 
   const connectedRef = useRef(false);
   connectedRef.current = transcription.connected;
@@ -122,6 +129,7 @@ export function App() {
   const start = async (): Promise<void> => {
     if (selectedId === null) return;
     setBusy(true);
+    setDetectedLang(null); // reset for new session
     try {
       transcription.reset();
       await window.api.meetings.start(selectedId);
@@ -231,6 +239,11 @@ export function App() {
                   <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-red-400">
                     <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
                     Recording
+                    {detectedLang && settings?.language.mode === 'auto' && (
+                      <span className="ml-1.5 rounded bg-neutral-800 px-1.5 py-0.5 text-[10px] font-normal text-neutral-400">
+                        Detected: {detectedLang.toUpperCase()}
+                      </span>
+                    )}
                   </span>
                 )}
               </div>

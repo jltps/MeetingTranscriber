@@ -13,12 +13,21 @@ import { logger } from '../logger';
 let session: TranscriptionSession | null = null;
 let target: WebContents | null = null;
 let meetingId: number | null = null;
+/**
+ * Last language detected by Deepgram for the current (or most recent) session.
+ * Reset on start. Read by ipc/enhancer to resolve the enhancement output language.
+ */
+let detectedLanguage: string | null = null;
+export function getDetectedLanguage(): string | null {
+  return detectedLanguage;
+}
 
 export function registerTranscriptionIpc(): void {
   ipcMain.handle(IPC.transcriptionStart, async (event, raw) => {
     const opts = TranscriptionStartSchema.parse(raw);
     target = event.sender;
     meetingId = opts.meetingId;
+    detectedLanguage = null; // reset for new session
     if (session) {
       await session.stop();
       session = null;
@@ -29,6 +38,10 @@ export function registerTranscriptionIpc(): void {
         target?.send(IPC.transcriptionSegment, seg);
       },
       onStatus: (status) => target?.send(IPC.transcriptionStatus, status),
+      onLanguageDetected: (bcp47) => {
+        detectedLanguage = bcp47;
+        target?.send(IPC.transcriptionLanguageDetected, { bcp47 });
+      },
     });
     await next.start({ sampleRate: opts.sampleRate, channels: opts.channels });
     session = next;

@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcRendererEvent } from 'electron';
-import { IPC, TranscriptSegmentSchema, TranscriptionStatusSchema } from '../shared/ipc-contract';
+import {
+  IPC,
+  TranscriptSegmentSchema,
+  TranscriptionLanguageSchema,
+  TranscriptionStatusSchema,
+} from '../shared/ipc-contract';
 import type { ScribeApi } from '../shared/ipc-contract';
 
 // The only object the renderer ever sees. No raw ipcRenderer, no Node globals,
@@ -24,6 +29,13 @@ const api: ScribeApi = {
     };
     ipcRenderer.on(IPC.transcriptionStatus, listener);
     return () => ipcRenderer.removeListener(IPC.transcriptionStatus, listener);
+  },
+  onTranscriptionLanguage: (cb) => {
+    const listener = (_event: IpcRendererEvent, payload: unknown): void => {
+      cb(TranscriptionLanguageSchema.parse(payload));
+    };
+    ipcRenderer.on(IPC.transcriptionLanguageDetected, listener);
+    return () => ipcRenderer.removeListener(IPC.transcriptionLanguageDetected, listener);
   },
   meetings: {
     list: () => ipcRenderer.invoke(IPC.meetingsList),

@@ -5,7 +5,7 @@ import type { EnhanceInput, Enhancer, EnhancerSegment } from './enhancer';
 import {
   FALLBACK_SYSTEM_PROMPT,
   SUMMARY_SYSTEM_PROMPT,
-  SYSTEM_PROMPT,
+  buildSystemPrompt,
   buildUserContent,
   markdownFallbackToNotes,
   segmentsToText,
@@ -82,7 +82,16 @@ export class AnthropicEnhancer implements Enhancer {
         const response = await this.client.messages.create({
           model: MODEL,
           max_tokens: MAX_TOKENS,
-          system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+          system: [
+            {
+              type: 'text',
+              text: buildSystemPrompt({
+                globalInstructions: input.globalInstructions,
+                detectedLanguage: input.detectedLanguage,
+              }),
+              cache_control: { type: 'ephemeral' },
+            },
+          ],
           messages: [{ role: 'user', content: userContent }],
           tools: [ENHANCE_TOOL],
           tool_choice: { type: 'tool', name: ENHANCE_TOOL.name },

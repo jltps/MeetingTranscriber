@@ -1,9 +1,19 @@
 # CLAUDE.md
 
-Build conventions and guardrails for this repository. Read `PRODUCT_SPEC.md`
-first — it is the source of truth for *what* to build. This file is *how* to
-build it. When the two ever disagree, `PRODUCT_SPEC.md` wins on product
-decisions; this file wins on code conventions.
+Standing conventions and guardrails for this repository. **The app already exists**
+— v1 was built from the original spec. This file governs how to *extend and
+maintain* it, not how to build it from scratch.
+
+**Ground truth is the code, not the docs.** Where this file or any spec disagrees
+with what's actually in the repository, the **existing code wins** — read it first
+and reconcile the docs to it, never the reverse. The one exception is §1: those
+invariants are non-negotiable even if current code violates them (if it does, flag
+it as a bug to fix).
+
+Roles: `PRODUCT_SPEC.md` is the original v1 product intent (now largely
+*implemented* — historical reference). `FEATURES_LANGUAGE_PROMPT_TEMPLATES.md` is
+the active backlog of features being added. This file is *how* the code should
+look and behave.
 
 ---
 
@@ -12,16 +22,18 @@ decisions; this file wins on code conventions.
 - This is **Scribe**: a bot-free, device-audio meeting notepad for **Windows**
   (Electron + React + TypeScript). It transcribes the full meeting by capturing
   system audio + mic, never joins the call, and never stores audio.
-- Build strictly in the **milestone order** in `PRODUCT_SPEC.md` §12 (M0→M6).
-  Do not jump ahead. Each milestone must be independently runnable.
-- The **riskiest** subsystem is audio capture (M1). Prove it works end-to-end
-  before building UI polish. If asked to "just build the app," still start at M0
-  and stop after each milestone for review.
+- **v1 is built.** Before changing anything, read the relevant existing code and
+  match its established patterns (structure, naming, IPC style, DB access). Do not
+  introduce a second way of doing something that already has a way.
+- For **new features**, work from `FEATURES_LANGUAGE_PROMPT_TEMPLATES.md`. Propose
+  how a feature fits the existing code *before* writing it; don't assume the
+  greenfield structure in §3 below is exactly what got built — verify.
 
 ## 1. The non-negotiable rules
 
 These are correctness/safety invariants, not style preferences. Never violate
-them, even if a task seems to ask for it — flag the conflict instead.
+them, even if a task seems to ask for it — flag the conflict instead. If existing
+code violates one, treat that as a bug to surface, not a precedent to follow.
 
 1. **No audio is ever written to disk.** No recording files, no full-session
    buffers, no temp `.wav`. Audio frames exist in memory only long enough to be
@@ -31,177 +43,186 @@ them, even if a task seems to ask for it — flag the conflict instead.
    Store via Electron `safeStorage`. Anthropic calls and (preferably) the
    Deepgram socket originate in the **main process**.
 3. **Renderer is untrusted.** `contextIsolation: true`, `nodeIntegration: false`,
-   `sandbox: true`. No Node APIs in the renderer. All privileged work crosses a
-   typed IPC bridge.
+   `sandbox: true` where feasible. No Node APIs in the renderer. All privileged
+   work crosses a typed IPC bridge.
 4. **No bot, no meeting-platform integration.** We only touch OS audio. Do not
    add Zoom/Teams/Meet SDKs or APIs.
 5. **The user's notes are sacred.** Enhancement may expand them, never delete or
    silently rewrite them. AI text the user edits becomes user-owned.
+6. **User-supplied prompt text never breaks the JSON contract.** Custom
+   instructions and templates only fill a constrained slot. The strict-JSON schema,
+   origin rules, and `sourceSegmentIds` are non-editable scaffolding. Always
+   validate enhancer output with Zod and fall back to plain markdown on failure.
+   (`FEATURES_LANGUAGE_PROMPT_TEMPLATES.md` §B.)
+7. **Never default to English.** Transcription auto-detects or uses the chosen
+   language; enhanced notes are written in the transcript's language unless
+   overridden. The app must work in Portuguese.
+   (`FEATURES_LANGUAGE_PROMPT_TEMPLATES.md` §A.)
 
 If a requested change would break one of these, stop and say so.
 
-## 2. Tech stack (do not substitute without being asked)
+## 2. Tech stack (match what's installed; don't substitute without being asked)
 
-- Electron (latest stable, **≥ v31** — required for loopback audio), pinned.
+The intended stack is below. **Check `package.json` for the versions and libraries
+actually in use** and match them — if the build chose something different (e.g. a
+different state or styling approach), follow the code, and only raise a swap if
+there's a real problem.
+
+- Electron (loopback audio needs **≥ v31**), pinned.
 - React 18 + TypeScript (`strict: true`) + Vite.
 - Tailwind CSS for styling.
 - TipTap (ProseMirror) for the notes editor.
 - `better-sqlite3` for local storage (main process only).
-- Web Audio API + AudioWorklet for capture/mix/resample.
+- Web Audio API + AudioWorklet for capture/mix.
 - Deepgram streaming (WebSocket) for transcription, behind the
   `TranscriptionSession` interface.
 - Anthropic Claude API for enhancement, behind the `Enhancer` interface.
 - Zod for runtime validation of all IPC payloads and all LLM JSON output.
-- `electron-builder` (NSIS) — only at M6.
+- `electron-builder` (NSIS) for packaging.
 
 Use **pnpm**. Pin versions. Prefer the platform/standard library over adding a
 dependency; justify any new dependency in the PR description.
 
-## 3. Project structure
+## 3. Project structure (verify against the actual tree)
+
+The structure below was the *intended* layout. The real repo may differ — **run a
+directory listing and follow the actual structure**; update this section to match
+reality rather than moving files to match this section.
 
 ```
-.
-├─ CLAUDE.md
-├─ PRODUCT_SPEC.md
-├─ package.json
-├─ electron.vite.config.ts
-├─ src/
-│  ├─ main/                     # Electron main process (privileged)
-│  │  ├─ index.ts               # app/window lifecycle, security hardening
-│  │  ├─ ipc/                   # ipcMain handlers, one file per domain
-│  │  ├─ db/                    # better-sqlite3: schema, migrations, queries
-│  │  ├─ audio/                 # display-media loopback handler, device mgmt
-│  │  ├─ transcription/         # TranscriptionSession impls (Deepgram), relay
-│  │  ├─ enhancer/              # Enhancer impl, prompt.ts (versioned)
-│  │  └─ secrets/               # safeStorage wrappers for API keys
-│  ├─ preload/
-│  │  └─ index.ts               # contextBridge: exposes typed window.api only
-│  ├─ renderer/                 # React app (untrusted)
-│  │  ├─ main.tsx
-│  │  ├─ app/                   # routing, layout, providers
-│  │  ├─ features/
-│  │  │  ├─ meetings/           # sidebar list, search
-│  │  │  ├─ notes/              # TipTap editor, myNote/aiNote marks
-│  │  │  ├─ transcript/         # live transcript panel
-│  │  │  └─ settings/           # keys, devices, privacy
-│  │  ├─ audio/                 # capture, ChannelMerger, AudioWorklet glue
-│  │  │  └─ worklets/           # resampler.worklet.ts
-│  │  └─ lib/                   # shared renderer utils
-│  └─ shared/                   # types shared across processes (NO node/electron imports)
-│     ├─ types.ts               # TranscriptSegment, EnhancedNotes, etc.
-│     └─ ipc-contract.ts        # channel names + Zod schemas for every IPC call
-└─ tests/
+src/
+├─ main/        # Electron main process (privileged): window, ipc/, db/, audio/,
+│               # transcription/, enhancer/ (incl. prompt.ts), secrets/
+├─ preload/     # contextBridge: exposes typed window.api only
+├─ renderer/    # React app (untrusted): app/, features/, audio/, lib/
+│  └─ features/ # meetings/, notes/, transcript/, settings/  (one folder per feature)
+└─ shared/      # types + ipc-contract.ts (Zod). NO node/electron/react imports.
 ```
 
-Rules about structure:
-- `src/shared/**` must import nothing from `electron`, `node:*`, or React. It is
-  pure types + Zod schemas, importable from any process.
-- Never import `src/main/**` from the renderer or vice versa. They communicate
-  **only** through the preload bridge using channels declared in
-  `src/shared/ipc-contract.ts`.
-- One feature = one folder under `renderer/features`. Keep components, hooks, and
-  local state for that feature together.
+Structural rules (these hold regardless of exact folder names):
+- The shared types/contract layer must import nothing from `electron`, `node:*`,
+  or React — pure types + Zod, importable from any process.
+- Main and renderer never import each other; they communicate **only** through the
+  preload bridge using channels declared in the shared IPC contract.
+- One feature = one folder under the renderer's `features` dir.
+- New code goes where its neighbours already live. Don't create a parallel layout.
 
 ## 4. IPC contract discipline
 
-- Every IPC channel is declared once in `src/shared/ipc-contract.ts` with a Zod
-  schema for its request and response.
+- Every IPC channel is declared once in the shared IPC contract with a Zod schema
+  for request and response. New features (templates CRUD, language settings) add
+  their channels there, matching the existing pattern.
 - `ipcMain` handlers validate input with the schema before doing anything.
 - The preload bridge exposes a single typed object: `window.api`. No raw
   `ipcRenderer` in the renderer. No dynamic channel names.
-- Audio PCM frames are the one high-frequency channel — keep their payload a
-  transferable (`ArrayBuffer`), and do not validate per-frame with Zod (validate
-  the start/stop control messages instead).
+- Audio PCM frames are the one high-frequency channel — payload stays a
+  transferable (`ArrayBuffer`); don't Zod-validate per frame (validate the
+  start/stop control messages instead).
 
 ## 5. Coding conventions
 
 - TypeScript `strict`. No `any` (use `unknown` + narrowing). No non-null `!`
   unless provably safe with a comment.
 - Functional React components + hooks. No class components.
-- Naming: components `PascalCase`, hooks `useCamelCase`, files for components
-  `PascalCase.tsx`, everything else `kebab-case.ts`.
+- Naming: components `PascalCase`, hooks `useCamelCase`, component files
+  `PascalCase.tsx`, everything else `kebab-case.ts` — **unless the existing repo
+  already settled on a different convention, in which case match it.**
 - Keep modules small and single-purpose. Audio, transcription, and enhancement
-  each stay behind their interface (`PRODUCT_SPEC.md` §6.2, §9) — UI code never
-  imports a concrete provider, only the interface + a factory.
+  each stay behind their interface — UI code imports the interface + a factory,
+  never a concrete provider.
 - Async: prefer `async/await`; always handle rejection. Sockets and the
   AudioContext must have explicit teardown on stop/unmount — leaks here mean the
   mic stays hot, which is unacceptable.
 - Errors: fail loud in dev, degrade gracefully in UI. Surface transcription/LLM
   failures to the user; never silently swallow.
-- No `console.log` in committed code — use a small logger that is guaranteed
-  never to log audio bytes or API keys.
+- No `console.log` in committed code — use the logger, which must never log audio
+  bytes or API keys.
+- **Targeted edits over wholesale rewrites.** When changing existing code, make the
+  smallest change that fits the established style. Don't reformat or restructure
+  files you're only touching for a small feature.
 
-## 6. Audio subsystem rules (highest care)
+## 6. Audio subsystem rules (highest care — already built, change with care)
 
-- All capture/mix/resample lives in `renderer/audio`. The loopback grant lives in
-  `main/audio`. Nowhere else.
+- Capture/mix lives in the renderer audio module; the loopback grant lives in the
+  main process. Don't scatter audio logic elsewhere.
 - On stop or component unmount: stop every `MediaStreamTrack`, close the
   `AudioContext`, close the Deepgram socket, null out buffers. Verify the mic
   indicator goes off.
-- Always request loopback as channel 1 and mic as channel 0 (see multichannel
-  strategy, `PRODUCT_SPEC.md` §6.3) so "Me vs them" attribution is deterministic.
-- The capture module must be swappable: if the Electron loopback path fails, a
-  native WASAPI addon can replace `main/audio` without touching the renderer
-  interface. Do not build the native addon unless the Electron path is proven to
-  fail (it is explicitly out of scope for v1 otherwise).
+- Mic is channel 0, system/loopback is channel 1, so "Me vs them" is deterministic.
+- The capture module stays swappable behind its interface (Electron loopback now;
+  a native WASAPI addon could replace it later without touching the renderer). Do
+  not add the native addon unless the Electron path is proven to fail.
 
 ## 7. Database rules
 
 - `better-sqlite3` runs in the main process only; the renderer reaches it via IPC.
-- Use migrations from day one (a simple numbered-SQL migration runner is fine).
-  The schema in `PRODUCT_SPEC.md` §11 is the M0 baseline.
-- `ON DELETE CASCADE` for meeting children; deleting a meeting wipes its notes and
-  transcript. The "wipe all data" Settings action must leave nothing behind.
+- **Migrations only — never recreate tables.** The database now holds real user
+  meetings. All schema changes ship as additive, ordered migrations
+  (`ALTER TABLE …`, new `CREATE TABLE …`) run by the existing migration runner.
+  Never `DROP`/recreate a populated table; never reset the DB to apply a change.
+  (Schema deltas for the new features are in
+  `FEATURES_LANGUAGE_PROMPT_TEMPLATES.md` §D, written as migrations.)
+- `ON DELETE CASCADE` for meeting children. Deleting a template must **not** delete
+  meetings that referenced it — null the reference instead.
+- The "wipe all data" Settings action must leave nothing behind.
 
 ## 8. LLM / enhancement rules
 
-- Model: current Anthropic Sonnet. Prompt lives in `main/enhancer/prompt.ts`,
-  versioned with a comment header.
-- Output is **strict JSON** matching `EnhancedNotes` (`PRODUCT_SPEC.md` §9),
-  validated with Zod. On invalid JSON: retry once, then fall back to a plain
-  markdown enhancement and mark it as a degraded result in the UI.
+- Model: current Anthropic Sonnet. The enhancement prompt lives in one versioned
+  file (e.g. `main/enhancer/prompt.ts`); find the existing one and edit it there.
+- Output is **strict JSON** matching the `EnhancedNotes` shape, validated with Zod.
+  On invalid JSON: retry once, then fall back to a plain-markdown enhancement and
+  mark it degraded in the UI.
+- The prompt is fixed scaffolding + a single user-instructions slot. User text
+  (global instructions or a template) fills only that slot and can never remove the
+  JSON/schema/source-linking rules (§1.6).
+- Enhanced-notes language follows the transcript's detected language unless a
+  template or setting overrides it (§1.7).
 - For long transcripts, chunk and summarize-then-merge rather than truncating.
 - Never send audio to the LLM. Only transcript text + user notes.
 
 ## 9. Testing
 
-- **M1 is validated manually** with on-screen VU meters per channel + a raw
-  transcript dump — automated tests can't prove real loopback capture.
-- Unit-test the pure pieces: the resampler math, IPC Zod schemas, the
-  enhancer JSON parser/validator, DB queries (against an in-memory SQLite).
-- Add a Playwright smoke test for the renderer once M3 exists (create note → type
-  → see it persist after reload). Keep it lightweight.
-- Don't chase coverage numbers; cover the audio resampler, the enhancer parser,
-  and the IPC contract because those break silently.
+- Real loopback capture is validated manually (per-channel VU meters / live
+  transcript) — automated tests can't prove it.
+- Unit-test the pure pieces: any resampling/framing math, IPC Zod schemas, the
+  enhancer JSON parser/validator, DB queries and **migrations** (against an
+  in-memory or temp SQLite), and the new template/language resolution logic.
+- Keep the renderer smoke test (create note → type → persists after reload) green.
+- Don't chase coverage; cover the things that break silently — the enhancer parser,
+  the IPC contract, and migrations against a populated DB.
 
 ## 10. Git & workflow
 
 - Conventional Commits (`feat:`, `fix:`, `refactor:`, `chore:`, `docs:`).
-- One milestone per branch (`m1-audio-capture`, `m2-transcription`, …). Keep PRs
-  reviewable; don't bundle milestones.
-- Each PR description states: which milestone, how it was verified, any new
-  dependency + why, and confirmation that the §1 invariants still hold.
-- Never commit secrets, `.env` with real keys, or any audio fixture. Add a
-  `.gitignore` covering `node_modules`, `dist`, `out`, `*.sqlite`, `.env*`.
+- One feature per branch (`feat/language-detect`, `feat/enhancement-templates`, …).
+  Keep PRs reviewable; don't bundle unrelated features.
+- Each PR states: what it changes, how it was verified, any new dependency + why,
+  any schema migration added, and confirmation the §1 invariants still hold.
+- Never commit secrets, `.env` with real keys, or any audio fixture. Ensure
+  `.gitignore` covers `node_modules`, `dist`, `out`, `*.sqlite`, `.env*`.
 
-## 11. Commands (define these in package.json at M0)
+## 11. Commands (use what's in package.json)
 
 ```
-pnpm install         # install
-pnpm dev             # run Electron + Vite in watch mode
-pnpm typecheck       # tsc --noEmit, must pass before any PR
-pnpm lint            # eslint, must pass before any PR
-pnpm test            # unit tests
-pnpm build           # electron-builder NSIS (M6 only)
+pnpm install
+pnpm dev          # run Electron + Vite
+pnpm typecheck    # must pass before any PR
+pnpm lint         # must pass before any PR
+pnpm test
+pnpm build        # electron-builder NSIS
 ```
 
-`pnpm typecheck` and `pnpm lint` must be clean before considering any task done.
+If the actual script names differ, use those and update this list. `typecheck` and
+`lint` must be clean before any task is considered done.
 
 ## 12. When you're unsure
 
-- If a task is ambiguous, ask before generating large amounts of code — don't
-  guess at product behavior. Cross-check against `PRODUCT_SPEC.md`.
+- Read the existing code first. If a task is ambiguous or seems to fight the
+  current structure, ask before generating large amounts of code.
 - If something seems to require violating a §1 invariant, stop and surface it.
-- If a v2 feature (calendar, templates, chat, sync, offline Whisper, macOS) gets
-  requested mid-v1, confirm it's intended scope before building — it's parked in
-  `PRODUCT_SPEC.md` §13 for a reason.
+- For new work, cross-check `FEATURES_LANGUAGE_PROMPT_TEMPLATES.md`; for original
+  v1 intent, cross-check `PRODUCT_SPEC.md` — but remember the shipped code is ground
+  truth where they conflict.
+- Deferred for later (don't build unless asked): calendar auto-start, offline
+  Whisper, post-meeting chat, cross-meeting querying, accounts/sync, macOS.

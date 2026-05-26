@@ -1,6 +1,15 @@
 // Domain types shared across main, preload, and renderer.
 // This module must import nothing from electron, node:*, or React (CLAUDE.md §3).
 
+/**
+ * Language setting for transcription + enhancement output (FEATURES §A).
+ * 'auto' — use nova-3 multilingual mode; detect from transcript at LLM layer.
+ * 'fixed' — pass the BCP-47 code directly to Deepgram and the enhancer.
+ */
+export type LanguageSetting =
+  | { mode: 'auto' }
+  | { mode: 'fixed'; bcp47: string };
+
 /** A single transcribed span. channel 0 = microphone ("Me"), 1 = system audio. */
 export type TranscriptSegment = {
   text: string;

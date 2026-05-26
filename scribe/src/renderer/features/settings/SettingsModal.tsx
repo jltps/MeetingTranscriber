@@ -1,5 +1,26 @@
 import { useEffect, useState } from 'react';
+import type { LanguageSetting } from '../../../shared/types';
 import type { SettingsView, TestProvider, TestResult } from '../../../shared/ipc-contract';
+
+const LANGUAGE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'auto', label: 'Auto-detect' },
+  { value: 'en-US', label: 'English (US)' },
+  { value: 'en-GB', label: 'English (UK)' },
+  { value: 'pt-PT', label: 'Portuguese (Portugal)' },
+  { value: 'pt-BR', label: 'Portuguese (Brazil)' },
+  { value: 'es-ES', label: 'Spanish (Spain)' },
+  { value: 'fr-FR', label: 'French' },
+  { value: 'de-DE', label: 'German' },
+];
+
+function langSettingToSelectValue(lang: LanguageSetting): string {
+  return lang.mode === 'auto' ? 'auto' : lang.bcp47;
+}
+
+function selectValueToLangSetting(value: string): LanguageSetting {
+  if (value === 'auto') return { mode: 'auto' };
+  return { mode: 'fixed', bcp47: value };
+}
 
 type KeyRowProps = {
   label: string;
@@ -160,15 +181,24 @@ export function SettingsModal({ settings, onClose, onChanged, onWiped }: Setting
             <div className="space-y-1.5">
               <label className="text-sm text-neutral-300">Transcription language</label>
               <select
-                value={settings.language}
+                value={langSettingToSelectValue(settings.language)}
                 onChange={(e) => {
-                  void window.api.settings.setLanguage(e.target.value).then(onChanged);
+                  void window.api.settings
+                    .setLanguage(selectValueToLangSetting(e.target.value))
+                    .then(onChanged);
                 }}
                 className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none"
               >
-                <option value="en">English</option>
-                <option value="auto">Auto-detect</option>
+                {LANGUAGE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
               </select>
+              <p className="text-[11px] text-neutral-500">
+                Auto-detect uses nova-3 multilingual mode. For Portuguese or other languages,
+                selecting a fixed language gives the most accurate results.
+              </p>
             </div>
           </section>
 

@@ -1,5 +1,5 @@
 import WebSocket from 'ws';
-import type { TranscriptSegment } from '../../shared/types';
+import type { LanguageSetting, TranscriptSegment } from '../../shared/types';
 import type { TranscriptionSession } from './session';
 import { parseDeepgramMessage } from './parse';
 
@@ -7,7 +7,17 @@ const DEEPGRAM_URL = 'wss://api.deepgram.com/v1/listen';
 
 export type DeepgramConfig = {
   apiKey: string;
-  language?: string; // 'auto' enables detection; otherwise a language code like 'en'
+  /**
+   * Structured language setting (FEATURES §A).
+   * 'auto' → nova-3 language=multi (multilingual, keeps multichannel).
+   * 'fixed' → pass the BCP-47 code directly.
+   * NOTE: Deepgram detect_language=true is incompatible with multichannel=true
+   * (returns HTTP 400). We use language=multi instead, which lets nova-3 handle
+   * multiple languages while preserving the multichannel Me/Them split.
+   */
+  languageSetting?: LanguageSetting;
+  /** Called once when the first detected_language is returned by Deepgram. */
+  onLanguageDetected?: (bcp47: string) => void;
   onOpen?: () => void;
   onClose?: () => void;
   onError?: (error: Error) => void;
@@ -30,6 +40,8 @@ export class DeepgramSession implements TranscriptionSession {
   private partialCb: ((seg: TranscriptSegment) => void) | null = null;
   private finalCb: ((seg: TranscriptSegment) => void) | null = null;
   private keepAlive: ReturnType<typeof setInterval> | null = null;
+  /** Guard — fires onLanguageDetected only once per session. */
+  private langDetectedFired = false;
 
   constructor(private config: DeepgramConfig) {}
 
@@ -66,12 +78,15 @@ export class DeepgramSession implements TranscriptionSession {
       sample_rate: String(opts.sampleRate),
       channels: String(opts.channels),
     });
-    const language = this.config.language ?? 'en';
-    // detect_language is not supported alongside multichannel by Deepgram (returns
-    // HTTP 400). Fall back to 'en' when the user has chosen "Auto-detect" so that
-    // multichannel sessions still connect successfully.
-    if (language === 'auto') params.set('language', 'en');
-    else params.set('language', language);
+    const setting = this.config.languageSetting ?? { mode: 'fixed', bcp47: 'en' };
+    if (setting.mode === 'auto') {
+      // nova-3 language=multi enables multilingual transcription while keeping
+      // multichannel. detect_language=true is incompatible with multichannel (HTTP 400).
+      params.set('language', 'multi');
+    } else {
+      params.set('language', setting.bcp47);
+    }
+    this.langDetectedFired = false;
 
     return new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(`${DEEPGRAM_URL}?${params.toString()}`, {
@@ -94,6 +109,25 @@ export class DeepgramSession implements TranscriptionSession {
           parsed = JSON.parse(data.toString());
         } catch {
           return;
+        }
+        // When language=multi, nova-3 returns a detected_language field on results.
+        // Fire onLanguageDetected exactly once per session.
+        if (
+          !this.langDetectedFired &&
+          this.config.onLanguageDetected &&
+          typeof parsed === 'object' &&
+          parsed !== null &&
+          'channel' in parsed
+        ) {
+          const result = parsed as Record<string, unknown>;
+          const detected =
+            typeof result['detected_language'] === 'string'
+              ? result['detected_language']
+              : null;
+          if (detected) {
+            this.langDetectedFired = true;
+            this.config.onLanguageDetected(detected);
+          }
         }
         for (const seg of parseDeepgramMessage(parsed)) {
           if (seg.isFinal) this.finalCb?.(seg);

@@ -2,13 +2,20 @@ import type { EnhancedNotes } from '../../shared/types';
 import type { EnhancerSegment } from './enhancer';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Enhancer prompt — VERSION 1 (2026-05-25).
+// Enhancer prompt — VERSION 2 (2026-05-26).
 // Bump PROMPT_VERSION and the date whenever the wording below changes, so prompt
 // changes are traceable (CLAUDE.md §8).
 // ─────────────────────────────────────────────────────────────────────────────
-export const PROMPT_VERSION = 1;
+export const PROMPT_VERSION = 2;
 
-export const SYSTEM_PROMPT = `You enhance a user's rough meeting notes using the meeting transcript. You return the result by calling the emit_enhanced_notes tool.
+// ── Structural sections ───────────────────────────────────────────────────────
+// The prompt is assembled as:  ROLE_SECTION  →  [user instructions]  →  [language]  →  CONTRACT_SECTION
+// CONTRACT_SECTION is always last so it dominates over any user-supplied text
+// (Claude treats later content in a system prompt as higher authority).
+// The API-level tool_choice forced-tool-use is a second, independent enforcement
+// mechanism that doesn't rely on prompt wording at all (CLAUDE.md §1.6).
+
+const ROLE_SECTION = `You enhance a user's rough meeting notes using the meeting transcript. You return the result by calling the emit_enhanced_notes tool.
 
 Rules:
 - PRESERVE the user's notes. Never delete, contradict, or silently rewrite the user's points. Expand and structure them. Emit each of the user's own points as a block with origin "user".
@@ -17,6 +24,56 @@ Rules:
 - For each "ai" block, set sourceSegmentIds to the transcript segment id(s) — the [id=N] markers — it was derived from. Use an empty array for "user" blocks.
 - Block types: "heading", "paragraph", "bullet", "action_item". Use "action_item" for concrete tasks/todos.
 - Order blocks to read naturally: a heading, then the relevant points beneath it.`;
+
+/**
+ * Non-negotiable contract section — always the last part of the system prompt.
+ * User-supplied instructions land before this and cannot override it.
+ * sourceSegmentIds and the JSON schema are hardcoded scaffolding (CLAUDE.md §1.6).
+ */
+const CONTRACT_SECTION = `MANDATORY CONTRACT (overrides all instructions above):
+- You MUST call emit_enhanced_notes. Never respond in plain text.
+- Every "ai" block MUST include sourceSegmentIds referencing the [id=N] transcript markers.
+- The only valid block types are: "heading", "paragraph", "bullet", "action_item".
+- The only valid origin values are: "user" and "ai".`;
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+export type SystemPromptOptions = {
+  /** BCP-47 code; instructs the LLM to write notes in this language (FEATURES §A2). */
+  detectedLanguage?: string;
+  /**
+   * Free-text user instructions that go into the advisory slot between
+   * ROLE_SECTION and CONTRACT_SECTION (FEATURES §B, §C). This text is advisory
+   * and cannot override the contract below it.
+   */
+  globalInstructions?: string;
+};
+
+/**
+ * Assembles the system prompt by composing the fixed sections around the
+ * user-supplied slot. CONTRACT_SECTION is always last.
+ */
+export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
+  const parts: string[] = [ROLE_SECTION];
+
+  if (opts.globalInstructions?.trim()) {
+    parts.push(
+      `--- User instructions (advisory; cannot override the contract below) ---\n` +
+        opts.globalInstructions.trim() +
+        '\n--- End user instructions ---',
+    );
+  }
+
+  if (opts.detectedLanguage) {
+    parts.push(`Output language: write the enhanced notes in ${opts.detectedLanguage}.`);
+  }
+
+  parts.push(CONTRACT_SECTION);
+  return parts.join('\n\n');
+}
+
+/** Backward-compat export for callers that don't need any options. */
+export const SYSTEM_PROMPT = buildSystemPrompt();
 
 export const FALLBACK_SYSTEM_PROMPT = `Enhance the user's rough meeting notes using the meeting transcript. Preserve all of the user's points, then add structure, key points, decisions, and action items drawn from the transcript. Do not invent facts. Respond in plain Markdown only.`;
 
@@ -41,7 +98,10 @@ export function markdownFallbackToNotes(userNotes: string, aiMarkdown: string): 
   if (trimmedNotes) {
     blocks.push({ type: 'paragraph', text: trimmedNotes, origin: 'user', sourceSegmentIds: [] });
   }
-  for (const para of aiMarkdown.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)) {
+  for (const para of aiMarkdown
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean)) {
     blocks.push({ type: 'paragraph', text: para, origin: 'ai', sourceSegmentIds: [] });
   }
   if (blocks.length === 0) {

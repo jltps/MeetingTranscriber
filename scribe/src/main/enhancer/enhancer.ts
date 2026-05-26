@@ -15,6 +15,10 @@ export type EnhancerSegment = {
 export type EnhanceInput = {
   userNotes: string;
   transcript: EnhancerSegment[];
+  /** BCP-47 language code. When present, the LLM is instructed to respond in this language. */
+  detectedLanguage?: string;
+  /** Free-text instructions from the user (global setting or template). */
+  globalInstructions?: string;
 };
 
 // The enhancement provider interface (PRODUCT_SPEC.md §9). UI/IPC code depends on

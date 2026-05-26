@@ -1,3 +1,5 @@
+import { SetLanguageSchema } from '../../shared/ipc-contract';
+import type { LanguageSetting } from '../../shared/types';
 import { getDb } from './index';
 
 // Key-value settings store + the "wipe all data" action (PRODUCT_SPEC.md §10).
@@ -23,8 +25,20 @@ export function deleteSetting(key: string): void {
   getDb().prepare('DELETE FROM settings WHERE key = ?').run(key);
 }
 
-export function getLanguage(): string {
-  return getSetting('language') ?? 'en';
+/**
+ * Returns the persisted language setting as a structured LanguageSetting.
+ * Handles backward-compat: old installs stored a plain string ('en', 'auto').
+ */
+export function getLanguage(): LanguageSetting {
+  const raw = getSetting('language');
+  if (!raw) return { mode: 'fixed', bcp47: 'en' };
+  try {
+    return SetLanguageSchema.parse(JSON.parse(raw));
+  } catch {
+    // Legacy plain-string values stored before this migration.
+    if (raw === 'auto') return { mode: 'auto' };
+    return { mode: 'fixed', bcp47: raw };
+  }
 }
 
 // Leaves nothing behind (PRODUCT_SPEC.md §7): meetings + children + FTS + every

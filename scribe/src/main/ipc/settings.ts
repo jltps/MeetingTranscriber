@@ -42,7 +42,8 @@ export function registerSettingsIpc(): void {
   });
 
   ipcMain.handle(IPC.settingsSetLanguage, (_event, raw) => {
-    setSetting('language', SetLanguageSchema.parse(raw));
+    // Store as JSON so getLanguage() can parse the structured object.
+    setSetting('language', JSON.stringify(SetLanguageSchema.parse(raw)));
   });
 
   ipcMain.handle(IPC.settingsAcceptPrivacy, () => {
