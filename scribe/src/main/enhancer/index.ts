@@ -16,6 +16,7 @@ export async function runEnhancement(input: EnhanceInput): Promise<EnhanceResult
   // Merge global instructions unless the caller already provided (template) instructions.
   const fullInput: EnhanceInput = {
     ...input,
+    // templateInstructions passed through as-is (ipc/enhancer.ts resolved it).
     globalInstructions: input.globalInstructions ?? (getGlobalInstructions() || undefined),
   };
   try {

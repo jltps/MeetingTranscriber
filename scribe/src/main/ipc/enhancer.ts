@@ -37,16 +37,15 @@ export function registerEnhancerIpc(): void {
       outputLanguage = detected ?? undefined;
     }
 
-    // Instructions resolution: template (if non-empty) > global > none.
-    // Note: runEnhancement will merge global instructions if none are provided here,
-    // but we want template instructions to take full priority.
-    const instructions = template?.instructions.trim() || getGlobalInstructions() || undefined;
-
+    // Template instructions replace the ROLE_SECTION entirely when non-empty.
+    // Global instructions are always an advisory addendum after the role.
+    // Both are passed separately so buildSystemPrompt can position them correctly.
     const result = await runEnhancement({
       userNotes: meeting.rawUserMd,
       transcript: getEnhancerSegments(id),
       detectedLanguage: outputLanguage,
-      globalInstructions: instructions, // pre-resolved; runEnhancement won't override
+      templateInstructions: template?.instructions.trim() || undefined,
+      globalInstructions: getGlobalInstructions() || undefined,
     });
     saveEnhancedNotes(id, JSON.stringify(result.notes), outputLanguage ?? null);
     logger.info(

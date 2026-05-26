@@ -17,7 +17,12 @@ export type EnhanceInput = {
   transcript: EnhancerSegment[];
   /** BCP-47 language code. When present, the LLM is instructed to respond in this language. */
   detectedLanguage?: string;
-  /** Free-text instructions from the user (global setting or template). */
+  /**
+   * Template instructions — replace the fixed ROLE_SECTION entirely when non-empty.
+   * What the user sees and edits in TemplateEditorModal is exactly this text.
+   */
+  templateInstructions?: string;
+  /** Global instructions from Settings — appended as an advisory addendum. */
   globalInstructions?: string;
 };
 

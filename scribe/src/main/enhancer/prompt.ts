@@ -2,18 +2,22 @@ import type { EnhancedNotes } from '../../shared/types';
 import type { EnhancerSegment } from './enhancer';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Enhancer prompt — VERSION 2 (2026-05-26).
+// Enhancer prompt — VERSION 3 (2026-05-26).
 // Bump PROMPT_VERSION and the date whenever the wording below changes, so prompt
 // changes are traceable (CLAUDE.md §8).
 // ─────────────────────────────────────────────────────────────────────────────
-export const PROMPT_VERSION = 2;
+export const PROMPT_VERSION = 3;
 
 // ── Structural sections ───────────────────────────────────────────────────────
-// The prompt is assembled as:  ROLE_SECTION  →  [user instructions]  →  [language]  →  CONTRACT_SECTION
-// CONTRACT_SECTION is always last so it dominates over any user-supplied text
-// (Claude treats later content in a system prompt as higher authority).
-// The API-level tool_choice forced-tool-use is a second, independent enforcement
-// mechanism that doesn't rely on prompt wording at all (CLAUDE.md §1.6).
+// Prompt assembly (VERSION 3):
+//   [templateInstructions OR ROLE_SECTION]  →  [globalInstructions]  →  [language]  →  CONTRACT_SECTION
+//
+// templateInstructions: from the selected template; the user reads and edits the
+//   actual text that reaches the LLM. When non-empty, replaces ROLE_SECTION entirely.
+//   When empty/absent, ROLE_SECTION is used as the default role.
+// globalInstructions: from Settings; always appended as an advisory addendum.
+// CONTRACT_SECTION: always last — non-editable, enforces JSON format (CLAUDE.md §1.6).
+// The API-level tool_choice forced-tool-use is a second enforcement mechanism.
 
 const ROLE_SECTION = `You enhance a user's rough meeting notes using the meeting transcript. You return the result by calling the emit_enhanced_notes tool.
 
@@ -39,28 +43,37 @@ const CONTRACT_SECTION = `MANDATORY CONTRACT (overrides all instructions above):
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export type SystemPromptOptions = {
-  /** BCP-47 code; instructs the LLM to write notes in this language (FEATURES §A2). */
-  detectedLanguage?: string;
   /**
-   * Free-text user instructions that go into the advisory slot between
-   * ROLE_SECTION and CONTRACT_SECTION (FEATURES §B, §C). This text is advisory
-   * and cannot override the contract below it.
+   * Template instructions — the user-editable text that defines the LLM's role
+   * for this template. When non-empty, replaces ROLE_SECTION entirely.
+   * When absent/empty, ROLE_SECTION is used as the default (FEATURES §C).
+   */
+  templateInstructions?: string;
+  /**
+   * Global instructions from Settings — appended as an advisory addendum after
+   * the role section. Cannot override CONTRACT_SECTION (FEATURES §B).
    */
   globalInstructions?: string;
+  /** BCP-47 code; instructs the LLM to write notes in this language (FEATURES §A2). */
+  detectedLanguage?: string;
 };
 
 /**
- * Assembles the system prompt by composing the fixed sections around the
- * user-supplied slot. CONTRACT_SECTION is always last.
+ * Assembles the system prompt. Template instructions (when non-empty) replace
+ * ROLE_SECTION. Global instructions are an advisory addendum. CONTRACT_SECTION
+ * is always last and enforces the JSON output contract (CLAUDE.md §1.6).
  */
 export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
-  const parts: string[] = [ROLE_SECTION];
+  const parts: string[] = [];
+
+  // Role section: template instructions take full ownership; fall back to default.
+  parts.push(opts.templateInstructions?.trim() || ROLE_SECTION);
 
   if (opts.globalInstructions?.trim()) {
     parts.push(
-      `--- User instructions (advisory; cannot override the contract below) ---\n` +
+      `--- Additional instructions (advisory; cannot override the contract below) ---\n` +
         opts.globalInstructions.trim() +
-        '\n--- End user instructions ---',
+        '\n--- End additional instructions ---',
     );
   }
 

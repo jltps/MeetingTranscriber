@@ -86,6 +86,7 @@ export class AnthropicEnhancer implements Enhancer {
             {
               type: 'text',
               text: buildSystemPrompt({
+                templateInstructions: input.templateInstructions,
                 globalInstructions: input.globalInstructions,
                 detectedLanguage: input.detectedLanguage,
               }),
