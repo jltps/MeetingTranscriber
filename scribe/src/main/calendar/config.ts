@@ -32,7 +32,7 @@ function ensureEnvLoaded(): void {
 
 // Public Desktop OAuth client ID (PKCE — no secret). GOOGLE_OAUTH_CLIENT_ID env
 // still overrides this for local dev. Project: covid19-tracker-296716.
-const BUNDLED_GOOGLE_CLIENT_ID = '941880454523-ebbgatke8sq7ia0dm80phju1kvlaj7go.apps.googleusercontent.com';
+const BUNDLED_GOOGLE_CLIENT_ID = '172739372349-3k6s3ssfrmu7uvbrn3dl14f3agtu72vg.apps.googleusercontent.com';
 
 export const GOOGLE_OAUTH = {
   authEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
