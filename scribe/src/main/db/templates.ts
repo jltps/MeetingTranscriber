@@ -1,5 +1,6 @@
 // Templates CRUD (FEATURES §C). Runs in the main process only.
-// Built-in templates are read-only; users can duplicate them to create editable copies.
+// All templates — including built-ins — are editable and deletable. The is_builtin
+// flag is retained only for seeding idempotency in migrations.
 // Deleting a template sets meetings.template_id to NULL via the FK cascade (CLAUDE.md §7).
 import type { Template, TemplateCreate } from '../../shared/types';
 import { getDb } from './index';
@@ -60,13 +61,9 @@ export function createTemplate(data: TemplateCreate): Template {
   return rowToTemplate(row);
 }
 
-export function updateTemplate(
-  id: number,
-  data: Partial<TemplateCreate>,
-): Template {
+export function updateTemplate(id: number, data: Partial<TemplateCreate>): Template {
   const existing = getTemplate(id);
   if (!existing) throw new Error(`Template ${id} not found`);
-  if (existing.isBuiltin) throw new Error('Built-in templates cannot be edited directly. Duplicate them first.');
 
   const now = Date.now();
   getDb()
@@ -83,7 +80,7 @@ export function updateTemplate(
       data.name ?? null,
       data.instructions ?? null,
       data.languageMode ?? null,
-      // Allow explicit null to clear language_code; use existing value if not in data
+      // Allow explicit null to clear language_code; use existing value if not in data.
       'languageCode' in data ? data.languageCode : existing.languageCode,
       now,
       id,
@@ -97,7 +94,6 @@ export function updateTemplate(
 export function deleteTemplate(id: number): void {
   const existing = getTemplate(id);
   if (!existing) throw new Error(`Template ${id} not found`);
-  if (existing.isBuiltin) throw new Error('Built-in templates cannot be deleted.');
   // ON DELETE SET NULL handles meetings.template_id cleanup via the FK constraint.
   getDb().prepare('DELETE FROM templates WHERE id = ?').run(id);
 }

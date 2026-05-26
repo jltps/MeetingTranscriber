@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { MeetingStatus, MeetingSummary } from '../../../shared/types';
+import type { MeetingStatus, MeetingSummary, Template } from '../../../shared/types';
 import { useDebouncedCallback } from '../../lib/debounce';
 
 function statusDot(status: MeetingStatus): string {
@@ -19,6 +19,7 @@ function formatWhen(ms: number): string {
 
 type MeetingSidebarProps = {
   meetings: MeetingSummary[];
+  templates: Template[];
   selectedId: number | null;
   searching: boolean;
   disabled: boolean; // selection locked while recording
@@ -31,6 +32,7 @@ type MeetingSidebarProps = {
 
 export function MeetingSidebar({
   meetings,
+  templates,
   selectedId,
   searching,
   disabled,
@@ -106,6 +108,14 @@ export function MeetingSidebar({
                     <span className="block text-[11px] text-neutral-500">
                       {formatWhen(m.createdAt)}
                     </span>
+                    {m.templateId && (() => {
+                      const templateName = templates.find((t) => t.id === m.templateId)?.name;
+                      return templateName ? (
+                        <span className="mt-0.5 block truncate text-[10px] text-neutral-600">
+                          {templateName}
+                        </span>
+                      ) : null;
+                    })()}
                   </span>
                 </button>
                 <button

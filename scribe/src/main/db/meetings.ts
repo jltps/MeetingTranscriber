@@ -38,6 +38,7 @@ function toSummary(row: MeetingRow): MeetingSummary {
     createdAt: row.created_at,
     startedAt: row.started_at,
     endedAt: row.ended_at,
+    templateId: row.template_id,
   };
 }
 
@@ -60,7 +61,7 @@ export function createMeeting(): MeetingSummary {
   const id = Number(info.lastInsertRowid);
   db.prepare(`INSERT INTO notes (meeting_id, raw_user_md) VALUES (?, '')`).run(id);
   rebuildMeetingFts(id);
-  return { id, title: 'Untitled meeting', status: 'draft', createdAt, startedAt: null, endedAt: null };
+  return { id, title: 'Untitled meeting', status: 'draft', createdAt, startedAt: null, endedAt: null, templateId: null };
 }
 
 export function listMeetings(): MeetingSummary[] {

@@ -43,6 +43,8 @@ export type MeetingSummary = {
   createdAt: number;
   startedAt: number | null;
   endedAt: number | null;
+  /** Template used for this meeting's enhancement, if any (FEATURES §C, Tweak 3). */
+  templateId: number | null;
 };
 
 /** A meeting plus its notes, for the open editor. */

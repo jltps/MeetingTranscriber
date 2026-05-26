@@ -51,6 +51,7 @@ const api: ScribeApi = {
     saveEnhanced: (id, notes) => ipcRenderer.invoke(IPC.meetingsSaveEnhanced, { id, notes }),
     setTemplate: (meetingId, templateId) =>
       ipcRenderer.invoke(IPC.meetingsSetTemplate, { meetingId, templateId }),
+    suggestTitle: (id) => ipcRenderer.invoke(IPC.meetingsSuggestTitle, id),
   },
   templates: {
     list: () => ipcRenderer.invoke(IPC.templatesList),

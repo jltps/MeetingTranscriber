@@ -37,6 +37,7 @@ export const IPC = {
   meetingsSearch: 'meetings:search',
   meetingsSaveEnhanced: 'meetings:saveEnhanced',
   meetingsSetTemplate: 'meetings:setTemplate',
+  meetingsSuggestTitle: 'meetings:suggestTitle',
 
   templatesList: 'templates:list',
   templatesCreate: 'templates:create',
@@ -188,6 +189,7 @@ export interface MeetingsApi {
   search(query: string): Promise<MeetingSummary[]>;
   saveEnhanced(id: number, notes: EnhancedNotes): Promise<void>;
   setTemplate(meetingId: number, templateId: number | null): Promise<void>;
+  suggestTitle(id: number): Promise<string | null>;
 }
 
 export interface SettingsApi {

@@ -358,14 +358,7 @@ export function SettingsModal({
                     className="flex items-start justify-between rounded-md border border-neutral-800 px-3 py-2"
                   >
                     <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-medium text-neutral-200">{t.name}</span>
-                        {t.isBuiltin && (
-                          <span className="rounded bg-neutral-700 px-1 py-0.5 text-[9px] text-neutral-400">
-                            built-in
-                          </span>
-                        )}
-                      </div>
+                      <span className="text-xs font-medium text-neutral-200">{t.name}</span>
                       {t.instructions && (
                         <p className="mt-0.5 text-[10px] text-neutral-500 line-clamp-1">
                           {t.instructions}
@@ -373,36 +366,24 @@ export function SettingsModal({
                       )}
                     </div>
                     <div className="flex shrink-0 gap-1 ml-2">
-                      {t.isBuiltin ? (
-                        <button
-                          type="button"
-                          onClick={() => void window.api.templates.duplicate(t.id).then(onChanged)}
-                          className="text-[10px] text-neutral-500 hover:text-neutral-300"
-                        >
-                          Duplicate
-                        </button>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => setEditingTemplate(t)}
-                            className="text-[10px] text-neutral-500 hover:text-neutral-300"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (window.confirm(`Delete template "${t.name}"?`)) {
-                                void window.api.templates.remove(t.id).then(onChanged);
-                              }
-                            }}
-                            className="text-[10px] text-red-400 hover:text-red-300"
-                          >
-                            Delete
-                          </button>
-                        </>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => setEditingTemplate(t)}
+                        className="text-[10px] text-neutral-500 hover:text-neutral-300"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`Delete template "${t.name}"?`)) {
+                            void window.api.templates.remove(t.id).then(onChanged);
+                          }
+                        }}
+                        className="text-[10px] text-red-400 hover:text-red-300"
+                      >
+                        Delete
+                      </button>
                     </div>
                   </div>
                 ),

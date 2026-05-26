@@ -149,6 +149,10 @@ export function App() {
   };
 
   const onDelete = async (id: number): Promise<void> => {
+    const allMeetings = meetings.results ?? meetings.meetings;
+    const target = allMeetings?.find((m) => m.id === id);
+    const name = target?.title ?? 'this note';
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
     await meetings.remove(id);
     if (id === selectedId) setSelectedId(null);
   };
@@ -195,6 +199,20 @@ export function App() {
       await meetings.refresh();
     } finally {
       setBusy(false);
+    }
+    // Auto-title if still untitled and transcript exists — before enhancement so the
+    // title is already set when enhancement stores it. Runs fire-and-forget style
+    // but we await it so the sidebar title updates before the enhance banner appears.
+    if (endedId !== null && endedSegments.length > 0) {
+      const currentDetail = await window.api.meetings.get(endedId);
+      if (currentDetail?.title === 'Untitled meeting') {
+        const suggested = await window.api.meetings.suggestTitle(endedId);
+        if (suggested) {
+          await window.api.meetings.updateTitle(endedId, suggested);
+          setTitle(suggested);
+          await meetings.refresh();
+        }
+      }
     }
     // Auto-enhance once the meeting has ended and a transcript exists (§4).
     if (endedId !== null && endedSegments.length > 0) {
@@ -246,6 +264,7 @@ export function App() {
 
       <MeetingSidebar
         meetings={list}
+        templates={templates}
         selectedId={selectedId}
         searching={meetings.results !== null}
         disabled={running}
@@ -271,9 +290,29 @@ export function App() {
                     setTitle(e.target.value);
                     saveTitle(detail.id, e.target.value);
                   }}
+                  onFocus={(e) => e.target.select()}
                   className="min-w-0 flex-1 bg-transparent text-base font-medium text-neutral-200 focus:outline-none"
                   placeholder="Untitled meeting"
                 />
+                <select
+                  value={detail.templateId ?? ''}
+                  onChange={(e) => {
+                    const newId = e.target.value ? Number(e.target.value) : null;
+                    void window.api.meetings.setTemplate(detail.id, newId).then(() => {
+                      void window.api.meetings.get(detail.id).then((d) => {
+                        if (d) setDetail(d);
+                      });
+                    });
+                  }}
+                  className="rounded border border-neutral-700 bg-transparent px-2 py-1 text-xs text-neutral-400 focus:outline-none"
+                >
+                  <option value="">No template</option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
                 {running && (
                   <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-red-400">
                     <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />

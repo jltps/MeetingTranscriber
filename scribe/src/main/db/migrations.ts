@@ -101,6 +101,47 @@ const MIGRATIONS: Migration[] = [
       WHERE NOT EXISTS (SELECT 1 FROM templates WHERE name = '1:1' AND is_builtin = 1);
     `,
   },
+  {
+    version: 4,
+    name: 'replace-builtin-templates',
+    sql: `
+      -- Remove all old built-in templates (meetings referencing them get template_id = NULL via FK ON DELETE SET NULL)
+      DELETE FROM templates WHERE is_builtin = 1;
+
+      -- Insert 6 new built-in starter templates
+      INSERT INTO templates (name, instructions, language_mode, is_builtin, created_at, updated_at) VALUES
+      (
+        'General',
+        '',
+        'global', 1, unixepoch('now')*1000, unixepoch('now')*1000
+      ),
+      (
+        'Sales discovery',
+        'Structure notes around customer needs and qualification. Highlight: (1) customer background and current situation, (2) pain points and business challenges, (3) desired outcomes and success metrics, (4) budget, decision timeline, and stakeholders (BANT), (5) objections or concerns raised, (6) agreed next steps with owners and dates. Flag open questions that need follow-up.',
+        'global', 1, unixepoch('now')*1000, unixepoch('now')*1000
+      ),
+      (
+        'Sales meeting',
+        'Structure notes around deal progression. Highlight: (1) meeting objective and attendees, (2) opportunity status update, (3) key discussion points and customer feedback, (4) objections raised and how they were addressed, (5) product, pricing, or contract topics discussed, (6) commitments made by both sides, (7) next steps with owners and dates. Note any changes in deal status or urgency.',
+        'global', 1, unixepoch('now')*1000, unixepoch('now')*1000
+      ),
+      (
+        'Sales demo',
+        'Structure notes around the product demonstration. Highlight: (1) demo context and audience background, (2) use cases and scenarios shown, (3) prospect reactions, questions, and comments during the demo, (4) features that resonated most and least, (5) objections or gaps identified, (6) follow-up items and next steps. Capture verbatim any strong positive or negative reactions to specific features.',
+        'global', 1, unixepoch('now')*1000, unixepoch('now')*1000
+      ),
+      (
+        'Internal sync',
+        'Keep notes concise and focused on outcomes. Highlight: (1) agenda items covered, (2) status updates per workstream or team member, (3) blockers, risks, or escalations flagged, (4) decisions made and rationale, (5) action items with clear owners and due dates. Skip discussion context — focus on what was decided and what happens next.',
+        'global', 1, unixepoch('now')*1000, unixepoch('now')*1000
+      ),
+      (
+        '1:1',
+        'Structure notes to support ongoing manager–report relationship. Highlight: (1) progress on goals and commitments from last meeting, (2) wins and achievements to acknowledge, (3) current blockers and what support is needed, (4) feedback shared in both directions, (5) updated goals and priorities for the next period, (6) career development or personal topics. Capture specific commitments from both sides.',
+        'global', 1, unixepoch('now')*1000, unixepoch('now')*1000
+      );
+    `,
+  },
 ];
 
 export function runMigrations(db: Database): void {
