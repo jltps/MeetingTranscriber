@@ -22,7 +22,7 @@ kept clean.
 | 03 | Transcript & Enhancement Quality | Make the core output genuinely good: eval loop, source-link accuracy | Quality |
 | 04 | Data: Export, Backup, Sync & Sharing | Where data lives and who can reach it, in phases | Feature (phased) |
 | 05 | Local / Offline Transcription (Whisper) | Private, $0, better code-switching, behind the existing interface | Feature |
-| 06 | Calendar Integration | Auto-start transcription at scheduled meeting time | Feature |
+| 06 | Calendar Integration (Google + Microsoft/Teams) | Auto-start at scheduled time; read-only calendar, app never joins the call | Feature |
 | 07 | Cross-Meeting Intelligence | Chat about a meeting; query across many meetings | Feature |
 
 ## Dependencies
@@ -34,7 +34,7 @@ v1 (shipped) ── 01 Reliability ─────────────► (e
              ├─ 04 Data (export→backup→sync→sharing)
              │        └─ sync/sharing phase needs accounts; export/backup do not
              ├─ 05 Whisper ── motivated by 01's cost readout; native auto-detect helps language work
-             ├─ 06 Calendar ── standalone; later feeds name suggestions into 02
+             ├─ 06 Calendar (Google + MS/Teams) ── standalone; later feeds name suggestions into 02
              └─ 07 Cross-meeting ── benefits from 02 + 03; shares retrieval infra (embeddings/FTS)
 ```
 
@@ -49,8 +49,9 @@ v1 (shipped) ── 01 Reliability ─────────────► (e
 4. **04 Data: export + backup** early too (small, and it is your only backup/sharing
    story until sync exists). Defer the sync/sharing phases until you actually want
    multi-device or collaboration.
-5. Then pick by need: **05 Whisper** if cost/privacy bite, **06 Calendar** for
-   convenience, **07 Cross-meeting** for the "second brain" payoff.
+5. Then pick by need: **05 Whisper** if cost/privacy bite, **06 Calendar**
+   (Google + Microsoft/Teams) for convenience, **07 Cross-meeting** for the "second
+   brain" payoff.
 
 ## How to use a block with Claude Code
 

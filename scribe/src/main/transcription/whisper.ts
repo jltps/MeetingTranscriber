@@ -18,7 +18,7 @@ import type { TranscriptSegment } from '../../shared/types';
 import type { TranscriptionSession } from './session';
 import type { TranscriptionStatus } from '../../shared/ipc-contract';
 import type { LanguageSetting } from '../../shared/types';
-import { getHfId, isModelDownloaded } from './whisper-models';
+import { getHfId, isModelDownloaded, loadTransformers } from './whisper-models';
 import type { WhisperModelName } from './whisper-models';
 import { logger } from '../logger';
 
@@ -45,8 +45,9 @@ let cachedPipeline: any | null = null;
 
 async function getOrLoadPipeline(modelName: WhisperModelName): Promise<unknown> {
   if (cachedPipeline && cachedModelName === modelName) return cachedPipeline;
-  // Lazy-import to avoid loading the ONNX runtime until it is actually needed.
-  const { pipeline } = await import('@xenova/transformers');
+  // Lazy-load to avoid loading the ONNX runtime until it is actually needed,
+  // and to keep the ESM-only package off the static require() path.
+  const { pipeline } = await loadTransformers();
   const hfId = getHfId(modelName);
   logger.info(`Loading Whisper pipeline for model "${modelName}" (${hfId})`);
   cachedPipeline = await pipeline('automatic-speech-recognition', hfId);

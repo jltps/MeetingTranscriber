@@ -9,9 +9,6 @@
 import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-// env is the transformers.js global configuration object.
-// We set cacheDir and allowLocalModels before any pipeline call.
-import { env } from '@xenova/transformers';
 import { logger } from '../logger';
 
 // ── Model catalogue ───────────────────────────────────────────────────────────
@@ -47,35 +44,62 @@ export function getModelsDir(): string {
 }
 
 /**
- * Configure @xenova/transformers to use our userData cache.
- * Called once at app startup (from registerWhisperIpc).
+ * Ensure the model cache directory exists. Called at app startup.
+ *
+ * The @xenova/transformers `env` is configured lazily in loadTransformers()
+ * rather than here: the package is ESM-only, so it must be reached via a
+ * dynamic import() (a static import gets down-levelled to require() by the CJS
+ * main bundle and crashes at load — ERR_REQUIRE_ESM).
  */
 export function initTransformersCache(): void {
-  const dir = getModelsDir();
-  fs.mkdirSync(dir, { recursive: true });
-  // Tell transformers.js to cache here instead of ~/.cache/huggingface
-  env.cacheDir = dir;
-  // Allow downloads from the CDN (default: true)
-  env.allowRemoteModels = true;
-  // Disable local file scanning for security — we always go through the cache
-  env.allowLocalModels = false;
+  fs.mkdirSync(getModelsDir(), { recursive: true });
+}
+
+/** True once env.cacheDir/allowLocalModels have been applied (idempotent guard). */
+let envConfigured = false;
+
+/**
+ * Lazy-load @xenova/transformers and configure its cache exactly once.
+ * Every pipeline call (download + inference) goes through this so the cacheDir
+ * is guaranteed to be set before the first model load, without a startup race.
+ */
+export async function loadTransformers(): Promise<typeof import('@xenova/transformers')> {
+  const transformers = await import('@xenova/transformers');
+  if (!envConfigured) {
+    const dir = getModelsDir();
+    fs.mkdirSync(dir, { recursive: true });
+    // Tell transformers.js to cache here instead of ~/.cache/huggingface
+    transformers.env.cacheDir = dir;
+    // Allow downloads from the CDN (default: true)
+    transformers.env.allowRemoteModels = true;
+    // Disable local file scanning for security — we always go through the cache
+    transformers.env.allowLocalModels = false;
+    envConfigured = true;
+  }
+  return transformers;
 }
 
 // ── Model status ──────────────────────────────────────────────────────────────
 
 /**
+ * Absolute path to a model's cache directory.
+ *
+ * @xenova/transformers' FileCache mirrors the repo id verbatim as nested
+ * directories — {cacheDir}/{org}/{model}/... (e.g. Xenova/whisper-tiny) — NOT
+ * a flattened `org--model`. path.join handles the '/' on every platform.
+ */
+function getModelDir(name: WhisperModelName): string {
+  return path.join(getModelsDir(), ...CATALOGUE[name].hfId.split('/'));
+}
+
+/**
  * Returns true when the key model weight files are present in the cache.
- * @xenova/transformers stores Hugging Face repos as sub-directories named
- * after the model id (slashes replaced by --), so we check for the directory.
  */
 export function isModelDownloaded(name: WhisperModelName): boolean {
-  const dir = getModelsDir();
-  const hfId = CATALOGUE[name].hfId;
-  // transformers.js mirrors: {cacheDir}/{org}--{model}/...
-  const safeId = hfId.replace('/', '--');
-  const modelDir = path.join(dir, safeId);
+  const modelDir = getModelDir(name);
   if (!fs.existsSync(modelDir)) return false;
-  // Check for the ONNX encoder file which is the largest / last to download
+  // Check for the ONNX encoder file which is the largest / last to download.
+  // ASR pipelines default to the quantized variant, but accept either.
   const encoderPath = path.join(modelDir, 'onnx', 'encoder_model.onnx');
   const encoderQuantPath = path.join(modelDir, 'onnx', 'encoder_model_quantized.onnx');
   return fs.existsSync(encoderPath) || fs.existsSync(encoderQuantPath);
@@ -113,36 +137,49 @@ export async function downloadModel(
   onProgress: (pct: number) => void,
   signal: AbortSignal,
 ): Promise<void> {
-  // Lazy-import to avoid loading the heavy ONNX runtime at startup.
-  const { pipeline } = await import('@xenova/transformers');
+  // Lazy-load to avoid loading the heavy ONNX runtime at startup, and to keep
+  // the ESM-only package off the static require() path (see loadTransformers).
+  const { pipeline } = await loadTransformers();
 
   const hfId = CATALOGUE[name].hfId;
 
   // Track per-file progress and convert to an overall percentage.
-  // transformers.js fires callbacks per file; aggregate them into one value.
+  // transformers.js fires callbacks per file; `info.name` is the repo id (same
+  // for every file), so we key on `info.file` — otherwise all files collapse
+  // into one entry and the bar jumps. We register each file at 'initiate'/
+  // 'download' (0%) so the average reflects files that haven't started yet.
   const fileProgress = new Map<string, number>();
+
+  const report = (file: string | undefined, pct: number): void => {
+    if (!file) return;
+    fileProgress.set(file, Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 0);
+    const values = [...fileProgress.values()];
+    const avg = values.reduce((s, v) => s + v, 0) / values.length;
+    onProgress(Math.round(avg));
+  };
 
   await pipeline('automatic-speech-recognition', hfId, {
     progress_callback: (info: {
       status: string;
       name: string;
+      file?: string;
       progress?: number;
       loaded?: number;
       total?: number;
     }) => {
       if (signal.aborted) return;
-      if (info.status === 'progress' && info.name) {
-        const pct = info.progress ?? ((info.loaded ?? 0) / (info.total ?? 1)) * 100;
-        fileProgress.set(info.name, pct);
-        // Overall = average of all known files
-        const values = [...fileProgress.values()];
-        const avg = values.reduce((s, v) => s + v, 0) / values.length;
-        onProgress(Math.round(avg));
-      } else if (info.status === 'done') {
-        fileProgress.set(info.name, 100);
-        const values = [...fileProgress.values()];
-        const avg = values.reduce((s, v) => s + v, 0) / values.length;
-        onProgress(Math.round(avg));
+      switch (info.status) {
+        case 'initiate':
+        case 'download':
+          // File discovered but not yet downloading — seed at 0%.
+          if (info.file && !fileProgress.has(info.file)) report(info.file, 0);
+          break;
+        case 'progress':
+          report(info.file, info.progress ?? ((info.loaded ?? 0) / (info.total || 1)) * 100);
+          break;
+        case 'done':
+          report(info.file, 100);
+          break;
       }
     },
   });
@@ -169,10 +206,7 @@ export function createDownloadAbortController(): AbortController {
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 export function deleteModel(name: WhisperModelName): void {
-  const dir = getModelsDir();
-  const hfId = CATALOGUE[name].hfId;
-  const safeId = hfId.replace('/', '--');
-  const modelDir = path.join(dir, safeId);
+  const modelDir = getModelDir(name);
   if (fs.existsSync(modelDir)) {
     fs.rmSync(modelDir, { recursive: true, force: true });
     logger.info(`Whisper model "${name}" deleted`);
