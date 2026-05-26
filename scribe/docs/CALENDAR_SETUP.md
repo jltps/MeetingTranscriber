@@ -1,10 +1,12 @@
 # Google Calendar setup (ROADMAP_06)
 
-Connecting a calendar needs a Google OAuth **client ID**. This is a Google
+Connecting a calendar needs a Google OAuth **Desktop client**. This is a Google
 requirement — there's no way for any app to reach a user's private calendar
 without a client registered in Google Cloud. It's a one-time, ~5-minute task.
-The client ID is **public** (we use PKCE, there is no client secret), so it's
-safe to commit and ship.
+The client ID is public (safe to commit/ship). Google's Desktop client type also
+issues a **client secret** that must be sent in the token request (we use PKCE on
+top of it); Google treats this secret as non-confidential for installed apps, but
+we keep it out of git and read it from `.env` (see below).
 
 ## 1. Create the OAuth client (once)
 
@@ -16,23 +18,26 @@ safe to commit and ship.
    - **Test users** → add the Google account(s) you'll sign in with.
 4. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
    - Application type: **Desktop app**.
-   - Copy the generated **Client ID**.
+   - Copy the generated **Client ID** *and* **Client secret** (format `GOCSPX-…`).
+     (You can also "Download JSON" to get both.)
 
 No redirect URIs to configure — Desktop clients allow loopback
 (`http://127.0.0.1:<port>`) automatically, which is what the app uses.
 
-## 2. Give the app the client ID
+## 2. Give the app the credentials
 
-Either (pick one):
+The **client ID** is already bundled in `src/main/calendar/config.ts`
+(`BUNDLED_GOOGLE_CLIENT_ID`); `GOOGLE_OAUTH_CLIENT_ID` env overrides it.
 
-- **Dev / local:** copy `.env.example` to `.env` and set
-  `GOOGLE_OAUTH_CLIENT_ID=<your id>`. (`.env` is gitignored.)
-- **Shipping to others:** paste it into `BUNDLED_GOOGLE_CLIENT_ID` in
-  `src/main/calendar/config.ts` and commit. Because it's public + PKCE, every
-  build then connects with zero per-user setup.
+The **client secret** is required by Google's token exchange and is **not
+committed** — set it in `.env`:
 
-`src/main/calendar/config.ts` reads the env var first, then the bundled
-constant, so either path works with no other change.
+- Copy `.env.example` to `.env` (gitignored) and set
+  `GOOGLE_OAUTH_CLIENT_SECRET=GOCSPX-…` (and `GOOGLE_OAUTH_CLIENT_ID=…` if you want
+  to override the bundled one).
+
+`isGoogleConfigured()` requires **both** id and secret, so Connect surfaces a clear
+"not configured" message if the secret is missing rather than failing mid-flow.
 
 ## 3. First connect — expect the "unverified app" screen
 

@@ -11,6 +11,16 @@ import { normalizeGoogleEvent, type RawGoogleEvent } from './normalize';
 
 type EventsListResponse = { items?: RawGoogleEvent[]; nextPageToken?: string };
 
+/** Extract Google's human-readable error message from a failed API response. */
+async function readApiError(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: { message?: string; status?: string } };
+    return body.error?.message ?? body.error?.status ?? res.statusText;
+  } catch {
+    return res.statusText;
+  }
+}
+
 export class GoogleCalendarProvider implements CalendarProvider {
   readonly id = 'google' as const;
 
@@ -43,7 +53,10 @@ export class GoogleCalendarProvider implements CalendarProvider {
 
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) {
-        throw new Error(`Google Calendar request failed: ${res.status}`);
+        // Surface Google's error message (e.g. "Calendar API has not been used in
+        // project N… or it is disabled. Enable it by visiting …") so the cause is
+        // actionable rather than a bare status code.
+        throw new Error(`Google Calendar request failed (${res.status}): ${await readApiError(res)}`);
       }
       const json = (await res.json()) as EventsListResponse;
       for (const raw of json.items ?? []) {

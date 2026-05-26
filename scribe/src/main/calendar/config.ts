@@ -30,9 +30,14 @@ function ensureEnvLoaded(): void {
   }
 }
 
-// Public Desktop OAuth client ID (PKCE — no secret). GOOGLE_OAUTH_CLIENT_ID env
-// still overrides this for local dev. Project: covid19-tracker-296716.
+// Public Desktop OAuth client ID. GOOGLE_OAUTH_CLIENT_ID env overrides for dev.
 const BUNDLED_GOOGLE_CLIENT_ID = '172739372349-3k6s3ssfrmu7uvbrn3dl14f3agtu72vg.apps.googleusercontent.com';
+
+// Google's Desktop client type ALSO requires a client_secret in the token/refresh
+// requests, even with PKCE (it's "not confidential" per Google for installed apps,
+// but it is mandatory). We do NOT commit it: supply via GOOGLE_OAUTH_CLIENT_SECRET
+// in scribe/.env (gitignored). Bundling is left empty intentionally.
+const BUNDLED_GOOGLE_CLIENT_SECRET = '';
 
 export const GOOGLE_OAUTH = {
   authEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -50,6 +55,13 @@ export function getGoogleClientId(): string {
   return process.env.GOOGLE_OAUTH_CLIENT_ID?.trim() || BUNDLED_GOOGLE_CLIENT_ID;
 }
 
+export function getGoogleClientSecret(): string {
+  ensureEnvLoaded();
+  return process.env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() || BUNDLED_GOOGLE_CLIENT_SECRET;
+}
+
+// Both id AND secret are required for Google's Desktop-client token exchange, so
+// Connect can fail fast with a clear message instead of at the token endpoint.
 export function isGoogleConfigured(): boolean {
-  return getGoogleClientId().length > 0;
+  return getGoogleClientId().length > 0 && getGoogleClientSecret().length > 0;
 }

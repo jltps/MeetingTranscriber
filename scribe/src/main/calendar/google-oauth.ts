@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { shell } from 'electron';
-import { GOOGLE_OAUTH, getGoogleClientId, isGoogleConfigured } from './config';
+import { GOOGLE_OAUTH, getGoogleClientId, getGoogleClientSecret, isGoogleConfigured } from './config';
 import { challengeFromVerifier, generateVerifier, randomState } from './pkce';
 import {
   clearGoogleTokens,
@@ -14,8 +14,10 @@ import { logger } from '../logger';
 
 // Google OAuth 2.0 + PKCE "installed app" flow, entirely in the main process
 // (CLAUDE.md §1.2/§1.3). Login opens in the SYSTEM browser via shell.openExternal;
-// a temporary loopback HTTP server catches the redirect. No client secret. Tokens
-// are stored encrypted and NEVER logged.
+// a temporary loopback HTTP server catches the redirect. Google's Desktop client
+// type requires the client_secret in the token/refresh requests (alongside PKCE) —
+// it is supplied via env, never committed. Tokens are stored encrypted and NEVER
+// logged.
 
 const FLOW_TIMEOUT_MS = 3 * 60 * 1000; // user has 3 min to complete consent
 const EXPIRY_SAFETY_MS = 60 * 1000; // refresh 60s before the real expiry
@@ -27,6 +29,14 @@ type TokenResponse = {
   error?: string;
   error_description?: string;
 };
+
+/** Build a diagnosable error string from Google's token-endpoint error body. */
+function describeTokenError(json: TokenResponse, status: number): string {
+  if (json.error) {
+    return json.error_description ? `${json.error}: ${json.error_description}` : json.error;
+  }
+  return `HTTP ${status}`;
+}
 
 const CALLBACK_HTML =
   '<!doctype html><html><head><meta charset="utf-8"><title>Scribe</title></head>' +
@@ -43,9 +53,9 @@ const CALLBACK_HTML =
 export async function runGoogleOAuth(): Promise<void> {
   if (!isGoogleConfigured()) {
     throw new Error(
-      'Google Calendar is not configured. Add a Desktop OAuth client ID via ' +
-        'GOOGLE_OAUTH_CLIENT_ID (.env) or BUNDLED_GOOGLE_CLIENT_ID in calendar/config.ts. ' +
-        'See docs/CALENDAR_SETUP.md.',
+      'Google Calendar is not configured. A Desktop OAuth client needs BOTH a client ID ' +
+        'and a client secret: set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in ' +
+        'scribe/.env. See docs/CALENDAR_SETUP.md.',
     );
   }
   const verifier = generateVerifier();
@@ -142,6 +152,7 @@ async function exchangeCodeForTokens(
   const body = new URLSearchParams({
     code,
     client_id: getGoogleClientId(),
+    client_secret: getGoogleClientSecret(), // required by Google's Desktop client type
     redirect_uri: redirectUri,
     grant_type: 'authorization_code',
     code_verifier: verifier,
@@ -153,7 +164,7 @@ async function exchangeCodeForTokens(
   });
   const json = (await res.json()) as TokenResponse;
   if (!res.ok || !json.access_token) {
-    throw new Error(`Token exchange failed: ${json.error ?? res.status}`);
+    throw new Error(`Token exchange failed: ${describeTokenError(json, res.status)}`);
   }
   storeGoogleTokens({
     accessToken: json.access_token,
@@ -177,6 +188,7 @@ export async function getValidGoogleAccessToken(): Promise<string> {
 
   const body = new URLSearchParams({
     client_id: getGoogleClientId(),
+    client_secret: getGoogleClientSecret(), // required by Google's Desktop client type
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
   });
@@ -191,7 +203,7 @@ export async function getValidGoogleAccessToken(): Promise<string> {
       clearGoogleTokens();
       throw new Error('Google Calendar session expired — please reconnect.');
     }
-    throw new Error(`Token refresh failed: ${json.error ?? res.status}`);
+    throw new Error(`Token refresh failed: ${describeTokenError(json, res.status)}`);
   }
   storeGoogleTokens({
     accessToken: json.access_token,
