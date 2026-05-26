@@ -10,6 +10,7 @@ import type {
   MeetingDetail,
   MeetingSummary,
   PersistedSegment,
+  SpeakerName,
   Template,
   TemplateCreate,
   TranscriptSegment,
@@ -47,6 +48,11 @@ export const IPC = {
   templatesDuplicate: 'templates:duplicate',
 
   enhancerEnhance: 'enhancer:enhance',
+
+  speakersGet: 'speakers:get',           // meetingId → SpeakerName[]
+  speakersSet: 'speakers:set',           // { meetingId, rawLabel, displayName } → void
+  speakersClear: 'speakers:clear',       // { meetingId, rawLabel } → void
+  speakersReassign: 'speakers:reassign', // { meetingId, segmentId, newRawLabel } → void
 
   settingsGet: 'settings:get',
   settingsSetKeys: 'settings:setKeys',
@@ -186,6 +192,40 @@ export interface TemplatesApi {
   duplicate(id: number): Promise<Template>;
 }
 
+// ─── Speaker naming (ROADMAP_02) ────────────────────────────────────────────
+
+export const SpeakersSetSchema = z.object({
+  meetingId: MeetingIdSchema,
+  rawLabel: z.string().min(1),
+  displayName: z.string().min(1).max(80),
+});
+export type SpeakersSetInput = z.infer<typeof SpeakersSetSchema>;
+
+export const SpeakersClearSchema = z.object({
+  meetingId: MeetingIdSchema,
+  rawLabel: z.string().min(1),
+});
+export type SpeakersClearInput = z.infer<typeof SpeakersClearSchema>;
+
+export const SpeakersReassignSchema = z.object({
+  meetingId: MeetingIdSchema,
+  segmentId: z.number().int().positive(),
+  newRawLabel: z.string().min(1),
+});
+export type SpeakersReassignInput = z.infer<typeof SpeakersReassignSchema>;
+
+/** Per-meeting speaker name management. */
+export interface SpeakersApi {
+  /** Return all user-assigned name mappings for a meeting. Empty array = no mappings (use raw labels). */
+  get(meetingId: number): Promise<SpeakerName[]>;
+  /** Create or replace a mapping from rawLabel → displayName. */
+  set(meetingId: number, rawLabel: string, displayName: string): Promise<void>;
+  /** Delete a mapping, reverting the label back to rawLabel. */
+  clear(meetingId: number, rawLabel: string): Promise<void>;
+  /** Reassign a specific persisted segment to a different speaker label. */
+  reassign(meetingId: number, segmentId: number, newRawLabel: string): Promise<void>;
+}
+
 export interface MeetingsApi {
   list(): Promise<MeetingSummary[]>;
   create(): Promise<MeetingSummary>;
@@ -225,6 +265,7 @@ export interface ScribeApi {
   onTranscriptionLanguage(cb: (lang: TranscriptionLanguage) => void): () => void;
   meetings: MeetingsApi;
   templates: TemplatesApi;
+  speakers: SpeakersApi;
   enhance(meetingId: number): Promise<EnhanceResult>;
   settings: SettingsApi;
 }

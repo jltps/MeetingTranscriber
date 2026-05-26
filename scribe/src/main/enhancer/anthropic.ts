@@ -71,7 +71,10 @@ export class AnthropicEnhancer implements Enhancer {
   }
 
   async enhance(input: EnhanceInput): Promise<EnhanceResult> {
-    const { text: transcriptText, usage: summaryUsage } = await this.prepareTranscript(input.transcript);
+    const { text: transcriptText, usage: summaryUsage } = await this.prepareTranscript(
+      input.transcript,
+      input.speakerNames,
+    );
     const userContent = buildUserContent(input.userNotes, transcriptText);
 
     // Accumulated tokens across retries and chunk-summarization.
@@ -121,7 +124,10 @@ export class AnthropicEnhancer implements Enhancer {
 
   // Degraded path: plain-Markdown enhancement wrapped into EnhancedNotes (§8).
   async enhanceFallback(input: EnhanceInput): Promise<EnhanceResult> {
-    const { text: transcriptText, usage: summaryUsage } = await this.prepareTranscript(input.transcript);
+    const { text: transcriptText, usage: summaryUsage } = await this.prepareTranscript(
+      input.transcript,
+      input.speakerNames,
+    );
     const response = await this.client.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,
@@ -146,8 +152,9 @@ export class AnthropicEnhancer implements Enhancer {
   // Returns the merged transcript text AND cumulative token usage for all summary calls.
   private async prepareTranscript(
     segments: EnhancerSegment[],
+    speakerNames?: Record<string, string>,
   ): Promise<{ text: string; usage: EnhancerUsage }> {
-    const full = segmentsToText(segments);
+    const full = segmentsToText(segments, speakerNames);
     if (full.length <= CHUNK_THRESHOLD_CHARS) {
       return { text: full, usage: { inputTokens: 0, outputTokens: 0 } };
     }

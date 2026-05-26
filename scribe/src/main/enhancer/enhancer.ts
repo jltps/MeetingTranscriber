@@ -24,6 +24,12 @@ export type EnhanceInput = {
   templateInstructions?: string;
   /** Global instructions from Settings — appended as an advisory addendum. */
   globalInstructions?: string;
+  /**
+   * Speaker name mapping (ROADMAP_02) — rawLabel → displayName.
+   * When present, the transcript sent to the LLM uses real names instead of
+   * auto-generated labels ("Ana: …" rather than "Speaker 1: …").
+   */
+  speakerNames?: Record<string, string>;
 };
 
 /** Token consumption for a single enhancement call (ROADMAP_01 §3). */

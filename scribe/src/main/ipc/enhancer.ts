@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { IPC, MeetingIdSchema } from '../../shared/ipc-contract';
 import { getEnhancerSegments, getMeeting, saveClaudeUsage, saveEnhancedNotes } from '../db/meetings';
+import { getSpeakerNames } from '../db/speakers';
 import { getTemplate } from '../db/templates';
 import { getGlobalInstructions, getLanguage } from '../db/settings';
 import { runEnhancement } from '../enhancer';
@@ -40,12 +41,20 @@ export function registerEnhancerIpc(): void {
     // Template instructions replace the ROLE_SECTION entirely when non-empty.
     // Global instructions are always an advisory addendum after the role.
     // Both are passed separately so buildSystemPrompt can position them correctly.
+    // Resolve speaker names so the LLM sees real names (ROADMAP_02).
+    const speakerNamesArr = getSpeakerNames(id);
+    const speakerNames =
+      speakerNamesArr.length > 0
+        ? Object.fromEntries(speakerNamesArr.map((s) => [s.rawLabel, s.displayName]))
+        : undefined;
+
     const result = await runEnhancement({
       userNotes: meeting.rawUserMd,
       transcript: getEnhancerSegments(id),
       detectedLanguage: outputLanguage,
       templateInstructions: template?.instructions.trim() || undefined,
       globalInstructions: getGlobalInstructions() || undefined,
+      speakerNames,
     });
     saveEnhancedNotes(id, JSON.stringify(result.notes), outputLanguage ?? null);
     // Persist Claude token usage for cost tracking (ROADMAP_01 §3).

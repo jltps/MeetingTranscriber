@@ -61,6 +61,15 @@ const api: ScribeApi = {
     remove: (id) => ipcRenderer.invoke(IPC.templatesDelete, id),
     duplicate: (id) => ipcRenderer.invoke(IPC.templatesDuplicate, id),
   },
+  speakers: {
+    get: (meetingId) => ipcRenderer.invoke(IPC.speakersGet, meetingId),
+    set: (meetingId, rawLabel, displayName) =>
+      ipcRenderer.invoke(IPC.speakersSet, { meetingId, rawLabel, displayName }),
+    clear: (meetingId, rawLabel) =>
+      ipcRenderer.invoke(IPC.speakersClear, { meetingId, rawLabel }),
+    reassign: (meetingId, segmentId, newRawLabel) =>
+      ipcRenderer.invoke(IPC.speakersReassign, { meetingId, segmentId, newRawLabel }),
+  },
   enhance: (meetingId) => ipcRenderer.invoke(IPC.enhancerEnhance, meetingId),
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),

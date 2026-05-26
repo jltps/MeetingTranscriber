@@ -2,6 +2,7 @@ import { registerAppIpc } from './app';
 import { registerEnhancerIpc } from './enhancer';
 import { registerMeetingsIpc } from './meetings';
 import { registerSettingsIpc } from './settings';
+import { registerSpeakersIpc } from './speakers';
 import { registerTemplatesIpc } from './templates';
 import { registerTranscriptionIpc } from './transcription';
 
@@ -12,5 +13,6 @@ export function registerIpcHandlers(): void {
   registerTemplatesIpc();
   registerTranscriptionIpc();
   registerEnhancerIpc();
+  registerSpeakersIpc();
   registerSettingsIpc();
 }

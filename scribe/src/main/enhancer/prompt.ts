@@ -93,8 +93,21 @@ export const FALLBACK_SYSTEM_PROMPT = `Enhance the user's rough meeting notes us
 
 export const SUMMARY_SYSTEM_PROMPT = `Summarize this meeting-transcript excerpt into concise key points, decisions, and action items. Preserve speaker attributions and any [id=N] markers where they matter. Output plain text bullet points.`;
 
-export function segmentsToText(segments: EnhancerSegment[]): string {
-  return segments.map((s) => `[id=${s.id}] ${s.speakerLabel}: ${s.text}`).join('\n');
+/**
+ * Format transcript segments for the LLM prompt.
+ * When speakerNames is supplied (ROADMAP_02), raw labels are resolved to the
+ * user-assigned display names so the LLM sees "Ana: …" instead of "Speaker 1: …".
+ */
+export function segmentsToText(
+  segments: EnhancerSegment[],
+  speakerNames?: Record<string, string>,
+): string {
+  return segments
+    .map((s) => {
+      const label = speakerNames?.[s.speakerLabel] ?? s.speakerLabel;
+      return `[id=${s.id}] ${label}: ${s.text}`;
+    })
+    .join('\n');
 }
 
 export function buildUserContent(userNotes: string, transcriptText: string): string {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EnhancedNotes, MeetingDetail, PersistedSegment, Template } from '../../shared/types';
 import { EnhancedNotesSchema } from '../../shared/ipc-contract';
 import { useAudioCapture } from '../audio/use-audio-capture';
@@ -56,6 +56,9 @@ export function App() {
   /** Whether the template picker modal is open before creating a new meeting. */
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
+  /** Speaker display names for the currently selected meeting (ROADMAP_02). */
+  const [speakerNames, setSpeakerNames] = useState<Map<string, string>>(new Map());
+
   // Subscribe to language detection events for the lifetime of the app.
   useEffect(() => {
     return window.api.onTranscriptionLanguage(({ bcp47 }) => setDetectedLang(bcp47));
@@ -89,18 +92,21 @@ export function App() {
       setLoadedSegments([]);
       setTitle('');
       setEnhanced(null);
+      setSpeakerNames(new Map());
       return;
     }
     let cancelled = false;
     void (async () => {
-      const [d, segs] = await Promise.all([
+      const [d, segs, names] = await Promise.all([
         window.api.meetings.get(selectedId),
         window.api.meetings.getTranscript(selectedId),
+        window.api.speakers.get(selectedId),
       ]);
       if (cancelled) return;
       setDetail(d);
       setLoadedSegments(segs);
       setTitle(d?.title ?? '');
+      setSpeakerNames(new Map(names.map((n) => [n.rawLabel, n.displayName])));
       const parsed = parseEnhanced(d?.enhancedJson ?? null);
       setEnhanced(parsed);
       setDegraded(false);
@@ -224,6 +230,53 @@ export function App() {
       await enhanceMeeting(endedId);
     }
   };
+
+  // ── Speaker naming (ROADMAP_02) ───────────────────────────────────────────
+
+  /** Rename (or revert) a speaker label for the current meeting. */
+  const onRenameSpeaker = useCallback(
+    (rawLabel: string, displayName: string): void => {
+      if (selectedId === null) return;
+      if (displayName === rawLabel) {
+        // User cleared the name — revert to the raw label.
+        void window.api.speakers.clear(selectedId, rawLabel).then(() => {
+          setSpeakerNames((prev) => {
+            const next = new Map(prev);
+            next.delete(rawLabel);
+            return next;
+          });
+        });
+      } else {
+        void window.api.speakers.set(selectedId, rawLabel, displayName).then(() => {
+          setSpeakerNames((prev) => {
+            const next = new Map(prev);
+            next.set(rawLabel, displayName);
+            return next;
+          });
+        });
+      }
+    },
+    [selectedId],
+  );
+
+  /** Reassign one segment to a different speaker label, then reload the transcript. */
+  const onReassignSegment = useCallback(
+    (segmentId: number, newRawLabel: string): void => {
+      if (selectedId === null) return;
+      void window.api.speakers.reassign(selectedId, segmentId, newRawLabel).then(() => {
+        void window.api.meetings.getTranscript(selectedId).then(setLoadedSegments);
+      });
+    },
+    [selectedId],
+  );
+
+  /** All distinct raw speaker labels across the loaded + live transcript. */
+  const distinctRawLabels = useMemo(() => {
+    const all = showingActive ? [...transcription.finals, ...loadedSegments] : loadedSegments;
+    return [...new Set(all.map((s) => s.speakerLabel))];
+  }, [showingActive, transcription.finals, loadedSegments]);
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   const list = meetings.results ?? meetings.meetings;
   const finals = showingActive ? transcription.finals : loadedSegments;
@@ -430,7 +483,15 @@ export function App() {
               </section>
               <section className="flex w-[42%] shrink-0 flex-col overflow-hidden p-6">
                 <div className="min-h-0 flex-1">
-                  <TranscriptPanel finals={finals} interims={interims} highlight={highlight} />
+                  <TranscriptPanel
+                    finals={finals}
+                    interims={interims}
+                    highlight={highlight}
+                    speakerNames={speakerNames}
+                    onRenameSpeaker={onRenameSpeaker}
+                    onReassignSegment={onReassignSegment}
+                    distinctRawLabels={distinctRawLabels}
+                  />
                 </div>
                 <details className="mt-4 text-xs text-neutral-500">
                   <summary className="cursor-pointer select-none">Capture diagnostics</summary>

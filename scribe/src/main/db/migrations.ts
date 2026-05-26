@@ -245,6 +245,23 @@ Rules:
       ALTER TABLE meetings ADD COLUMN claude_output_tokens INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 7,
+    name: 'speaker-names',
+    // Per-meeting speaker name mapping (ROADMAP_02).
+    // Naming is metadata — the raw speaker_label in transcript_segments is never
+    // edited for renames; this table stores the display name overlay.
+    // ON DELETE CASCADE: when a meeting is deleted, its name mappings go too.
+    sql: `
+      CREATE TABLE speaker_names (
+        id           INTEGER PRIMARY KEY,
+        meeting_id   INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+        raw_label    TEXT    NOT NULL,
+        display_name TEXT    NOT NULL,
+        UNIQUE(meeting_id, raw_label)
+      );
+    `,
+  },
 ];
 
 export function runMigrations(db: Database): void {

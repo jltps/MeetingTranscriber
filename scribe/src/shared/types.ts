@@ -89,3 +89,13 @@ export type TemplateCreate = {
   languageMode: TemplateLangMode;
   languageCode: string | null;
 };
+
+/**
+ * A per-meeting speaker name mapping (ROADMAP_02).
+ * rawLabel  — the original Deepgram-generated label, e.g. "Speaker 1" or "Me".
+ * displayName — the user-assigned real name, e.g. "Ana".
+ */
+export type SpeakerName = {
+  rawLabel: string;
+  displayName: string;
+};
