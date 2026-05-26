@@ -1,0 +1,28 @@
+appId: com.scribe.app
+productName: Scribe
+directories:
+  output: release
+# Keep source/test files out of the package; out/** and production node_modules
+# are included by default.
+files:
+  - '!src/**'
+  - '!tests/**'
+  - '!e2e/**'
+  - '!**/*.map'
+# The better-sqlite3 native addon can't be loaded from inside an asar archive.
+asarUnpack:
+  - '**/*.node'
+# Native deps are already built for Electron's ABI via .npmrc (runtime=electron),
+# so don't let electron-builder rebuild them (this machine has no C++ toolchain).
+npmRebuild: false
+win:
+  target:
+    - nsis
+  # We don't sign and ship no custom icon, so skip rcedit/signtool. This avoids
+  # electron-builder's winCodeSign download, whose macOS symlinks can't be
+  # extracted without admin/Developer Mode on Windows.
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true

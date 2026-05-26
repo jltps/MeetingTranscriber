@@ -57,7 +57,9 @@ export class DeepgramSession implements TranscriptionSession {
     const params = new URLSearchParams({
       model: 'nova-3',
       multichannel: 'true',
-      diarize: 'true',
+      // diarize is for single-channel speaker separation and is incompatible with
+      // multichannel mode. Channel 0 (mic) and channel 1 (loopback) already encode
+      // "me vs them" attribution deterministically — no diarize needed.
       punctuate: 'true',
       interim_results: 'true',
       encoding: 'linear16',
@@ -65,7 +67,10 @@ export class DeepgramSession implements TranscriptionSession {
       channels: String(opts.channels),
     });
     const language = this.config.language ?? 'en';
-    if (language === 'auto') params.set('detect_language', 'true');
+    // detect_language is not supported alongside multichannel by Deepgram (returns
+    // HTTP 400). Fall back to 'en' when the user has chosen "Auto-detect" so that
+    // multichannel sessions still connect successfully.
+    if (language === 'auto') params.set('language', 'en');
     else params.set('language', language);
 
     return new Promise<void>((resolve, reject) => {

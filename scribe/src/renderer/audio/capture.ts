@@ -44,7 +44,10 @@ type WorkletFrameMessage = {
   samplesPerChannel: number;
 };
 
-const WORKLET_URL = '/pcm-framer.worklet.js'; // served from renderer/public
+// Relative so it resolves correctly in both dev (Vite dev server) and the
+// packaged app (file:// origin). An absolute '/' path would resolve to the
+// filesystem root in file:// context, causing addModule() to fail with AbortError.
+const WORKLET_URL = './pcm-framer.worklet.js';
 
 export class AudioCapture {
   private ctx: AudioContext | null = null;
