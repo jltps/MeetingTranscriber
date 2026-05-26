@@ -53,6 +53,54 @@ const MIGRATIONS: Migration[] = [
       );
     `,
   },
+  {
+    version: 3,
+    name: 'templates',
+    // Enhancement templates (FEATURES §C) + per-meeting language/template tracking.
+    // ALTER TABLE is additive — existing rows survive with NULL/default values.
+    // ON DELETE SET NULL: deleting a template never breaks past meetings (CLAUDE.md §7).
+    sql: `
+      CREATE TABLE templates (
+        id            INTEGER PRIMARY KEY,
+        name          TEXT    NOT NULL,
+        instructions  TEXT    NOT NULL DEFAULT '',
+        language_mode TEXT    NOT NULL DEFAULT 'global',
+        language_code TEXT,
+        is_builtin    INTEGER NOT NULL DEFAULT 0,
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL
+      );
+
+      ALTER TABLE meetings ADD COLUMN template_id   INTEGER REFERENCES templates(id) ON DELETE SET NULL;
+      ALTER TABLE meetings ADD COLUMN language_mode TEXT;
+      ALTER TABLE meetings ADD COLUMN language_code TEXT;
+
+      ALTER TABLE notes ADD COLUMN enhanced_lang TEXT;
+
+      -- Seed built-in starter templates.  Guard on is_builtin so re-running is safe.
+      INSERT INTO templates (name, instructions, language_mode, is_builtin, created_at, updated_at)
+      SELECT 'General', '', 'global', 1, unixepoch('now')*1000, unixepoch('now')*1000
+      WHERE NOT EXISTS (SELECT 1 FROM templates WHERE is_builtin = 1);
+
+      INSERT INTO templates (name, instructions, language_mode, is_builtin, created_at, updated_at)
+      SELECT 'Technical',
+             'Focus on technical decisions, architecture choices, and engineering tasks. List any mentioned APIs, systems, or code components with owners.',
+             'global', 1, unixepoch('now')*1000, unixepoch('now')*1000
+      WHERE NOT EXISTS (SELECT 1 FROM templates WHERE name = 'Technical' AND is_builtin = 1);
+
+      INSERT INTO templates (name, instructions, language_mode, is_builtin, created_at, updated_at)
+      SELECT 'Sales discovery',
+             'Focus on customer pain points, next steps, commitments, and deal context. Identify all action items, owners, and any timeline discussed.',
+             'global', 1, unixepoch('now')*1000, unixepoch('now')*1000
+      WHERE NOT EXISTS (SELECT 1 FROM templates WHERE name = 'Sales discovery' AND is_builtin = 1);
+
+      INSERT INTO templates (name, instructions, language_mode, is_builtin, created_at, updated_at)
+      SELECT '1:1',
+             'Focus on feedback, blockers, goals, and personal commitments. Highlight anything the manager and report committed to.',
+             'global', 1, unixepoch('now')*1000, unixepoch('now')*1000
+      WHERE NOT EXISTS (SELECT 1 FROM templates WHERE name = '1:1' AND is_builtin = 1);
+    `,
+  },
 ];
 
 export function runMigrations(db: Database): void {

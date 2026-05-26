@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { EnhancedNotes, MeetingDetail, PersistedSegment } from '../../shared/types';
+import type { EnhancedNotes, MeetingDetail, PersistedSegment, Template } from '../../shared/types';
 import { EnhancedNotesSchema } from '../../shared/ipc-contract';
 import { useAudioCapture } from '../audio/use-audio-capture';
 import { useTranscription } from '../features/transcript/use-transcription';
@@ -11,6 +11,7 @@ import { EnhancedNotesEditor } from '../features/notes/EnhancedNotesEditor';
 import { useSettings } from '../features/settings/use-settings';
 import { SettingsModal } from '../features/settings/SettingsModal';
 import { PrivacyNotice } from '../features/settings/PrivacyNotice';
+import { TemplatePickerModal } from '../features/templates/TemplatePickerModal';
 import { useDebouncedCallback } from '../lib/debounce';
 import { CaptureProbe } from './CaptureProbe';
 
@@ -49,10 +50,19 @@ export function App() {
   const [highlight, setHighlight] = useState<TranscriptHighlight | null>(null);
   /** BCP-47 code detected by Deepgram during the current/last auto-detect session. */
   const [detectedLang, setDetectedLang] = useState<string | null>(null);
+  /** Available templates (loaded once on mount). */
+  const [templates, setTemplates] = useState<Template[]>([]);
+  /** Whether the template picker modal is open before creating a new meeting. */
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
   // Subscribe to language detection events for the lifetime of the app.
   useEffect(() => {
     return window.api.onTranscriptionLanguage(({ bcp47 }) => setDetectedLang(bcp47));
+  }, []);
+
+  // Load templates once on mount (and after settings wipe, via wiped() callback).
+  useEffect(() => {
+    void window.api.templates.list().then(setTemplates);
   }, []);
 
   const connectedRef = useRef(false);
@@ -116,8 +126,25 @@ export function App() {
     }
   };
 
-  const onNewNote = async (): Promise<void> => {
+  const onNewNote = (): void => {
+    // Show template picker when more than just the default "General" template exists.
+    // Otherwise create immediately for the one-click-default experience (FEATURES §C2).
+    if (templates.length > 1) {
+      setShowTemplatePicker(true);
+    } else {
+      void (async () => {
+        const meeting = await meetings.create();
+        setSelectedId(meeting.id);
+      })();
+    }
+  };
+
+  const createNoteWithTemplate = async (templateId: number | null): Promise<void> => {
+    setShowTemplatePicker(false);
     const meeting = await meetings.create();
+    if (templateId !== null) {
+      await window.api.meetings.setTemplate(meeting.id, templateId);
+    }
     setSelectedId(meeting.id);
   };
 
@@ -185,6 +212,7 @@ export function App() {
     setSelectedId(null);
     await meetings.refresh();
     await refreshSettings();
+    setTemplates(await window.api.templates.list());
   };
 
   return (
@@ -199,9 +227,20 @@ export function App() {
       {showSettings && settings && (
         <SettingsModal
           settings={settings}
+          templates={templates}
           onClose={() => setShowSettings(false)}
-          onChanged={() => void refreshSettings()}
+          onChanged={() => {
+            void refreshSettings();
+            void window.api.templates.list().then(setTemplates);
+          }}
           onWiped={() => void wiped()}
+        />
+      )}
+      {showTemplatePicker && (
+        <TemplatePickerModal
+          templates={templates}
+          onSelect={(templateId) => void createNoteWithTemplate(templateId)}
+          onClose={() => setShowTemplatePicker(false)}
         />
       )}
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { LanguageSetting } from '../../../shared/types';
+import type { LanguageSetting, Template, TemplateCreate } from '../../../shared/types';
 import type { SettingsView, TestProvider, TestResult } from '../../../shared/ipc-contract';
 
 const LANGUAGE_OPTIONS: Array<{ value: string; label: string }> = [
@@ -104,14 +104,49 @@ function KeyRow({ label, provider, isSet, onSaved }: KeyRowProps) {
 
 type SettingsModalProps = {
   settings: SettingsView;
+  templates: Template[];
   onClose: () => void;
   onChanged: () => void;
   onWiped: () => void;
 };
 
-export function SettingsModal({ settings, onClose, onChanged, onWiped }: SettingsModalProps) {
+export function SettingsModal({
+  settings,
+  templates,
+  onClose,
+  onChanged,
+  onWiped,
+}: SettingsModalProps) {
   const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
   const [instructions, setInstructions] = useState(settings.globalInstructions);
+
+  // Template editor state
+  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
+  const [newTemplate, setNewTemplate] = useState<Partial<TemplateCreate> | null>(null);
+
+  const saveTemplate = async (): Promise<void> => {
+    if (!newTemplate?.name?.trim()) return;
+    await window.api.templates.create({
+      name: newTemplate.name.trim(),
+      instructions: newTemplate.instructions ?? '',
+      languageMode: newTemplate.languageMode ?? 'global',
+      languageCode: newTemplate.languageCode ?? null,
+    });
+    setNewTemplate(null);
+    onChanged();
+  };
+
+  const saveEditingTemplate = async (): Promise<void> => {
+    if (!editingTemplate) return;
+    await window.api.templates.update(editingTemplate.id, {
+      name: editingTemplate.name,
+      instructions: editingTemplate.instructions,
+      languageMode: editingTemplate.languageMode,
+      languageCode: editingTemplate.languageCode,
+    });
+    setEditingTemplate(null);
+    onChanged();
+  };
 
   useEffect(() => {
     const load = (): void => {
@@ -226,6 +261,152 @@ export function SettingsModal({ settings, onClose, onChanged, onWiped }: Setting
                 Applied to every enhancement as advisory guidance. Cannot change the output format
                 or remove source-linking (those are enforced by the system).
               </p>
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                Templates
+              </h3>
+              {!newTemplate && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNewTemplate({ name: '', instructions: '', languageMode: 'global', languageCode: null })
+                  }
+                  className="text-[11px] text-neutral-400 hover:text-neutral-200"
+                >
+                  + New template
+                </button>
+              )}
+            </div>
+
+            {/* New template form */}
+            {newTemplate && (
+              <div className="space-y-2 rounded-md border border-neutral-700 p-3">
+                <input
+                  placeholder="Template name"
+                  value={newTemplate.name ?? ''}
+                  onChange={(e) => setNewTemplate({ ...newTemplate, name: e.target.value })}
+                  className="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-200 focus:outline-none"
+                />
+                <textarea
+                  placeholder="Instructions (optional)"
+                  value={newTemplate.instructions ?? ''}
+                  onChange={(e) => setNewTemplate({ ...newTemplate, instructions: e.target.value })}
+                  rows={3}
+                  className="w-full resize-none rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-200 focus:outline-none"
+                />
+                <div className="flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setNewTemplate(null)}
+                    className="text-xs text-neutral-500 hover:text-neutral-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void saveTemplate()}
+                    className="rounded bg-neutral-700 px-2.5 py-1 text-xs text-neutral-200 hover:bg-neutral-600"
+                  >
+                    Create
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Template list */}
+            <div className="space-y-1.5">
+              {templates.map((t) =>
+                editingTemplate?.id === t.id ? (
+                  <div key={t.id} className="space-y-2 rounded-md border border-neutral-600 p-3">
+                    <input
+                      value={editingTemplate.name}
+                      onChange={(e) => setEditingTemplate({ ...editingTemplate, name: e.target.value })}
+                      className="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-200 focus:outline-none"
+                    />
+                    <textarea
+                      value={editingTemplate.instructions}
+                      onChange={(e) =>
+                        setEditingTemplate({ ...editingTemplate, instructions: e.target.value })
+                      }
+                      rows={3}
+                      className="w-full resize-none rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-200 focus:outline-none"
+                    />
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setEditingTemplate(null)}
+                        className="text-xs text-neutral-500 hover:text-neutral-300"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void saveEditingTemplate()}
+                        className="rounded bg-neutral-700 px-2.5 py-1 text-xs text-neutral-200 hover:bg-neutral-600"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    key={t.id}
+                    className="flex items-start justify-between rounded-md border border-neutral-800 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-medium text-neutral-200">{t.name}</span>
+                        {t.isBuiltin && (
+                          <span className="rounded bg-neutral-700 px-1 py-0.5 text-[9px] text-neutral-400">
+                            built-in
+                          </span>
+                        )}
+                      </div>
+                      {t.instructions && (
+                        <p className="mt-0.5 text-[10px] text-neutral-500 line-clamp-1">
+                          {t.instructions}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 gap-1 ml-2">
+                      {t.isBuiltin ? (
+                        <button
+                          type="button"
+                          onClick={() => void window.api.templates.duplicate(t.id).then(onChanged)}
+                          className="text-[10px] text-neutral-500 hover:text-neutral-300"
+                        >
+                          Duplicate
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setEditingTemplate(t)}
+                            className="text-[10px] text-neutral-500 hover:text-neutral-300"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`Delete template "${t.name}"?`)) {
+                                void window.api.templates.remove(t.id).then(onChanged);
+                              }
+                            }}
+                            className="text-[10px] text-red-400 hover:text-red-300"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ),
+              )}
             </div>
           </section>
 

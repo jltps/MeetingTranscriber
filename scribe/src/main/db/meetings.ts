@@ -19,6 +19,7 @@ type MeetingRow = {
   created_at: number;
   started_at: number | null;
   ended_at: number | null;
+  template_id: number | null;
 };
 
 type SegmentRow = {
@@ -40,7 +41,7 @@ function toSummary(row: MeetingRow): MeetingSummary {
   };
 }
 
-const SUMMARY_COLUMNS = 'id, title, status, created_at, started_at, ended_at';
+const SUMMARY_COLUMNS = 'id, title, status, created_at, started_at, ended_at, template_id';
 
 function getSummary(id: number): MeetingSummary {
   const row = getDb()
@@ -76,13 +77,22 @@ export function getMeeting(id: number): MeetingDetail | null {
     .get(id) as MeetingRow | undefined;
   if (!row) return null;
   const note = db
-    .prepare(`SELECT raw_user_md, enhanced_json FROM notes WHERE meeting_id = ?`)
-    .get(id) as { raw_user_md: string; enhanced_json: string | null } | undefined;
+    .prepare(`SELECT raw_user_md, enhanced_json, enhanced_lang FROM notes WHERE meeting_id = ?`)
+    .get(id) as { raw_user_md: string; enhanced_json: string | null; enhanced_lang: string | null } | undefined;
   return {
     ...toSummary(row),
     rawUserMd: note?.raw_user_md ?? '',
     enhancedJson: note?.enhanced_json ?? null,
+    templateId: row.template_id,
+    enhancedLang: note?.enhanced_lang ?? null,
   };
+}
+
+/** Link a meeting to a template (or clear the link by passing null). */
+export function setMeetingTemplate(meetingId: number, templateId: number | null): void {
+  getDb()
+    .prepare(`UPDATE meetings SET template_id = ? WHERE id = ?`)
+    .run(templateId, meetingId);
 }
 
 export function saveNotes(id: number, markdown: string): void {
@@ -138,10 +148,20 @@ export function insertTranscriptSegment(meetingId: number, seg: TranscriptSegmen
     );
 }
 
-export function saveEnhancedNotes(id: number, enhancedJson: string): void {
+/**
+ * Persist the enhanced notes JSON. Optionally records the language they were
+ * written in for display purposes (FEATURES §A2, §C).
+ */
+export function saveEnhancedNotes(
+  id: number,
+  enhancedJson: string,
+  enhancedLang: string | null = null,
+): void {
   getDb()
-    .prepare(`UPDATE notes SET enhanced_json = ?, enhanced_at = ? WHERE meeting_id = ?`)
-    .run(enhancedJson, Date.now(), id);
+    .prepare(
+      `UPDATE notes SET enhanced_json = ?, enhanced_at = ?, enhanced_lang = ? WHERE meeting_id = ?`,
+    )
+    .run(enhancedJson, Date.now(), enhancedLang, id);
 }
 
 export function getEnhancerSegments(meetingId: number): EnhancerSegment[] {

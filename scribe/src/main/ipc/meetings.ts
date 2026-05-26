@@ -5,6 +5,7 @@ import {
   SaveEnhancedSchema,
   SaveNotesSchema,
   SearchQuerySchema,
+  SetMeetingTemplateSchema,
   UpdateTitleSchema,
 } from '../../shared/ipc-contract';
 import * as meetings from '../db/meetings';
@@ -36,5 +37,9 @@ export function registerMeetingsIpc(): void {
   ipcMain.handle(IPC.meetingsSaveEnhanced, (_event, raw) => {
     const input = SaveEnhancedSchema.parse(raw);
     meetings.saveEnhancedNotes(input.id, JSON.stringify(input.notes));
+  });
+  ipcMain.handle(IPC.meetingsSetTemplate, (_event, raw) => {
+    const { meetingId, templateId } = SetMeetingTemplateSchema.parse(raw);
+    meetings.setMeetingTemplate(meetingId, templateId);
   });
 }

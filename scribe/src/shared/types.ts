@@ -49,4 +49,31 @@ export type MeetingSummary = {
 export type MeetingDetail = MeetingSummary & {
   rawUserMd: string;
   enhancedJson: string | null;
+  /** Template used for this meeting's enhancement, if any (FEATURES §C). */
+  templateId: number | null;
+  /** BCP-47 of the language the last enhancement was written in (FEATURES §A2, §C). */
+  enhancedLang: string | null;
+};
+
+/** How a template resolves its language (FEATURES §C1). */
+export type TemplateLangMode = 'global' | 'auto' | 'fixed';
+
+/** A named, reusable enhancement configuration (FEATURES §C). */
+export type Template = {
+  id: number;
+  name: string;
+  instructions: string;
+  languageMode: TemplateLangMode;
+  languageCode: string | null;
+  isBuiltin: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
+
+/** Input for creating a new template. */
+export type TemplateCreate = {
+  name: string;
+  instructions: string;
+  languageMode: TemplateLangMode;
+  languageCode: string | null;
 };

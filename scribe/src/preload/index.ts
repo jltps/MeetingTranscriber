@@ -49,6 +49,16 @@ const api: ScribeApi = {
     remove: (id) => ipcRenderer.invoke(IPC.meetingsDelete, id),
     search: (query) => ipcRenderer.invoke(IPC.meetingsSearch, query),
     saveEnhanced: (id, notes) => ipcRenderer.invoke(IPC.meetingsSaveEnhanced, { id, notes }),
+    setTemplate: (meetingId, templateId) =>
+      ipcRenderer.invoke(IPC.meetingsSetTemplate, { meetingId, templateId }),
+  },
+  templates: {
+    list: () => ipcRenderer.invoke(IPC.templatesList),
+    get: (id) => ipcRenderer.invoke(IPC.templatesGet, id),
+    create: (data) => ipcRenderer.invoke(IPC.templatesCreate, data),
+    update: (id, data) => ipcRenderer.invoke(IPC.templatesUpdate, { id, ...data }),
+    remove: (id) => ipcRenderer.invoke(IPC.templatesDelete, id),
+    duplicate: (id) => ipcRenderer.invoke(IPC.templatesDuplicate, id),
   },
   enhance: (meetingId) => ipcRenderer.invoke(IPC.enhancerEnhance, meetingId),
   settings: {

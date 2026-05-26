@@ -10,6 +10,8 @@ import type {
   MeetingDetail,
   MeetingSummary,
   PersistedSegment,
+  Template,
+  TemplateCreate,
   TranscriptSegment,
 } from './types';
 
@@ -34,6 +36,14 @@ export const IPC = {
   meetingsDelete: 'meetings:delete',
   meetingsSearch: 'meetings:search',
   meetingsSaveEnhanced: 'meetings:saveEnhanced',
+  meetingsSetTemplate: 'meetings:setTemplate',
+
+  templatesList: 'templates:list',
+  templatesCreate: 'templates:create',
+  templatesGet: 'templates:get',
+  templatesUpdate: 'templates:update',
+  templatesDelete: 'templates:delete',
+  templatesDuplicate: 'templates:duplicate',
 
   enhancerEnhance: 'enhancer:enhance',
 
@@ -138,6 +148,33 @@ export type SettingsView = {
 };
 export type TestResult = { ok: boolean; message?: string };
 
+export const TemplateIdSchema = z.number().int().positive();
+
+export const TemplateCreateSchema = z.object({
+  name: z.string().min(1).max(100),
+  instructions: z.string().max(4000),
+  languageMode: z.enum(['global', 'auto', 'fixed']),
+  languageCode: z.string().nullable(),
+}) satisfies z.ZodType<TemplateCreate>;
+
+export const TemplateUpdateSchema = TemplateCreateSchema.partial();
+export type TemplateUpdate = z.infer<typeof TemplateUpdateSchema>;
+
+export const SetMeetingTemplateSchema = z.object({
+  meetingId: MeetingIdSchema,
+  templateId: TemplateIdSchema.nullable(),
+});
+export type SetMeetingTemplateInput = z.infer<typeof SetMeetingTemplateSchema>;
+
+export interface TemplatesApi {
+  list(): Promise<Template[]>;
+  get(id: number): Promise<Template | null>;
+  create(data: TemplateCreate): Promise<Template>;
+  update(id: number, data: TemplateUpdate): Promise<Template>;
+  remove(id: number): Promise<void>;
+  duplicate(id: number): Promise<Template>;
+}
+
 export interface MeetingsApi {
   list(): Promise<MeetingSummary[]>;
   create(): Promise<MeetingSummary>;
@@ -150,6 +187,7 @@ export interface MeetingsApi {
   remove(id: number): Promise<void>;
   search(query: string): Promise<MeetingSummary[]>;
   saveEnhanced(id: number, notes: EnhancedNotes): Promise<void>;
+  setTemplate(meetingId: number, templateId: number | null): Promise<void>;
 }
 
 export interface SettingsApi {
@@ -174,6 +212,7 @@ export interface ScribeApi {
   /** Fires once when Deepgram (or LLM layer) identifies the transcript language. */
   onTranscriptionLanguage(cb: (lang: TranscriptionLanguage) => void): () => void;
   meetings: MeetingsApi;
+  templates: TemplatesApi;
   enhance(meetingId: number): Promise<EnhanceResult>;
   settings: SettingsApi;
 }
