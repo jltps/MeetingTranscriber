@@ -1,5 +1,6 @@
 import { registerAppIpc } from './app';
 import { registerEnhancerIpc } from './enhancer';
+import { registerExportIpc } from './export';
 import { registerMeetingsIpc } from './meetings';
 import { registerSettingsIpc } from './settings';
 import { registerSpeakersIpc } from './speakers';
@@ -14,5 +15,6 @@ export function registerIpcHandlers(): void {
   registerTranscriptionIpc();
   registerEnhancerIpc();
   registerSpeakersIpc();
+  registerExportIpc();
   registerSettingsIpc();
 }

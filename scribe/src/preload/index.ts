@@ -71,6 +71,11 @@ const api: ScribeApi = {
       ipcRenderer.invoke(IPC.speakersReassign, { meetingId, segmentId, newRawLabel }),
   },
   enhance: (meetingId) => ipcRenderer.invoke(IPC.enhancerEnhance, meetingId),
+  export: {
+    exportMeeting: (meetingId) => ipcRenderer.invoke(IPC.exportMeeting, meetingId),
+    exportBackup: () => ipcRenderer.invoke(IPC.exportBackup),
+    exportRestore: () => ipcRenderer.invoke(IPC.exportRestore),
+  },
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),
     setKeys: (keys) => ipcRenderer.invoke(IPC.settingsSetKeys, keys),

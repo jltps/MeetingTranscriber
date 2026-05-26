@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { LanguageSetting, Template, TemplateCreate } from '../../../shared/types';
 import type { SettingsView, TestProvider, TestResult } from '../../../shared/ipc-contract';
 import { TemplateEditorModal } from '../templates/TemplateEditorModal';
@@ -124,6 +124,48 @@ export function SettingsModal({
 
   // null = editor closed, 'new' = creating, Template = editing
   const [editorTarget, setEditorTarget] = useState<'new' | Template | null>(null);
+
+  // Backup / restore state (ROADMAP_04)
+  const [backingUp, setBackingUp] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [backupMsg, setBackupMsg] = useState<string | null>(null);
+  const [restoreMsg, setRestoreMsg] = useState<string | null>(null);
+  const backupMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleBackup = async (): Promise<void> => {
+    setBackingUp(true);
+    setBackupMsg(null);
+    try {
+      const result = await window.api.export.exportBackup();
+      if (result.success) {
+        setBackupMsg(`Saved ${result.meetingCount} meeting${result.meetingCount === 1 ? '' : 's'}.`);
+        if (backupMsgTimer.current) clearTimeout(backupMsgTimer.current);
+        backupMsgTimer.current = setTimeout(() => setBackupMsg(null), 4000);
+      }
+    } catch (e) {
+      setBackupMsg(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBackingUp(false);
+    }
+  };
+
+  const handleRestore = async (): Promise<void> => {
+    setRestoring(true);
+    setRestoreMsg(null);
+    try {
+      const result = await window.api.export.exportRestore();
+      if (result.success) {
+        setRestoreMsg(`Restored ${result.meetingCount} meeting${result.meetingCount === 1 ? '' : 's'}. Reloading…`);
+        // Short delay so the user sees the message before the modal closes.
+        await new Promise<void>((r) => setTimeout(r, 800));
+        onWiped(); // reuses the same refresh path as "Wipe all data"
+      }
+    } catch (e) {
+      setRestoreMsg(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setRestoring(false);
+    }
+  };
 
   useEffect(() => {
     const load = (): void => {
@@ -366,6 +408,40 @@ export function SettingsModal({
                   </div>
                 );
               })()}
+            </section>
+
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Data</h3>
+              <p className="text-[11px] leading-relaxed text-neutral-400">
+                Back up all your meetings to a JSON file, or restore from a previous backup.
+                Restore replaces all current meetings — settings and API keys are not affected.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleBackup()}
+                  disabled={backingUp || restoring}
+                  className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+                >
+                  {backingUp ? 'Saving…' : 'Backup all meetings…'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleRestore()}
+                  disabled={backingUp || restoring}
+                  className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+                >
+                  {restoring ? 'Restoring…' : 'Restore from backup…'}
+                </button>
+              </div>
+              {backupMsg && (
+                <p className="text-[11px] text-emerald-400">{backupMsg}</p>
+              )}
+              {restoreMsg && (
+                <p className={`text-[11px] ${restoreMsg.startsWith('Error') ? 'text-red-400' : 'text-emerald-400'}`}>
+                  {restoreMsg}
+                </p>
+              )}
             </section>
 
             <section className="space-y-3">

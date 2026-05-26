@@ -46,6 +46,8 @@ export function App() {
   const [view, setView] = useState<'original' | 'enhanced'>('original');
   const [enhancing, setEnhancing] = useState(false);
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const [showSettings, setShowSettings] = useState(false);
   const [highlight, setHighlight] = useState<TranscriptHighlight | null>(null);
@@ -84,7 +86,7 @@ export function App() {
 
   const running = capture.state === 'running' && activeId !== null;
   const showingActive = running && selectedId === activeId;
-  const error = transcription.error ?? capture.error;
+  const error = transcription.error ?? capture.error ?? exportError;
 
   useEffect(() => {
     if (selectedId === null) {
@@ -111,6 +113,7 @@ export function App() {
       setEnhanced(parsed);
       setDegraded(false);
       setEnhanceError(null);
+      setExportError(null);
       setView(parsed ? 'enhanced' : 'original');
     })();
     return () => {
@@ -121,6 +124,18 @@ export function App() {
   const saveTitle = useDebouncedCallback((id: number, value: string) => {
     void window.api.meetings.updateTitle(id, value).then(() => meetings.refresh());
   }, 500);
+
+  const exportMeeting = async (id: number): Promise<void> => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await window.api.export.exportMeeting(id);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const enhanceMeeting = async (id: number): Promise<void> => {
     setEnhancing(true);
@@ -421,14 +436,25 @@ export function App() {
                   </div>
                 )}
                 {!running && (
-                  <button
-                    type="button"
-                    onClick={() => void enhanceMeeting(detail.id)}
-                    disabled={enhancing}
-                    className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm font-medium text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
-                  >
-                    {enhancing ? 'Enhancing…' : 'Enhance'}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void exportMeeting(detail.id)}
+                      disabled={exporting}
+                      title="Export meeting to Markdown file"
+                      className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm font-medium text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+                    >
+                      {exporting ? 'Exporting…' : 'Export'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void enhanceMeeting(detail.id)}
+                      disabled={enhancing}
+                      className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm font-medium text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+                    >
+                      {enhancing ? 'Enhancing…' : 'Enhance'}
+                    </button>
+                  </>
                 )}
                 {running ? (
                   <button

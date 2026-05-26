@@ -62,6 +62,10 @@ export const IPC = {
   settingsTest: 'settings:test',
   settingsAcceptPrivacy: 'settings:acceptPrivacy',
   settingsWipe: 'settings:wipe',
+
+  exportMeeting: 'export:meeting', // meetingId → { success, path? }
+  exportBackup:  'export:backup',  // void → { success, path?, meetingCount }
+  exportRestore: 'export:restore', // void → { success, meetingCount }
 } as const;
 
 export const AppStatusSchema = z.object({
@@ -253,6 +257,78 @@ export interface SettingsApi {
   wipe(): Promise<void>;
 }
 
+// ─── Export & Backup (ROADMAP_04) ───────────────────────────────────────────
+
+const BackupSegmentSchema = z.object({
+  id: z.number().int(),
+  channel: z.number().int(),
+  speakerLabel: z.string(),
+  text: z.string(),
+  startMs: z.number().int(),
+  endMs: z.number().int(),
+});
+
+const BackupSpeakerNameSchema = z.object({
+  rawLabel: z.string(),
+  displayName: z.string(),
+});
+
+const BackupMeetingSchema = z.object({
+  id: z.number().int().positive(),
+  title: z.string(),
+  status: z.string(),
+  createdAt: z.number().int(),
+  startedAt: z.number().int().nullable(),
+  endedAt: z.number().int().nullable(),
+  templateId: z.number().int().positive().nullable(),
+  rawUserMd: z.string(),
+  enhancedJson: z.string().nullable(),
+  enhancedAt: z.number().int().nullable(),
+  enhancedLang: z.string().nullable(),
+  templateName: z.string().nullable(),
+  usage: z.object({
+    deepgramAudioMs: z.number().int(),
+    claudeInputTokens: z.number().int(),
+    claudeOutputTokens: z.number().int(),
+  }),
+  segments: z.array(BackupSegmentSchema),
+  speakerNames: z.array(BackupSpeakerNameSchema),
+});
+
+const BackupTemplateSchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string(),
+  instructions: z.string(),
+  languageMode: z.string(),
+  languageCode: z.string().nullable(),
+  createdAt: z.number().int(),
+  updatedAt: z.number().int(),
+});
+
+/**
+ * Schema for validating a Scribe backup file before restoring (ROADMAP_04 §2).
+ * Parsed from the user-selected JSON — validated before any DB writes.
+ */
+export const BackupBundleSchema = z.object({
+  version: z.literal(1),
+  app: z.literal('scribe'),
+  exportedAt: z.string(),
+  meetings: z.array(BackupMeetingSchema),
+  templates: z.array(BackupTemplateSchema),
+});
+export type BackupBundle = z.infer<typeof BackupBundleSchema>;
+export type BackupMeeting = z.infer<typeof BackupMeetingSchema>;
+
+/** Export, backup, and restore API (ROADMAP_04 Phases 1 & 2). */
+export interface ExportApi {
+  /** Export one meeting to a Markdown file. Opens an OS save dialog. */
+  exportMeeting(meetingId: number): Promise<{ success: boolean; path?: string }>;
+  /** Export all meetings as a JSON backup bundle. Opens an OS save dialog. */
+  exportBackup(): Promise<{ success: boolean; path?: string; meetingCount: number }>;
+  /** Restore from a backup file. Opens an OS open dialog. Replaces all current meetings. */
+  exportRestore(): Promise<{ success: boolean; meetingCount: number }>;
+}
+
 /** The typed surface exposed to the renderer as window.api. */
 export interface ScribeApi {
   getStatus(): Promise<AppStatus>;
@@ -268,4 +344,5 @@ export interface ScribeApi {
   speakers: SpeakersApi;
   enhance(meetingId: number): Promise<EnhanceResult>;
   settings: SettingsApi;
+  export: ExportApi;
 }
