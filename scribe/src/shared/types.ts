@@ -99,3 +99,34 @@ export type SpeakerName = {
   rawLabel: string;
   displayName: string;
 };
+
+// ─── Calendar integration (ROADMAP_06) ──────────────────────────────────────
+
+/** Which calendar backend an event came from. */
+export type CalendarProviderId = 'google' | 'microsoft';
+
+/**
+ * A normalized calendar event. Both providers map their raw shape onto this so
+ * the agenda + auto-start logic stay provider-agnostic. Times are epoch ms (UTC)
+ * to match the rest of the app and to cross IPC cleanly. `joinUrl` is metadata
+ * only — the app never joins the call (CLAUDE.md §1.4).
+ */
+export type CalendarEvent = {
+  providerId: CalendarProviderId;
+  /** Provider event id; recurring instances get distinct ids (singleEvents). */
+  externalId: string;
+  title: string;
+  startMs: number;
+  endMs: number;
+  allDay: boolean;
+  attendees: { name?: string; email: string }[];
+  joinUrl?: string;
+};
+
+/** A calendar event enriched with app-local state for the agenda UI. */
+export type AgendaEvent = CalendarEvent & {
+  /** User opted into auto-start for this event. */
+  armed: boolean;
+  /** The meeting created/linked when auto-start fired, if any. */
+  meetingId: number | null;
+};

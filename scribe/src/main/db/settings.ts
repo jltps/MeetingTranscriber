@@ -79,8 +79,10 @@ export function wipeAllData(): void {
   const wipe = db.transaction(() => {
     db.prepare('DELETE FROM transcript_segments').run();
     db.prepare('DELETE FROM notes').run();
+    db.prepare('DELETE FROM calendar_events').run();
     db.prepare('DELETE FROM meetings').run();
     db.prepare('DELETE FROM search_fts').run();
+    // Clears every setting, including the encrypted API keys + calendar OAuth tokens.
     db.prepare('DELETE FROM settings').run();
   });
   wipe();

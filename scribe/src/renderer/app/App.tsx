@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { EnhancedNotes, MeetingDetail, PersistedSegment, Template } from '../../shared/types';
+import type { AgendaEvent, EnhancedNotes, MeetingDetail, PersistedSegment, Template } from '../../shared/types';
 import { EnhancedNotesSchema } from '../../shared/ipc-contract';
 import { useAudioCapture } from '../audio/use-audio-capture';
 import { useTranscription } from '../features/transcript/use-transcription';
@@ -12,6 +12,10 @@ import { useSettings } from '../features/settings/use-settings';
 import { SettingsModal } from '../features/settings/SettingsModal';
 import { PrivacyNotice } from '../features/settings/PrivacyNotice';
 import { TemplatePickerModal } from '../features/templates/TemplatePickerModal';
+import { useCalendar } from '../features/calendar/use-calendar';
+import { useAutoStartScheduler } from '../features/calendar/use-auto-start-scheduler';
+import { AgendaPanel } from '../features/calendar/AgendaPanel';
+import { AutoStartPrompt } from '../features/calendar/AutoStartPrompt';
 import { useDebouncedCallback } from '../lib/debounce';
 import { CaptureProbe } from './CaptureProbe';
 import { estimateCost, formatAudioDuration, formatCost } from '../../shared/pricing';
@@ -33,6 +37,7 @@ export function App() {
   const meetings = useMeetings();
   const transcription = useTranscription();
   const { settings, refresh: refreshSettings } = useSettings();
+  const calendar = useCalendar();
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<MeetingDetail | null>(null);
@@ -60,6 +65,9 @@ export function App() {
 
   /** Speaker display names for the currently selected meeting (ROADMAP_02). */
   const [speakerNames, setSpeakerNames] = useState<Map<string, string>>(new Map());
+
+  /** An armed calendar event that just reached its start time, awaiting confirm (ROADMAP_06). */
+  const [duePrompt, setDuePrompt] = useState<AgendaEvent | null>(null);
 
   // Subscribe to language detection events for the lifetime of the app.
   useEffect(() => {
@@ -183,16 +191,18 @@ export function App() {
     if (id === selectedId) setSelectedId(null);
   };
 
-  const start = async (): Promise<void> => {
-    if (selectedId === null) return;
+  // Single start path: the button calls start() (defaults to the selected meeting);
+  // calendar auto-start passes the target meeting explicitly (ROADMAP_06).
+  const start = async (targetId: number | null = selectedId): Promise<void> => {
+    if (targetId === null) return;
     setBusy(true);
     setDetectedLang(null); // reset for new session
     try {
       transcription.reset();
-      await window.api.meetings.start(selectedId);
-      await transcription.start({ meetingId: selectedId, sampleRate: 16000, channels: 2 });
+      await window.api.meetings.start(targetId);
+      await transcription.start({ meetingId: targetId, sampleRate: 16000, channels: 2 });
       await capture.start();
-      setActiveId(selectedId);
+      setActiveId(targetId);
       await meetings.refresh();
     } catch {
       await capture.stop();
@@ -202,6 +212,28 @@ export function App() {
       setBusy(false);
     }
   };
+
+  // Auto-start for a calendar event: lazily create + link a meeting (so armed-but-
+  // unattended events don't litter drafts), pre-fill its title, then run the normal
+  // start flow. The recording indicator behaves exactly as a manual start.
+  const startForCalendarEvent = async (event: AgendaEvent): Promise<void> => {
+    if (running) return; // already recording something else
+    let meetingId = event.meetingId;
+    if (meetingId === null) {
+      const meeting = await meetings.create();
+      meetingId = meeting.id;
+      await window.api.calendar.linkMeeting(event.providerId, event.externalId, meetingId);
+    }
+    if (event.title) await window.api.meetings.updateTitle(meetingId, event.title);
+    await meetings.refresh();
+    setSelectedId(meetingId);
+    await start(meetingId);
+  };
+
+  // Surface the confirm prompt when an armed event is due (renderer-side scheduler).
+  useAutoStartScheduler(calendar.agenda, (event) => {
+    if (!running) setDuePrompt(event);
+  });
 
   const stop = async (): Promise<void> => {
     setBusy(true);
@@ -334,6 +366,17 @@ export function App() {
           onClose={() => setShowTemplatePicker(false)}
         />
       )}
+      {duePrompt && (
+        <AutoStartPrompt
+          event={duePrompt}
+          onStart={() => {
+            const event = duePrompt;
+            setDuePrompt(null);
+            void startForCalendarEvent(event);
+          }}
+          onDismiss={() => setDuePrompt(null)}
+        />
+      )}
 
       <MeetingSidebar
         meetings={list}
@@ -346,6 +389,13 @@ export function App() {
         onSearch={(q) => void meetings.search(q)}
         onDelete={(id) => void onDelete(id)}
         onOpenSettings={() => setShowSettings(true)}
+        agendaSlot={
+          <AgendaPanel
+            events={calendar.agenda}
+            onArm={calendar.armEvent}
+            onSelectMeeting={(id) => setSelectedId(id)}
+          />
+        }
       />
 
       <main className="flex flex-1 flex-col overflow-hidden">

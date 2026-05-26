@@ -1,6 +1,7 @@
 import { app, BrowserWindow, session } from 'electron';
 import { join } from 'node:path';
 import { setupAudioCapture } from './audio/loopback';
+import { stopCalendarSync } from './calendar';
 import { initDb, closeDb } from './db';
 import { registerIpcHandlers } from './ipc';
 import { disposeTranscription } from './ipc/transcription';
@@ -94,5 +95,6 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   void disposeTranscription();
+  stopCalendarSync();
   closeDb();
 });

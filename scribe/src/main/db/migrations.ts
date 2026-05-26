@@ -4,9 +4,11 @@
 // audio table — audio is never persisted (§1.1).
 import type { Database } from 'better-sqlite3';
 
-type Migration = { version: number; name: string; sql: string };
+export type Migration = { version: number; name: string; sql: string };
 
-const MIGRATIONS: Migration[] = [
+// Exported so migration logic can be exercised in unit tests against a throwaway
+// SQLite database (CLAUDE.md §9 — test migrations against a populated DB).
+export const MIGRATIONS: Migration[] = [
   {
     version: 1,
     name: 'init',
@@ -260,6 +262,35 @@ Rules:
         display_name TEXT    NOT NULL,
         UNIQUE(meeting_id, raw_label)
       );
+    `,
+  },
+  {
+    version: 8,
+    name: 'calendar',
+    // Calendar integration (ROADMAP_06). Read-only cache of upcoming events from
+    // connected providers + a nullable link from a meeting to the event it was
+    // started from. No audio/no tokens here — tokens live in `settings` (encrypted).
+    sql: `
+      CREATE TABLE calendar_events (
+        id             INTEGER PRIMARY KEY,
+        provider_id    TEXT    NOT NULL,            -- 'google' | 'microsoft'
+        external_id    TEXT    NOT NULL,            -- provider event id (singleEvents instance)
+        title          TEXT    NOT NULL DEFAULT '',
+        start_ms       INTEGER NOT NULL,
+        end_ms         INTEGER NOT NULL,
+        all_day        INTEGER NOT NULL DEFAULT 0,
+        join_url       TEXT,
+        attendees_json TEXT    NOT NULL DEFAULT '[]',
+        armed          INTEGER NOT NULL DEFAULT 0,  -- user opted into auto-start
+        synced_at      INTEGER NOT NULL,
+        UNIQUE(provider_id, external_id)
+      );
+      CREATE INDEX idx_calendar_events_start ON calendar_events(start_ms);
+
+      -- ON DELETE SET NULL: deleting/re-syncing an event must NOT delete the
+      -- meeting it spawned (CLAUDE.md §7). Mirrors templates' ON DELETE SET NULL.
+      ALTER TABLE meetings ADD COLUMN calendar_event_id INTEGER
+        REFERENCES calendar_events(id) ON DELETE SET NULL;
     `,
   },
 ];

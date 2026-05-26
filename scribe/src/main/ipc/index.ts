@@ -1,4 +1,5 @@
 import { registerAppIpc } from './app';
+import { registerCalendarIpc } from './calendar';
 import { registerEnhancerIpc } from './enhancer';
 import { registerExportIpc } from './export';
 import { registerMeetingsIpc } from './meetings';
@@ -19,4 +20,5 @@ export function registerIpcHandlers(): void {
   registerExportIpc();
   registerSettingsIpc();
   registerWhisperIpc();
+  registerCalendarIpc();
 }

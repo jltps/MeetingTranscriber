@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { LanguageSetting, Template, TemplateCreate } from '../../../shared/types';
 import type { SettingsView, TestProvider, TestResult, WhisperModelStatus } from '../../../shared/ipc-contract';
 import { TemplateEditorModal } from '../templates/TemplateEditorModal';
+import { CalendarSettingsSection } from '../calendar/CalendarSettingsSection';
 import { estimateCost, formatAudioDuration, formatCost } from '../../../shared/pricing';
 
 function formatBytes(bytes: number): string {
@@ -443,6 +444,11 @@ export function SettingsModal({
                 </div>
               )}
             </section>
+
+            <CalendarSettingsSection
+              googleConnected={settings.googleCalendarConnected}
+              onChanged={onChanged}
+            />
 
             <section className="space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">

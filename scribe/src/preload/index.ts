@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcRendererEvent } from 'electron';
 import {
+  AgendaListSchema,
   IPC,
   TranscriptSegmentSchema,
   TranscriptionLanguageSchema,
@@ -102,6 +103,23 @@ const api: ScribeApi = {
       };
       ipcRenderer.on(IPC.whisperModelDownloadProgress, listener);
       return () => ipcRenderer.removeListener(IPC.whisperModelDownloadProgress, listener);
+    },
+  },
+  calendar: {
+    getAgenda: () => ipcRenderer.invoke(IPC.calendarGetAgenda),
+    connect: (providerId) => ipcRenderer.invoke(IPC.calendarConnect, providerId),
+    disconnect: (providerId) => ipcRenderer.invoke(IPC.calendarDisconnect, providerId),
+    refresh: () => ipcRenderer.invoke(IPC.calendarRefresh),
+    armEvent: (providerId, externalId, armed) =>
+      ipcRenderer.invoke(IPC.calendarArmEvent, { providerId, externalId, armed }),
+    linkMeeting: (providerId, externalId, meetingId) =>
+      ipcRenderer.invoke(IPC.calendarLinkMeeting, { providerId, externalId, meetingId }),
+    onAgenda: (cb) => {
+      const listener = (_event: IpcRendererEvent, payload: unknown): void => {
+        cb(AgendaListSchema.parse(payload));
+      };
+      ipcRenderer.on(IPC.calendarAgenda, listener);
+      return () => ipcRenderer.removeListener(IPC.calendarAgenda, listener);
     },
   },
 };

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import type { MeetingStatus, MeetingSummary, Template } from '../../../shared/types';
 import { useDebouncedCallback } from '../../lib/debounce';
 
@@ -28,6 +29,8 @@ type MeetingSidebarProps = {
   onSearch: (query: string) => void;
   onDelete: (id: number) => void;
   onOpenSettings: () => void;
+  /** Optional content rendered above the meeting list (e.g. the calendar agenda). */
+  agendaSlot?: ReactNode;
 };
 
 export function MeetingSidebar({
@@ -41,6 +44,7 @@ export function MeetingSidebar({
   onSearch,
   onDelete,
   onOpenSettings,
+  agendaSlot,
 }: MeetingSidebarProps) {
   const [text, setText] = useState('');
   const debouncedSearch = useDebouncedCallback(onSearch, 250);
@@ -80,6 +84,8 @@ export function MeetingSidebar({
           className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
         />
       </div>
+
+      {agendaSlot}
 
       <div className="flex-1 overflow-y-auto">
         {meetings.length === 0 ? (

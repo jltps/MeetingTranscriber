@@ -5,6 +5,9 @@
 // exception is the audio frame channel, a raw ArrayBuffer not validated per-frame.
 import { z } from 'zod';
 import type {
+  AgendaEvent,
+  CalendarEvent,
+  CalendarProviderId,
   EnhancedNotes,
   LanguageSetting,
   MeetingDetail,
@@ -75,6 +78,15 @@ export const IPC = {
   whisperModelCancel:           'whisper:modelCancel',           // → void
   whisperModelDelete:           'whisper:modelDelete',           // name → void
   whisperModelDownloadProgress: 'whisper:modelDownloadProgress', // push: DownloadProgress
+
+  // Calendar integration (ROADMAP_06)
+  calendarGetAgenda:   'calendar:getAgenda',    // → AgendaEvent[]
+  calendarConnect:     'calendar:connect',      // providerId → void (runs OAuth)
+  calendarDisconnect:  'calendar:disconnect',   // providerId → void (revoke + clear)
+  calendarRefresh:     'calendar:refresh',      // → void (re-sync now)
+  calendarArmEvent:    'calendar:armEvent',     // { providerId, externalId, armed } → AgendaEvent
+  calendarLinkMeeting: 'calendar:linkMeeting',  // { providerId, externalId, meetingId } → void
+  calendarAgenda:      'calendar:agenda',       // push: AgendaEvent[]
 } as const;
 
 export const AppStatusSchema = z.object({
@@ -179,6 +191,8 @@ export type SettingsView = {
   transcriptionProvider: 'deepgram' | 'whisper';
   /** Active Whisper model size key (ROADMAP_05). */
   whisperModel: string;
+  /** Whether a Google Calendar account is connected (ROADMAP_06). Never the token. */
+  googleCalendarConnected: boolean;
 };
 export type TestResult = { ok: boolean; message?: string };
 
@@ -375,6 +389,67 @@ export interface WhisperApi {
   onDownloadProgress(cb: (e: WhisperDownloadProgress) => void): () => void;
 }
 
+// ─── Calendar integration (ROADMAP_06) ──────────────────────────────────────
+
+export const CalendarProviderIdSchema = z.enum(['google', 'microsoft']);
+
+export const CalendarAttendeeSchema = z.object({
+  name: z.string().optional(),
+  email: z.string(),
+});
+
+export const CalendarEventSchema = z.object({
+  providerId: CalendarProviderIdSchema,
+  externalId: z.string(),
+  title: z.string(),
+  startMs: z.number().int(),
+  endMs: z.number().int(),
+  allDay: z.boolean(),
+  attendees: z.array(CalendarAttendeeSchema),
+  joinUrl: z.string().optional(),
+}) satisfies z.ZodType<CalendarEvent>;
+
+export const AgendaEventSchema = CalendarEventSchema.extend({
+  armed: z.boolean(),
+  meetingId: MeetingIdSchema.nullable(),
+}) satisfies z.ZodType<AgendaEvent>;
+
+export const AgendaListSchema = z.array(AgendaEventSchema);
+
+export const CalendarArmSchema = z.object({
+  providerId: CalendarProviderIdSchema,
+  externalId: z.string().min(1),
+  armed: z.boolean(),
+});
+export type CalendarArmInput = z.infer<typeof CalendarArmSchema>;
+
+export const CalendarLinkSchema = z.object({
+  providerId: CalendarProviderIdSchema,
+  externalId: z.string().min(1),
+  meetingId: MeetingIdSchema,
+});
+export type CalendarLinkInput = z.infer<typeof CalendarLinkSchema>;
+
+/**
+ * Read-only calendar integration. Exposes only event metadata + connection
+ * booleans — OAuth tokens NEVER cross this bridge (CLAUDE.md §1.2).
+ */
+export interface CalendarApi {
+  getAgenda(): Promise<AgendaEvent[]>;
+  /** Runs the provider's OAuth flow in the system browser; resolves on success. */
+  connect(providerId: CalendarProviderId): Promise<void>;
+  /** Revokes + clears the provider's tokens and removes its cached events. */
+  disconnect(providerId: CalendarProviderId): Promise<void>;
+  /** Force a re-sync of all connected providers. */
+  refresh(): Promise<void>;
+  /** Opt a single event in/out of auto-start. Returns the updated agenda row. */
+  armEvent(providerId: CalendarProviderId, externalId: string, armed: boolean): Promise<AgendaEvent>;
+  /** Link a created meeting back to its calendar event. */
+  linkMeeting(providerId: CalendarProviderId, externalId: string, meetingId: number): Promise<void>;
+  /** Pushed whenever the merged agenda changes (sync, arm, connect/disconnect). */
+  onAgenda(cb: (events: AgendaEvent[]) => void): () => void;
+}
+
 /** The typed surface exposed to the renderer as window.api. */
 export interface ScribeApi {
   getStatus(): Promise<AppStatus>;
@@ -392,4 +467,5 @@ export interface ScribeApi {
   settings: SettingsApi;
   export: ExportApi;
   whisper: WhisperApi;
+  calendar: CalendarApi;
 }

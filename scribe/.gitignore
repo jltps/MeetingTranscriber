@@ -8,6 +8,7 @@ release
 *.sqlite-shm
 .env
 .env.*
+!.env.example
 .DS_Store
 *.log
 test-results
