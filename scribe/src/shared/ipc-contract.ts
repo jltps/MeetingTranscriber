@@ -66,6 +66,15 @@ export const IPC = {
   exportMeeting: 'export:meeting', // meetingId → { success, path? }
   exportBackup:  'export:backup',  // void → { success, path?, meetingCount }
   exportRestore: 'export:restore', // void → { success, meetingCount }
+
+  // Local Whisper transcription (ROADMAP_05)
+  settingsSetTranscriptionProvider: 'settings:setTranscriptionProvider',
+  settingsSetWhisperModel:          'settings:setWhisperModel',
+  whisperModelsGet:             'whisper:modelsGet',             // → WhisperModelStatus[]
+  whisperModelDownload:         'whisper:modelDownload',         // name → void (async)
+  whisperModelCancel:           'whisper:modelCancel',           // → void
+  whisperModelDelete:           'whisper:modelDelete',           // name → void
+  whisperModelDownloadProgress: 'whisper:modelDownloadProgress', // push: DownloadProgress
 } as const;
 
 export const AppStatusSchema = z.object({
@@ -166,6 +175,10 @@ export type SettingsView = {
   privacyAccepted: boolean;
   /** Aggregate usage totals across all meetings (ROADMAP_01 §3). */
   usageTotals: UsageTotals;
+  /** 'deepgram' (default) or 'whisper' (local, ROADMAP_05). */
+  transcriptionProvider: 'deepgram' | 'whisper';
+  /** Active Whisper model size key (ROADMAP_05). */
+  whisperModel: string;
 };
 export type TestResult = { ok: boolean; message?: string };
 
@@ -252,6 +265,8 @@ export interface SettingsApi {
   setMicDevice(deviceId: string | null): Promise<void>;
   setLanguage(language: LanguageSetting): Promise<void>;
   setGlobalInstructions(instructions: string): Promise<void>;
+  setTranscriptionProvider(provider: 'deepgram' | 'whisper'): Promise<void>;
+  setWhisperModel(model: string): Promise<void>;
   test(provider: TestProvider, key?: string): Promise<TestResult>;
   acceptPrivacy(): Promise<void>;
   wipe(): Promise<void>;
@@ -329,6 +344,37 @@ export interface ExportApi {
   exportRestore(): Promise<{ success: boolean; meetingCount: number }>;
 }
 
+// ─── Local Whisper model management (ROADMAP_05) ─────────────────────────────
+
+export const WhisperModelNameSchema = z.enum(['tiny', 'base', 'small', 'medium']);
+export type WhisperModelName = z.infer<typeof WhisperModelNameSchema>;
+
+/** Status of a single Whisper model (sent from main to renderer). */
+export type WhisperModelStatus = {
+  name: WhisperModelName;
+  /** Expected download size in bytes. */
+  sizeBytes: number;
+  state: 'not-downloaded' | 'downloading' | 'ready';
+  /** 0-100 while downloading. */
+  progress?: number;
+};
+
+/** Push payload for `whisperModelDownloadProgress`. */
+export type WhisperDownloadProgress = {
+  name: WhisperModelName;
+  pct: number;
+  done: boolean;
+  error?: string;
+};
+
+export interface WhisperApi {
+  getModels(): Promise<WhisperModelStatus[]>;
+  downloadModel(name: string): Promise<void>;
+  cancelDownload(): Promise<void>;
+  deleteModel(name: string): Promise<void>;
+  onDownloadProgress(cb: (e: WhisperDownloadProgress) => void): () => void;
+}
+
 /** The typed surface exposed to the renderer as window.api. */
 export interface ScribeApi {
   getStatus(): Promise<AppStatus>;
@@ -345,4 +391,5 @@ export interface ScribeApi {
   enhance(meetingId: number): Promise<EnhanceResult>;
   settings: SettingsApi;
   export: ExportApi;
+  whisper: WhisperApi;
 }

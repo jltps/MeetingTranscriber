@@ -1,5 +1,7 @@
 import { SetLanguageSchema } from '../../shared/ipc-contract';
 import type { LanguageSetting } from '../../shared/types';
+import type { WhisperModelName } from '../transcription/whisper-models';
+import { WHISPER_MODEL_NAMES } from '../transcription/whisper-models';
 import { getDb } from './index';
 
 // Key-value settings store + the "wipe all data" action (PRODUCT_SPEC.md §10).
@@ -44,6 +46,30 @@ export function getLanguage(): LanguageSetting {
 /** Global custom instructions appended to every enhancement prompt (FEATURES §B). */
 export function getGlobalInstructions(): string {
   return getSetting('global_instructions') ?? '';
+}
+
+// ── Local Whisper settings (ROADMAP_05) ────────────────────────────────────
+
+export type TranscriptionProvider = 'deepgram' | 'whisper';
+
+export function getTranscriptionProvider(): TranscriptionProvider {
+  const raw = getSetting('transcription_provider');
+  return raw === 'whisper' ? 'whisper' : 'deepgram'; // default: deepgram
+}
+
+export function setTranscriptionProvider(p: TranscriptionProvider): void {
+  setSetting('transcription_provider', p);
+}
+
+export function getWhisperModel(): WhisperModelName {
+  const raw = getSetting('whisper_model');
+  return (WHISPER_MODEL_NAMES.includes(raw as WhisperModelName)
+    ? (raw as WhisperModelName)
+    : 'base');
+}
+
+export function setWhisperModel(m: WhisperModelName): void {
+  setSetting('whisper_model', m);
 }
 
 // Leaves nothing behind (PRODUCT_SPEC.md §7): meetings + children + FTS + every

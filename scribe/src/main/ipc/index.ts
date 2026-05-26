@@ -6,6 +6,7 @@ import { registerSettingsIpc } from './settings';
 import { registerSpeakersIpc } from './speakers';
 import { registerTemplatesIpc } from './templates';
 import { registerTranscriptionIpc } from './transcription';
+import { registerWhisperIpc } from './whisper';
 
 // One registration entry point; each IPC domain gets its own file (CLAUDE.md §3).
 export function registerIpcHandlers(): void {
@@ -17,4 +18,5 @@ export function registerIpcHandlers(): void {
   registerSpeakersIpc();
   registerExportIpc();
   registerSettingsIpc();
+  registerWhisperIpc();
 }

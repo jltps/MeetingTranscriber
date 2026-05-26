@@ -6,7 +6,7 @@ import {
   TranscriptionLanguageSchema,
   TranscriptionStatusSchema,
 } from '../shared/ipc-contract';
-import type { ScribeApi } from '../shared/ipc-contract';
+import type { ScribeApi, WhisperDownloadProgress } from '../shared/ipc-contract';
 
 // The only object the renderer ever sees. No raw ipcRenderer, no Node globals,
 // no dynamic channel names (CLAUDE.md §4). Inbound events are validated against
@@ -83,9 +83,26 @@ const api: ScribeApi = {
     setLanguage: (language) => ipcRenderer.invoke(IPC.settingsSetLanguage, language),
     setGlobalInstructions: (instructions) =>
       ipcRenderer.invoke(IPC.settingsSetGlobalInstructions, instructions),
+    setTranscriptionProvider: (provider) =>
+      ipcRenderer.invoke(IPC.settingsSetTranscriptionProvider, provider),
+    setWhisperModel: (model) =>
+      ipcRenderer.invoke(IPC.settingsSetWhisperModel, model),
     test: (provider, key) => ipcRenderer.invoke(IPC.settingsTest, { provider, key }),
     acceptPrivacy: () => ipcRenderer.invoke(IPC.settingsAcceptPrivacy),
     wipe: () => ipcRenderer.invoke(IPC.settingsWipe),
+  },
+  whisper: {
+    getModels: () => ipcRenderer.invoke(IPC.whisperModelsGet),
+    downloadModel: (name: string) => ipcRenderer.invoke(IPC.whisperModelDownload, name),
+    cancelDownload: () => ipcRenderer.invoke(IPC.whisperModelCancel),
+    deleteModel: (name: string) => ipcRenderer.invoke(IPC.whisperModelDelete, name),
+    onDownloadProgress: (cb: (e: WhisperDownloadProgress) => void) => {
+      const listener = (_event: IpcRendererEvent, payload: unknown): void => {
+        cb(payload as WhisperDownloadProgress);
+      };
+      ipcRenderer.on(IPC.whisperModelDownloadProgress, listener);
+      return () => ipcRenderer.removeListener(IPC.whisperModelDownloadProgress, listener);
+    },
   },
 };
 

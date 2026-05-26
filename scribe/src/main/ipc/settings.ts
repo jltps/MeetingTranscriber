@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import { z } from 'zod';
 import {
   IPC,
   SetGlobalInstructionsSchema,
@@ -6,6 +7,7 @@ import {
   SetLanguageSchema,
   SetMicDeviceSchema,
   TestRequestSchema,
+  WhisperModelNameSchema,
 } from '../../shared/ipc-contract';
 import type { SettingsView, TestResult } from '../../shared/ipc-contract';
 import {
@@ -13,6 +15,10 @@ import {
   getGlobalInstructions,
   getLanguage,
   getSetting,
+  getTranscriptionProvider,
+  getWhisperModel,
+  setTranscriptionProvider,
+  setWhisperModel,
   setSetting,
   wipeAllData,
 } from '../db/settings';
@@ -38,6 +44,8 @@ export function registerSettingsIpc(): void {
     globalInstructions: getGlobalInstructions(),
     privacyAccepted: getSetting('privacy_accepted') === '1',
     usageTotals: getUsageTotals(),
+    transcriptionProvider: getTranscriptionProvider(),
+    whisperModel: getWhisperModel(),
   }));
 
   ipcMain.handle(IPC.settingsSetKeys, (_event, raw) => {
@@ -59,6 +67,16 @@ export function registerSettingsIpc(): void {
 
   ipcMain.handle(IPC.settingsSetGlobalInstructions, (_event, raw) => {
     setSetting('global_instructions', SetGlobalInstructionsSchema.parse(raw));
+  });
+
+  ipcMain.handle(IPC.settingsSetTranscriptionProvider, (_event, raw) => {
+    const provider = z.enum(['deepgram', 'whisper']).parse(raw);
+    setTranscriptionProvider(provider);
+  });
+
+  ipcMain.handle(IPC.settingsSetWhisperModel, (_event, raw) => {
+    const model = WhisperModelNameSchema.parse(raw);
+    setWhisperModel(model);
   });
 
   ipcMain.handle(IPC.settingsAcceptPrivacy, () => {

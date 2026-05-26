@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LanguageSetting, Template, TemplateCreate } from '../../../shared/types';
-import type { SettingsView, TestProvider, TestResult } from '../../../shared/ipc-contract';
+import type { SettingsView, TestProvider, TestResult, WhisperModelStatus } from '../../../shared/ipc-contract';
 import { TemplateEditorModal } from '../templates/TemplateEditorModal';
 import { estimateCost, formatAudioDuration, formatCost } from '../../../shared/pricing';
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
+  return `${Math.round(bytes / 1_000_000)} MB`;
+}
 
 const LANGUAGE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'auto', label: 'Auto-detect' },
@@ -124,6 +129,42 @@ export function SettingsModal({
 
   // null = editor closed, 'new' = creating, Template = editing
   const [editorTarget, setEditorTarget] = useState<'new' | Template | null>(null);
+
+  // Transcription provider + Whisper model manager (ROADMAP_05)
+  const [provider, setProvider] = useState<'deepgram' | 'whisper'>(settings.transcriptionProvider);
+  const [whisperModel, setWhisperModel] = useState(settings.whisperModel);
+  const [modelStatuses, setModelStatuses] = useState<WhisperModelStatus[]>([]);
+  const [activeDownload, setActiveDownload] = useState<string | null>(null);
+
+  // Load model statuses on mount and subscribe to download progress.
+  useEffect(() => {
+    void window.api.whisper.getModels().then(setModelStatuses);
+    const unsub = window.api.whisper.onDownloadProgress((e) => {
+      if (e.done) {
+        setActiveDownload(null);
+        // Refresh statuses after a download completes or errors.
+        void window.api.whisper.getModels().then(setModelStatuses);
+      } else {
+        setActiveDownload(e.name);
+        setModelStatuses((prev) =>
+          prev.map((m) =>
+            m.name === e.name ? { ...m, state: 'downloading' as const, progress: e.pct } : m,
+          ),
+        );
+      }
+    });
+    return unsub;
+  }, []);
+
+  const handleSetProvider = (p: 'deepgram' | 'whisper'): void => {
+    setProvider(p);
+    void window.api.settings.setTranscriptionProvider(p).then(onChanged);
+  };
+
+  const handleSetWhisperModel = (m: string): void => {
+    setWhisperModel(m);
+    void window.api.settings.setWhisperModel(m).then(onChanged);
+  };
 
   // Backup / restore state (ROADMAP_04)
   const [backingUp, setBackingUp] = useState(false);
@@ -273,6 +314,134 @@ export function SettingsModal({
                   selecting a fixed language gives the most accurate results.
                 </p>
               </div>
+            </section>
+
+            {/* ── Transcription provider + local Whisper model manager ── */}
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                Transcription
+              </h3>
+
+              {/* Provider toggle */}
+              <div className="space-y-1.5">
+                <label className="text-sm text-neutral-300">Provider</label>
+                <div className="flex gap-2">
+                  {(['deepgram', 'whisper'] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => handleSetProvider(p)}
+                      className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        provider === p
+                          ? 'border-neutral-400 bg-neutral-700 text-neutral-100'
+                          : 'border-neutral-700 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'
+                      }`}
+                    >
+                      {p === 'deepgram' ? 'Deepgram (cloud)' : 'Local (Whisper)'}
+                    </button>
+                  ))}
+                </div>
+                {provider === 'deepgram' && (
+                  <p className="text-[11px] text-neutral-500">
+                    Streams audio to Deepgram&apos;s cloud API. Requires a Deepgram key (set above).
+                  </p>
+                )}
+                {provider === 'whisper' && (
+                  <p className="text-[11px] text-neutral-500">
+                    Transcribes on-device using whisper.cpp ONNX. No API key needed; audio never leaves
+                    your machine. Latency ≈ 5 s per chunk.
+                  </p>
+                )}
+              </div>
+
+              {/* Local Whisper model manager */}
+              {provider === 'whisper' && (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="text-sm text-neutral-300">Active model</label>
+                    <select
+                      value={whisperModel}
+                      onChange={(e) => handleSetWhisperModel(e.target.value)}
+                      className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none"
+                    >
+                      {(['tiny', 'base', 'small', 'medium'] as const).map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                    {(() => {
+                      const active = modelStatuses.find((s) => s.name === whisperModel);
+                      if (!active) return null;
+                      if (active.state !== 'ready') {
+                        return (
+                          <p className="text-[11px] text-amber-400">
+                            Download &ldquo;{whisperModel}&rdquo; below before recording.
+                          </p>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+
+                  {/* Model status table */}
+                  <div className="rounded-md border border-neutral-800 divide-y divide-neutral-800">
+                    {modelStatuses.map((m) => (
+                      <div key={m.name} className="flex items-center justify-between px-3 py-2 text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono text-neutral-200">ggml-{m.name}.bin</span>
+                          <span className="text-neutral-600">{formatBytes(m.sizeBytes)}</span>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2 ml-2">
+                          {m.state === 'ready' && (
+                            <>
+                              <span className="text-emerald-400">✓ Ready</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void window.api.whisper.deleteModel(m.name).then(() =>
+                                    window.api.whisper.getModels().then(setModelStatuses),
+                                  );
+                                }}
+                                className="text-[10px] text-red-400 hover:text-red-300"
+                              >
+                                Delete
+                              </button>
+                            </>
+                          )}
+                          {m.state === 'downloading' && (
+                            <>
+                              <span className="text-neutral-400">
+                                {m.progress != null ? `${m.progress}%` : 'Starting…'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => void window.api.whisper.cancelDownload()}
+                                className="text-[10px] text-neutral-400 hover:text-neutral-200"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          )}
+                          {m.state === 'not-downloaded' && (
+                            <button
+                              type="button"
+                              disabled={activeDownload !== null}
+                              onClick={() => {
+                                setActiveDownload(m.name);
+                                void window.api.whisper.downloadModel(m.name);
+                              }}
+                              className="rounded border border-neutral-700 px-2 py-0.5 text-[10px] text-neutral-300 hover:bg-neutral-800 disabled:opacity-40"
+                            >
+                              Download
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </section>
 
             <section className="space-y-3">
