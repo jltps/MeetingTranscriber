@@ -26,6 +26,7 @@ type MeetingSidebarProps = {
   onNew: () => void;
   onSearch: (query: string) => void;
   onDelete: (id: number) => void;
+  onOpenSettings: () => void;
 };
 
 export function MeetingSidebar({
@@ -37,6 +38,7 @@ export function MeetingSidebar({
   onNew,
   onSearch,
   onDelete,
+  onOpenSettings,
 }: MeetingSidebarProps) {
   const [text, setText] = useState('');
   const debouncedSearch = useDebouncedCallback(onSearch, 250);
@@ -45,13 +47,23 @@ export function MeetingSidebar({
     <aside className="flex w-72 shrink-0 flex-col border-r border-neutral-800 bg-neutral-900">
       <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
         <span className="text-sm font-semibold tracking-wide">Scribe</span>
-        <button
-          type="button"
-          onClick={onNew}
-          className="rounded-md bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-900 hover:bg-white"
-        >
-          New Note
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            aria-label="Settings"
+            className="rounded-md px-2 py-1 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+          >
+            ⚙
+          </button>
+          <button
+            type="button"
+            onClick={onNew}
+            className="rounded-md bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-900 hover:bg-white"
+          >
+            New Note
+          </button>
+        </div>
       </div>
 
       <div className="border-b border-neutral-800 p-3">

@@ -4,7 +4,13 @@
 // preload bridge wires window.api methods to these channel names. The one
 // exception is the audio frame channel, a raw ArrayBuffer not validated per-frame.
 import { z } from 'zod';
-import type { EnhancedNotes, MeetingDetail, MeetingSummary, TranscriptSegment } from './types';
+import type {
+  EnhancedNotes,
+  MeetingDetail,
+  MeetingSummary,
+  PersistedSegment,
+  TranscriptSegment,
+} from './types';
 
 export const IPC = {
   appGetStatus: 'app:getStatus',
@@ -28,6 +34,14 @@ export const IPC = {
   meetingsSaveEnhanced: 'meetings:saveEnhanced',
 
   enhancerEnhance: 'enhancer:enhance',
+
+  settingsGet: 'settings:get',
+  settingsSetKeys: 'settings:setKeys',
+  settingsSetMicDevice: 'settings:setMicDevice',
+  settingsSetLanguage: 'settings:setLanguage',
+  settingsTest: 'settings:test',
+  settingsAcceptPrivacy: 'settings:acceptPrivacy',
+  settingsWipe: 'settings:wipe',
 } as const;
 
 export const AppStatusSchema = z.object({
@@ -82,11 +96,36 @@ export type SaveEnhancedInput = z.infer<typeof SaveEnhancedSchema>;
 
 export type EnhanceResult = { notes: EnhancedNotes; degraded: boolean };
 
+export const SetKeysSchema = z.object({
+  deepgram: z.string().optional(),
+  anthropic: z.string().optional(),
+});
+export type SetKeysInput = z.infer<typeof SetKeysSchema>;
+export const SetMicDeviceSchema = z.string().nullable();
+export const SetLanguageSchema = z.string();
+export const TestProviderSchema = z.enum(['deepgram', 'anthropic']);
+export type TestProvider = z.infer<typeof TestProviderSchema>;
+// `key` lets the UI test the just-typed (unsaved) key; when omitted, the stored
+// key is tested instead.
+export const TestRequestSchema = z.object({
+  provider: TestProviderSchema,
+  key: z.string().optional(),
+});
+
+export type SettingsView = {
+  deepgramKeySet: boolean;
+  anthropicKeySet: boolean;
+  micDeviceId: string | null;
+  language: string;
+  privacyAccepted: boolean;
+};
+export type TestResult = { ok: boolean; message?: string };
+
 export interface MeetingsApi {
   list(): Promise<MeetingSummary[]>;
   create(): Promise<MeetingSummary>;
   get(id: number): Promise<MeetingDetail | null>;
-  getTranscript(id: number): Promise<TranscriptSegment[]>;
+  getTranscript(id: number): Promise<PersistedSegment[]>;
   saveNotes(id: number, markdown: string): Promise<void>;
   updateTitle(id: number, title: string): Promise<void>;
   start(id: number): Promise<MeetingSummary>;
@@ -94,6 +133,16 @@ export interface MeetingsApi {
   remove(id: number): Promise<void>;
   search(query: string): Promise<MeetingSummary[]>;
   saveEnhanced(id: number, notes: EnhancedNotes): Promise<void>;
+}
+
+export interface SettingsApi {
+  get(): Promise<SettingsView>;
+  setKeys(keys: SetKeysInput): Promise<void>;
+  setMicDevice(deviceId: string | null): Promise<void>;
+  setLanguage(language: string): Promise<void>;
+  test(provider: TestProvider, key?: string): Promise<TestResult>;
+  acceptPrivacy(): Promise<void>;
+  wipe(): Promise<void>;
 }
 
 /** The typed surface exposed to the renderer as window.api. */
@@ -106,4 +155,5 @@ export interface ScribeApi {
   onTranscriptionStatus(cb: (status: TranscriptionStatus) => void): () => void;
   meetings: MeetingsApi;
   enhance(meetingId: number): Promise<EnhanceResult>;
+  settings: SettingsApi;
 }

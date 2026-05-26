@@ -1,5 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { TranscriptSegment } from '../../../shared/types';
+
+export type TranscriptHighlight = { ids: number[]; nonce: number };
+
+type DisplaySegment = TranscriptSegment & { id?: number };
 
 function formatTime(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -8,10 +12,23 @@ function formatTime(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-function Line({ seg, interim }: { seg: TranscriptSegment; interim?: boolean }) {
+function Line({
+  seg,
+  interim,
+  highlighted,
+}: {
+  seg: DisplaySegment;
+  interim?: boolean;
+  highlighted?: boolean;
+}) {
   const isMe = seg.channel === 0;
   return (
-    <div className={interim ? 'opacity-50' : ''}>
+    <div
+      data-segment-id={seg.id}
+      className={`rounded px-1 transition-colors ${interim ? 'opacity-50' : ''} ${
+        highlighted ? 'bg-amber-400/20' : ''
+      }`}
+    >
       <span className={`mr-2 text-xs font-semibold ${isMe ? 'text-emerald-400' : 'text-sky-400'}`}>
         {seg.speakerLabel}
       </span>
@@ -24,19 +41,39 @@ function Line({ seg, interim }: { seg: TranscriptSegment; interim?: boolean }) {
 export function TranscriptPanel({
   finals,
   interims,
+  highlight,
 }: {
-  finals: TranscriptSegment[];
+  finals: DisplaySegment[];
   interims: TranscriptSegment[];
+  highlight?: TranscriptHighlight | null;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Auto-scroll only while pinned to the bottom, so scrolling up to read back
-  // doesn't fight the live feed (PRODUCT_SPEC.md §8.2).
   const pinned = useRef(true);
+  const [highlightedIds, setHighlightedIds] = useState<Set<number>>(new Set());
+  const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Live auto-scroll while pinned to the bottom (PRODUCT_SPEC.md §8.2).
   useEffect(() => {
     const el = scrollRef.current;
     if (el && pinned.current) el.scrollTop = el.scrollHeight;
   }, [finals, interims]);
+
+  // Source-link jump (§8.4): scroll to the first cited segment and flash a
+  // highlight on all of them, then clear.
+  useEffect(() => {
+    if (!highlight || highlight.ids.length === 0) return;
+    setHighlightedIds(new Set(highlight.ids));
+    pinned.current = false;
+    requestAnimationFrame(() => {
+      const target = scrollRef.current?.querySelector(`[data-segment-id="${highlight.ids[0]}"]`);
+      target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+    if (clearTimer.current) clearTimeout(clearTimer.current);
+    clearTimer.current = setTimeout(() => setHighlightedIds(new Set()), 2600);
+    return () => {
+      if (clearTimer.current) clearTimeout(clearTimer.current);
+    };
+  }, [highlight]);
 
   const handleScroll = (): void => {
     const el = scrollRef.current;
@@ -61,7 +98,11 @@ export function TranscriptPanel({
         ) : (
           <>
             {finals.map((seg, i) => (
-              <Line key={`final-${i}`} seg={seg} />
+              <Line
+                key={seg.id ?? `final-${i}`}
+                seg={seg}
+                highlighted={seg.id !== undefined && highlightedIds.has(seg.id)}
+              />
             ))}
             {interims.map((seg) => (
               <Line key={`interim-${seg.channel}`} seg={seg} interim />

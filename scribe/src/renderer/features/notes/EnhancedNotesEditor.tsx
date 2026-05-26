@@ -5,13 +5,14 @@ import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import type { EnhancedNotes } from '../../../shared/types';
 import { useDebouncedCallback } from '../../lib/debounce';
-import { AiNote, EnhancedOwnership, MyNote } from './marks';
+import { AiNote, EnhancedOwnership, MyNote, SourceAttr, SourceLinks } from './marks';
 import { docToEnhancedNotes, enhancedNotesToDoc } from './enhanced-doc';
 
 type EnhancedNotesEditorProps = {
   meetingId: number;
   notes: EnhancedNotes;
   onSave: (id: number, notes: EnhancedNotes) => void;
+  onJump: (segmentIds: number[]) => void;
   editable?: boolean;
 };
 
@@ -24,14 +25,26 @@ export function EnhancedNotesEditor({
   meetingId,
   notes,
   onSave,
+  onJump,
   editable = true,
 }: EnhancedNotesEditorProps) {
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
+  const onJumpRef = useRef(onJump);
+  onJumpRef.current = onJump;
   const dirty = useRef(false);
 
   const editor = useEditor({
-    extensions: [StarterKit, TaskList, TaskItem.configure({ nested: true }), MyNote, AiNote, EnhancedOwnership],
+    extensions: [
+      StarterKit,
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      MyNote,
+      AiNote,
+      EnhancedOwnership,
+      SourceAttr,
+      SourceLinks.configure({ onJump: (ids) => onJumpRef.current(ids) }),
+    ],
     editable,
     content: '',
     editorProps: { attributes: { class: 'notes-editor', 'data-testid': 'enhanced-editor' } },

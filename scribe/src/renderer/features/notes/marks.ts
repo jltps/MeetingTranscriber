@@ -1,5 +1,6 @@
 import { Extension, Mark, mergeAttributes } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
 // Two inline marks distinguish user-authored vs AI-added text (PRODUCT_SPEC.md
 // §8.3). Rendered via data-note + a class; styling lives in app/index.css.
@@ -81,6 +82,93 @@ export const EnhancedOwnership = Extension.create({
           if (!changed) return null;
           tr.setMeta('enhancedFlip', true);
           return tr;
+        },
+      }),
+    ];
+  },
+});
+
+// Carries the transcript segment ids an AI block was derived from (§8.4) as a
+// node attribute, so they survive editing and round-trip through getJSON. Stored
+// on the text-containing block (paragraph/heading) so the source icon sits next
+// to the text.
+export const SourceAttr = Extension.create({
+  name: 'sourceAttr',
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['paragraph', 'heading'],
+        attributes: {
+          sources: {
+            default: [] as number[],
+            parseHTML: (element) => {
+              try {
+                const raw = element.getAttribute('data-sources');
+                return raw ? (JSON.parse(raw) as number[]) : [];
+              } catch {
+                return [];
+              }
+            },
+            renderHTML: (attributes) => {
+              const sources = attributes.sources as number[] | undefined;
+              return sources && sources.length > 0
+                ? { 'data-sources': JSON.stringify(sources) }
+                : {};
+            },
+          },
+        },
+      },
+    ];
+  },
+});
+
+export interface SourceLinksOptions {
+  onJump: (segmentIds: number[]) => void;
+}
+
+// Renders a non-editable "jump to transcript" widget next to any block that has
+// source ids (§8.4). Clicking calls onJump with those ids; the transcript panel
+// scrolls to and highlights them.
+export const SourceLinks = Extension.create<SourceLinksOptions>({
+  name: 'sourceLinks',
+  addOptions() {
+    return { onJump: () => {} };
+  },
+  addProseMirrorPlugins() {
+    const onJump = (ids: number[]): void => this.options.onJump(ids);
+    return [
+      new Plugin({
+        key: new PluginKey('sourceLinks'),
+        props: {
+          decorations(state) {
+            const decorations: Decoration[] = [];
+            state.doc.descendants((node, pos) => {
+              if (node.type.name !== 'paragraph' && node.type.name !== 'heading') return;
+              const sources = node.attrs.sources as number[] | undefined;
+              if (!sources || sources.length === 0) return;
+              decorations.push(
+                Decoration.widget(
+                  pos + 1,
+                  () => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'source-link';
+                    button.setAttribute('contenteditable', 'false');
+                    button.title = `Jump to transcript (${sources.length} segment${sources.length === 1 ? '' : 's'})`;
+                    button.textContent = '⌕';
+                    button.addEventListener('mousedown', (event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onJump(sources);
+                    });
+                    return button;
+                  },
+                  { side: -1, key: `src-${pos}-${sources.join(',')}` },
+                ),
+              );
+            });
+            return DecorationSet.create(state.doc, decorations);
+          },
         },
       }),
     ];

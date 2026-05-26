@@ -66,13 +66,15 @@ export class AudioCapture {
     this.handlers.onState?.(state);
   }
 
-  async start(): Promise<void> {
+  async start(opts: { micDeviceId?: string } = {}): Promise<void> {
     if (this.state !== 'idle') return;
     this.setState('starting');
     try {
       // 1) Microphone. Disable processing so channel 0 is a clean local signal.
+      //    Use the device chosen in Settings (§10); otherwise the OS default.
       this.micStream = await navigator.mediaDevices.getUserMedia({
         audio: {
+          deviceId: opts.micDeviceId ? { exact: opts.micDeviceId } : undefined,
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,

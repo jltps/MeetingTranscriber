@@ -41,6 +41,18 @@ const MIGRATIONS: Migration[] = [
       CREATE VIRTUAL TABLE search_fts USING fts5(meeting_id, content);
     `,
   },
+  {
+    version: 2,
+    name: 'settings',
+    // Key-value app settings. API keys are stored here only as safeStorage-
+    // encrypted base64 blobs (CLAUDE.md §1.2) — never plaintext.
+    sql: `
+      CREATE TABLE settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 export function runMigrations(db: Database): void {

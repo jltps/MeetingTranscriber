@@ -53,6 +53,17 @@ function textOf(content: Anthropic.ContentBlock[]): string {
     .join('\n');
 }
 
+// Minimal auth check for Settings → "Test connection". A 1-token request both
+// validates the key and confirms model access; throws on failure.
+export async function testAnthropicKey(apiKey: string): Promise<void> {
+  const client = new Anthropic({ apiKey });
+  await client.messages.create({
+    model: MODEL,
+    max_tokens: 1,
+    messages: [{ role: 'user', content: 'ping' }],
+  });
+}
+
 export class AnthropicEnhancer implements Enhancer {
   private client: Anthropic;
 

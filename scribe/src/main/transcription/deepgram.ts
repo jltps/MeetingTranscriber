@@ -7,10 +7,20 @@ const DEEPGRAM_URL = 'wss://api.deepgram.com/v1/listen';
 
 export type DeepgramConfig = {
   apiKey: string;
+  language?: string; // 'auto' enables detection; otherwise a language code like 'en'
   onOpen?: () => void;
   onClose?: () => void;
   onError?: (error: Error) => void;
 };
+
+// Lightweight key check used by Settings → "Test connection". Hits a cheap REST
+// endpoint; throws on any non-2xx so the caller can surface the failure.
+export async function testDeepgramKey(apiKey: string): Promise<void> {
+  const res = await fetch('https://api.deepgram.com/v1/projects', {
+    headers: { Authorization: `Token ${apiKey}` },
+  });
+  if (!res.ok) throw new Error(`Deepgram rejected the key (HTTP ${res.status}).`);
+}
 
 // Deepgram streaming over a WebSocket opened in the main process. The interleaved
 // 16-bit PCM frames the renderer captures are linear16 multichannel exactly as
@@ -54,6 +64,9 @@ export class DeepgramSession implements TranscriptionSession {
       sample_rate: String(opts.sampleRate),
       channels: String(opts.channels),
     });
+    const language = this.config.language ?? 'en';
+    if (language === 'auto') params.set('detect_language', 'true');
+    else params.set('language', language);
 
     return new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(`${DEEPGRAM_URL}?${params.toString()}`, {

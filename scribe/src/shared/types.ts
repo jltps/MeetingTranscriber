@@ -11,6 +11,9 @@ export type TranscriptSegment = {
   isFinal: boolean;
 };
 
+/** A persisted transcript segment (carries its DB id, for source linking §8.4). */
+export type PersistedSegment = TranscriptSegment & { id: number };
+
 /** Structured, source-linked enhancement returned by the LLM (PRODUCT_SPEC.md §9). */
 export type EnhancedNotes = {
   blocks: Array<{

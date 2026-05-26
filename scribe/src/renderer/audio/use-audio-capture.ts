@@ -18,6 +18,8 @@ export type UseAudioCaptureOptions = {
   // Called for each frame's interleaved PCM. M2 forwards it to the main process
   // for transcription; the buffer is never stored locally (PRODUCT_SPEC.md §6.4).
   onPcm?: (pcm: ArrayBuffer) => void;
+  // The mic device chosen in Settings (§10); falls back to the OS default.
+  micDeviceId?: string | null;
 };
 
 // React glue over AudioCapture. Owns the meter peak-hold/decay and the frame/byte
@@ -29,6 +31,8 @@ export function useAudioCapture(options: UseAudioCaptureOptions = {}): AudioCapt
   const sysPeak = useRef(0);
   const onPcmRef = useRef(options.onPcm);
   onPcmRef.current = options.onPcm;
+  const micDeviceIdRef = useRef(options.micDeviceId);
+  micDeviceIdRef.current = options.micDeviceId;
 
   const [state, setState] = useState<CaptureState>('idle');
   const [micLevel, setMicLevel] = useState(0);
@@ -74,7 +78,7 @@ export function useAudioCapture(options: UseAudioCaptureOptions = {}): AudioCapt
     setSampleRate(null);
     setSysTrack(null);
     try {
-      await captureRef.current?.start();
+      await captureRef.current?.start({ micDeviceId: micDeviceIdRef.current ?? undefined });
     } catch {
       /* surfaced via onError */
     }

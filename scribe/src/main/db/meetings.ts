@@ -3,6 +3,7 @@ import type {
   MeetingDetail,
   MeetingStatus,
   MeetingSummary,
+  PersistedSegment,
   TranscriptSegment,
 } from '../../shared/types';
 import type { EnhancerSegment } from '../enhancer/enhancer';
@@ -160,14 +161,15 @@ export function getEnhancerSegments(meetingId: number): EnhancerSegment[] {
   }));
 }
 
-export function getTranscript(meetingId: number): TranscriptSegment[] {
+export function getTranscript(meetingId: number): PersistedSegment[] {
   const rows = getDb()
     .prepare(
-      `SELECT channel, speaker_label, text, start_ms, end_ms
+      `SELECT id, channel, speaker_label, text, start_ms, end_ms
        FROM transcript_segments WHERE meeting_id = ? ORDER BY start_ms, id`,
     )
-    .all(meetingId) as SegmentRow[];
+    .all(meetingId) as Array<SegmentRow & { id: number }>;
   return rows.map((r) => ({
+    id: r.id,
     text: r.text,
     channel: r.channel === 0 ? 0 : 1,
     speakerLabel: r.speaker_label,

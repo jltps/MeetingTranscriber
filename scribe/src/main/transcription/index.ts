@@ -1,5 +1,6 @@
 import { DeepgramSession } from './deepgram';
 import { getDeepgramKey } from '../secrets/api-keys';
+import { getLanguage } from '../db/settings';
 import type { TranscriptionSession } from './session';
 import type { TranscriptSegment } from '../../shared/types';
 import type { TranscriptionStatus } from '../../shared/ipc-contract';
@@ -16,6 +17,7 @@ export function createTranscriptionSession(
 ): TranscriptionSession {
   const session = new DeepgramSession({
     apiKey: getDeepgramKey() ?? '',
+    language: getLanguage(),
     onOpen: () => config.onStatus({ state: 'open' }),
     onClose: () => config.onStatus({ state: 'closed' }),
     onError: (error) => config.onStatus({ state: 'error', message: error.message }),

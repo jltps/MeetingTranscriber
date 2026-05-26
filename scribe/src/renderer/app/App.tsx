@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import type { EnhancedNotes, MeetingDetail, TranscriptSegment } from '../../shared/types';
+import type { EnhancedNotes, MeetingDetail, PersistedSegment } from '../../shared/types';
 import { EnhancedNotesSchema } from '../../shared/ipc-contract';
 import { useAudioCapture } from '../audio/use-audio-capture';
 import { useTranscription } from '../features/transcript/use-transcription';
-import { TranscriptPanel } from '../features/transcript/TranscriptPanel';
+import { TranscriptPanel, type TranscriptHighlight } from '../features/transcript/TranscriptPanel';
 import { useMeetings } from '../features/meetings/use-meetings';
 import { MeetingSidebar } from '../features/meetings/MeetingSidebar';
 import { NotesEditor } from '../features/notes/NotesEditor';
 import { EnhancedNotesEditor } from '../features/notes/EnhancedNotesEditor';
+import { useSettings } from '../features/settings/use-settings';
+import { SettingsModal } from '../features/settings/SettingsModal';
+import { PrivacyNotice } from '../features/settings/PrivacyNotice';
 import { useDebouncedCallback } from '../lib/debounce';
 import { CaptureProbe } from './CaptureProbe';
 
@@ -27,10 +30,11 @@ function parseEnhanced(json: string | null): EnhancedNotes | null {
 export function App() {
   const meetings = useMeetings();
   const transcription = useTranscription();
+  const { settings, refresh: refreshSettings } = useSettings();
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<MeetingDetail | null>(null);
-  const [loadedSegments, setLoadedSegments] = useState<TranscriptSegment[]>([]);
+  const [loadedSegments, setLoadedSegments] = useState<PersistedSegment[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
@@ -41,12 +45,16 @@ export function App() {
   const [enhancing, setEnhancing] = useState(false);
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
 
+  const [showSettings, setShowSettings] = useState(false);
+  const [highlight, setHighlight] = useState<TranscriptHighlight | null>(null);
+
   const connectedRef = useRef(false);
   connectedRef.current = transcription.connected;
   const capture = useAudioCapture({
     onPcm: (pcm) => {
       if (connectedRef.current) window.api.pushAudioFrame(pcm);
     },
+    micDeviceId: settings?.micDeviceId ?? null,
   });
 
   const running = capture.state === 'running' && activeId !== null;
@@ -133,7 +141,7 @@ export function App() {
   const stop = async (): Promise<void> => {
     setBusy(true);
     const endedId = activeId;
-    let endedSegments: TranscriptSegment[] = [];
+    let endedSegments: PersistedSegment[] = [];
     try {
       await capture.stop();
       await transcription.stop();
@@ -164,8 +172,31 @@ export function App() {
   const interims = showingActive ? transcription.interims : [];
   const hasEnhanced = enhanced !== null;
 
+  const wiped = async (): Promise<void> => {
+    setShowSettings(false);
+    setSelectedId(null);
+    await meetings.refresh();
+    await refreshSettings();
+  };
+
   return (
     <div className="flex h-full bg-neutral-950 text-neutral-200">
+      {settings && !settings.privacyAccepted && (
+        <PrivacyNotice
+          onAccept={() => {
+            void window.api.settings.acceptPrivacy().then(refreshSettings);
+          }}
+        />
+      )}
+      {showSettings && settings && (
+        <SettingsModal
+          settings={settings}
+          onClose={() => setShowSettings(false)}
+          onChanged={() => void refreshSettings()}
+          onWiped={() => void wiped()}
+        />
+      )}
+
       <MeetingSidebar
         meetings={list}
         selectedId={selectedId}
@@ -175,6 +206,7 @@ export function App() {
         onNew={() => void onNewNote()}
         onSearch={(q) => void meetings.search(q)}
         onDelete={(id) => void onDelete(id)}
+        onOpenSettings={() => setShowSettings(true)}
       />
 
       <main className="flex flex-1 flex-col overflow-hidden">
@@ -271,6 +303,7 @@ export function App() {
                     meetingId={detail.id}
                     notes={enhanced}
                     onSave={(id, notes) => void window.api.meetings.saveEnhanced(id, notes)}
+                    onJump={(ids) => setHighlight({ ids, nonce: Date.now() })}
                   />
                 ) : (
                   <NotesEditor
@@ -283,7 +316,7 @@ export function App() {
               </section>
               <section className="flex w-[42%] shrink-0 flex-col overflow-hidden p-6">
                 <div className="min-h-0 flex-1">
-                  <TranscriptPanel finals={finals} interims={interims} />
+                  <TranscriptPanel finals={finals} interims={interims} highlight={highlight} />
                 </div>
                 <details className="mt-4 text-xs text-neutral-500">
                   <summary className="cursor-pointer select-none">Capture diagnostics</summary>

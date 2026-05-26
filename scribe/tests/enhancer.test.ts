@@ -49,6 +49,23 @@ describe('enhancedNotesToDoc', () => {
   });
 });
 
+describe('source ids round-trip (§8.4)', () => {
+  it('carries sourceSegmentIds onto block attrs and back, surviving serialization', () => {
+    const notes: EnhancedNotes = {
+      blocks: [
+        { type: 'paragraph', text: 'AI point', origin: 'ai', sourceSegmentIds: [5, 6] },
+        { type: 'bullet', text: 'a bullet', origin: 'ai', sourceSegmentIds: [7] },
+      ],
+    };
+    const doc = enhancedNotesToDoc(notes);
+    expect(doc.content?.[0].attrs?.sources).toEqual([5, 6]);
+
+    const back = docToEnhancedNotes(doc);
+    expect(back.blocks[0].sourceSegmentIds).toEqual([5, 6]);
+    expect(back.blocks[1].sourceSegmentIds).toEqual([7]);
+  });
+});
+
 describe('docToEnhancedNotes (edit-flips-to-mine)', () => {
   it('treats a block as user-owned if any text run is not aiNote', () => {
     const doc: PmNode = {

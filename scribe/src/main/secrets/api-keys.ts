@@ -1,10 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { deleteSetting, getSetting, setSetting } from '../db/settings';
+import { decryptSecret, encryptSecret } from './safe-store';
 
 // API key access lives behind these accessors so the source can change without
-// touching callers. M2 reads from the environment (or a gitignored .env); M5
-// replaces this with Electron safeStorage + the Settings screen. Keys are never
-// returned to the renderer and never logged (CLAUDE.md §1.2).
+// touching callers (CLAUDE.md §1.2). Keys set via the Settings screen are stored
+// encrypted (safeStorage). For dev convenience, a gitignored .env / shell env var
+// is used as a fallback when no key has been saved. Keys are never returned to
+// the renderer and never logged.
+
+const DEEPGRAM_SETTING = 'deepgram_key_enc';
+const ANTHROPIC_SETTING = 'anthropic_key_enc';
 
 let envLoaded = false;
 
@@ -24,14 +30,34 @@ function ensureEnvLoaded(): void {
   }
 }
 
-export function getDeepgramKey(): string | null {
+function readKey(settingKey: string, envVar: string): string | null {
+  const stored = getSetting(settingKey);
+  if (stored) {
+    const decrypted = decryptSecret(stored);
+    if (decrypted) return decrypted;
+  }
   ensureEnvLoaded();
-  const key = process.env.DEEPGRAM_API_KEY?.trim();
-  return key ? key : null;
+  const fromEnv = process.env[envVar]?.trim();
+  return fromEnv ? fromEnv : null;
+}
+
+function storeKey(settingKey: string, key: string | null): void {
+  if (key && key.trim()) setSetting(settingKey, encryptSecret(key.trim()));
+  else deleteSetting(settingKey);
+}
+
+export function getDeepgramKey(): string | null {
+  return readKey(DEEPGRAM_SETTING, 'DEEPGRAM_API_KEY');
 }
 
 export function getAnthropicKey(): string | null {
-  ensureEnvLoaded();
-  const key = process.env.ANTHROPIC_API_KEY?.trim();
-  return key ? key : null;
+  return readKey(ANTHROPIC_SETTING, 'ANTHROPIC_API_KEY');
+}
+
+export function setDeepgramKey(key: string | null): void {
+  storeKey(DEEPGRAM_SETTING, key);
+}
+
+export function setAnthropicKey(key: string | null): void {
+  storeKey(ANTHROPIC_SETTING, key);
 }

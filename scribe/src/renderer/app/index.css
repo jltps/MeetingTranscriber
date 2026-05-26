@@ -87,3 +87,27 @@ body {
 .notes-editor :where(.note-ai) {
   color: #8b97a6;
 }
+
+/* Source-link icon (§8.4): a non-editable magnifying glass next to AI blocks. */
+.source-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15em;
+  height: 1.15em;
+  margin-right: 0.35em;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #6b7280;
+  font-size: 0.95em;
+  line-height: 1;
+  vertical-align: baseline;
+  cursor: pointer;
+  user-select: none;
+}
+.source-link:hover {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.14);
+}
