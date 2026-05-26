@@ -44,7 +44,7 @@ export function AgendaPanel({ events, onArm, onSelectMeeting }: AgendaPanelProps
             className="rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-2"
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate text-xs font-medium text-neutral-200">{e.title}</span>
+              <span className="truncate text-xs font-medium text-neutral-200">{e.title || 'Busy'}</span>
               <span className="shrink-0 rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-neutral-400">
                 {SOURCE_LABEL[e.providerId]}
               </span>

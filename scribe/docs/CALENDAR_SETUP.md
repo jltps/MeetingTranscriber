@@ -14,7 +14,8 @@ we keep it out of git and read it from `.env` (see below).
 2. **APIs & Services → Library** → search "Google Calendar API" → **Enable**.
 3. **APIs & Services → OAuth consent screen**:
    - User type **External**, fill the app name + your email.
-   - **Scopes** → add `.../auth/calendar.events.readonly` (read-only, events).
+   - **Scopes** → add `.../auth/calendar.freebusy` (busy times only — no event
+     details). The app uses this to detect *when* you're in a meeting.
    - **Test users** → add the Google account(s) you'll sign in with.
 4. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
    - Application type: **Desktop app**.

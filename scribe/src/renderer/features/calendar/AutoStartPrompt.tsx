@@ -43,7 +43,7 @@ export function AutoStartPrompt({ event, onStart, onDismiss }: AutoStartPromptPr
           <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
           Meeting starting
         </div>
-        <h2 className="mt-3 truncate text-base font-medium text-neutral-100">{event.title}</h2>
+        <h2 className="mt-3 truncate text-base font-medium text-neutral-100">{event.title || 'Calendar event'}</h2>
         <p className="mt-1 text-xs text-neutral-500">
           {formatTime(event.startMs)} · from your calendar
         </p>

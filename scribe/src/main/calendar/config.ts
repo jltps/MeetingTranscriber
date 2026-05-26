@@ -43,11 +43,11 @@ export const GOOGLE_OAUTH = {
   authEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
   tokenEndpoint: 'https://oauth2.googleapis.com/token',
   revokeEndpoint: 'https://oauth2.googleapis.com/revoke',
-  // Read-only, least-privilege: events only (narrower than calendar.readonly).
-  // `email` is requested only to label the connected account in the UI.
-  scope: 'https://www.googleapis.com/auth/calendar.events.readonly email',
-  // Primary calendar events endpoint.
-  eventsEndpoint: 'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+  // Least-privilege: freebusy only — reveals *when* the user is busy, never event
+  // titles/attendees/links. The agenda + auto-start use busy blocks alone.
+  scope: 'https://www.googleapis.com/auth/calendar.freebusy',
+  // Free/busy query endpoint (POST).
+  freeBusyEndpoint: 'https://www.googleapis.com/calendar/v3/freeBusy',
 } as const;
 
 export function getGoogleClientId(): string {

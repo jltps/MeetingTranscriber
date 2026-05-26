@@ -3,13 +3,16 @@ import type { CalendarProvider } from './provider';
 import { GOOGLE_OAUTH } from './config';
 import { getValidGoogleAccessToken, revokeGoogle, runGoogleOAuth } from './google-oauth';
 import { isGoogleConnected } from '../secrets/calendar-tokens';
-import { normalizeGoogleEvent, type RawGoogleEvent } from './normalize';
 
-// Google Calendar implementation of CalendarProvider (ROADMAP_06). Read-only:
-// it only ever GETs events. Recurrence is expanded server-side (singleEvents=true)
-// so each instance arrives as its own event with a distinct id.
+// Google Calendar implementation of CalendarProvider (ROADMAP_06). It uses the
+// FREEBUSY API only (scope calendar.freebusy): it learns *when* the user is busy,
+// never event titles/attendees/links. Each busy block becomes a CalendarEvent with
+// an empty title, so the agenda/auto-start pipeline downstream is unchanged.
 
-type EventsListResponse = { items?: RawGoogleEvent[]; nextPageToken?: string };
+type BusySlot = { start: string; end: string };
+type FreeBusyResponse = {
+  calendars?: Record<string, { busy?: BusySlot[] }>;
+};
 
 /** Extract Google's human-readable error message from a failed API response. */
 async function readApiError(res: Response): Promise<string> {
@@ -19,6 +22,31 @@ async function readApiError(res: Response): Promise<string> {
   } catch {
     return res.statusText;
   }
+}
+
+/**
+ * Map freebusy busy slots → CalendarEvent[]. Pure (no I/O) for testability.
+ * `externalId` is derived from the slot's start+end so it is stable across polls
+ * (the upsert preserves `armed`/link); title/attendees/joinUrl are empty because
+ * freebusy carries none. Slots with unparseable timestamps are skipped.
+ */
+export function busyToEvents(busy: BusySlot[]): CalendarEvent[] {
+  const events: CalendarEvent[] = [];
+  for (const slot of busy) {
+    const startMs = Date.parse(slot.start);
+    const endMs = Date.parse(slot.end);
+    if (Number.isNaN(startMs) || Number.isNaN(endMs)) continue;
+    events.push({
+      providerId: 'google',
+      externalId: `${startMs}-${endMs}`,
+      title: '',
+      startMs,
+      endMs,
+      allDay: false,
+      attendees: [],
+    });
+  }
+  return events;
 }
 
 export class GoogleCalendarProvider implements CalendarProvider {
@@ -38,34 +66,24 @@ export class GoogleCalendarProvider implements CalendarProvider {
 
   async listUpcoming(opts: { fromMs: number; toMs: number }): Promise<CalendarEvent[]> {
     const token = await getValidGoogleAccessToken();
-    const events: CalendarEvent[] = [];
-    let pageToken: string | undefined;
-
-    // Paginate defensively; a 14-day window is small but recurring series can be busy.
-    do {
-      const url = new URL(GOOGLE_OAUTH.eventsEndpoint);
-      url.searchParams.set('timeMin', new Date(opts.fromMs).toISOString());
-      url.searchParams.set('timeMax', new Date(opts.toMs).toISOString());
-      url.searchParams.set('singleEvents', 'true');
-      url.searchParams.set('orderBy', 'startTime');
-      url.searchParams.set('maxResults', '250');
-      if (pageToken) url.searchParams.set('pageToken', pageToken);
-
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) {
-        // Surface Google's error message (e.g. "Calendar API has not been used in
-        // project N… or it is disabled. Enable it by visiting …") so the cause is
-        // actionable rather than a bare status code.
-        throw new Error(`Google Calendar request failed (${res.status}): ${await readApiError(res)}`);
-      }
-      const json = (await res.json()) as EventsListResponse;
-      for (const raw of json.items ?? []) {
-        const normalized = normalizeGoogleEvent(raw);
-        if (normalized) events.push(normalized);
-      }
-      pageToken = json.nextPageToken;
-    } while (pageToken);
-
-    return events;
+    const res = await fetch(GOOGLE_OAUTH.freeBusyEndpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        timeMin: new Date(opts.fromMs).toISOString(),
+        timeMax: new Date(opts.toMs).toISOString(),
+        items: [{ id: 'primary' }],
+      }),
+    });
+    if (!res.ok) {
+      // Surface Google's message (e.g. "Calendar API has not been used in project
+      // N… or it is disabled. Enable it by visiting …") so the cause is actionable.
+      throw new Error(`Google freebusy request failed (${res.status}): ${await readApiError(res)}`);
+    }
+    const json = (await res.json()) as FreeBusyResponse;
+    return busyToEvents(json.calendars?.primary?.busy ?? []);
   }
 }
