@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { LanguageSetting, Template, TemplateCreate } from '../../../shared/types';
 import type { SettingsView, TestProvider, TestResult } from '../../../shared/ipc-contract';
+import { TemplateEditorModal } from '../templates/TemplateEditorModal';
 
 const LANGUAGE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'auto', label: 'Auto-detect' },
@@ -120,33 +121,8 @@ export function SettingsModal({
   const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
   const [instructions, setInstructions] = useState(settings.globalInstructions);
 
-  // Template editor state
-  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
-  const [newTemplate, setNewTemplate] = useState<Partial<TemplateCreate> | null>(null);
-
-  const saveTemplate = async (): Promise<void> => {
-    if (!newTemplate?.name?.trim()) return;
-    await window.api.templates.create({
-      name: newTemplate.name.trim(),
-      instructions: newTemplate.instructions ?? '',
-      languageMode: newTemplate.languageMode ?? 'global',
-      languageCode: newTemplate.languageCode ?? null,
-    });
-    setNewTemplate(null);
-    onChanged();
-  };
-
-  const saveEditingTemplate = async (): Promise<void> => {
-    if (!editingTemplate) return;
-    await window.api.templates.update(editingTemplate.id, {
-      name: editingTemplate.name,
-      instructions: editingTemplate.instructions,
-      languageMode: editingTemplate.languageMode,
-      languageCode: editingTemplate.languageCode,
-    });
-    setEditingTemplate(null);
-    onChanged();
-  };
+  // null = editor closed, 'new' = creating, Template = editing
+  const [editorTarget, setEditorTarget] = useState<'new' | Template | null>(null);
 
   useEffect(() => {
     const load = (): void => {
@@ -167,192 +143,138 @@ export function SettingsModal({
     onWiped();
   };
 
+  const handleEditorSave = async (data: TemplateCreate): Promise<void> => {
+    if (editorTarget === 'new') {
+      await window.api.templates.create(data);
+    } else if (editorTarget !== null) {
+      await window.api.templates.update(editorTarget.id, data);
+    }
+    onChanged();
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
-      <div className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900">
-        <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-3">
-          <h2 className="text-base font-semibold text-neutral-100">Settings</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded px-2 py-1 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
-          >
-            Close
-          </button>
-        </div>
+    <>
+      {editorTarget !== null && (
+        <TemplateEditorModal
+          template={editorTarget === 'new' ? null : editorTarget}
+          onSave={handleEditorSave}
+          onClose={() => setEditorTarget(null)}
+        />
+      )}
 
-        <div className="space-y-6 overflow-y-auto p-5">
-          <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">API keys</h3>
-            <KeyRow label="Deepgram" provider="deepgram" isSet={settings.deepgramKeySet} onSaved={onChanged} />
-            <KeyRow label="Anthropic" provider="anthropic" isSet={settings.anthropicKeySet} onSaved={onChanged} />
-            <p className="text-[11px] text-neutral-500">
-              Keys are encrypted with your OS secure storage and never leave this machine.
-            </p>
-          </section>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
+        <div className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900">
+          <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-3">
+            <h2 className="text-base font-semibold text-neutral-100">Settings</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded px-2 py-1 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+            >
+              Close
+            </button>
+          </div>
 
-          <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Audio</h3>
-            <div className="space-y-1.5">
-              <label className="text-sm text-neutral-300">Microphone</label>
-              <select
-                value={settings.micDeviceId ?? ''}
-                onChange={(e) => {
-                  void window.api.settings.setMicDevice(e.target.value || null).then(onChanged);
-                }}
-                className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none"
-              >
-                <option value="">System default</option>
-                {mics.map((m, i) => (
-                  <option key={m.deviceId || i} value={m.deviceId}>
-                    {m.label || `Microphone ${i + 1}`}
-                  </option>
-                ))}
-              </select>
+          <div className="space-y-6 overflow-y-auto p-5">
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">API keys</h3>
+              <KeyRow label="Deepgram" provider="deepgram" isSet={settings.deepgramKeySet} onSaved={onChanged} />
+              <KeyRow label="Anthropic" provider="anthropic" isSet={settings.anthropicKeySet} onSaved={onChanged} />
               <p className="text-[11px] text-neutral-500">
-                Device names appear after the first capture. Make sure your system output device
-                matches the one your call plays through, or remote audio (CH1) won’t be captured.
+                Keys are encrypted with your OS secure storage and never leave this machine.
               </p>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm text-neutral-300">Transcription language</label>
-              <select
-                value={langSettingToSelectValue(settings.language)}
-                onChange={(e) => {
-                  void window.api.settings
-                    .setLanguage(selectValueToLangSetting(e.target.value))
-                    .then(onChanged);
-                }}
-                className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none"
-              >
-                {LANGUAGE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-[11px] text-neutral-500">
-                Auto-detect uses nova-3 multilingual mode. For Portuguese or other languages,
-                selecting a fixed language gives the most accurate results.
-              </p>
-            </div>
-          </section>
+            </section>
 
-          <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              Enhancement
-            </h3>
-            <div className="space-y-1.5">
-              <label className="text-sm text-neutral-300">Custom instructions</label>
-              <textarea
-                value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
-                onBlur={() => {
-                  void window.api.settings.setGlobalInstructions(instructions).then(onChanged);
-                }}
-                rows={4}
-                placeholder={
-                  'e.g. "Always list action items with an owner and due date." ' +
-                  '"Write in European Portuguese." "Executive summary, no preamble."'
-                }
-                className="w-full resize-none rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none"
-              />
-              <p className="text-[11px] text-neutral-500">
-                Applied to every enhancement as advisory guidance. Cannot change the output format
-                or remove source-linking (those are enforced by the system).
-              </p>
-            </div>
-          </section>
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Audio</h3>
+              <div className="space-y-1.5">
+                <label className="text-sm text-neutral-300">Microphone</label>
+                <select
+                  value={settings.micDeviceId ?? ''}
+                  onChange={(e) => {
+                    void window.api.settings.setMicDevice(e.target.value || null).then(onChanged);
+                  }}
+                  className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none"
+                >
+                  <option value="">System default</option>
+                  {mics.map((m, i) => (
+                    <option key={m.deviceId || i} value={m.deviceId}>
+                      {m.label || `Microphone ${i + 1}`}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-neutral-500">
+                  Device names appear after the first capture. Make sure your system output device
+                  matches the one your call plays through, or remote audio (CH1) won't be captured.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm text-neutral-300">Transcription language</label>
+                <select
+                  value={langSettingToSelectValue(settings.language)}
+                  onChange={(e) => {
+                    void window.api.settings
+                      .setLanguage(selectValueToLangSetting(e.target.value))
+                      .then(onChanged);
+                  }}
+                  className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none"
+                >
+                  {LANGUAGE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-neutral-500">
+                  Auto-detect uses nova-3 multilingual mode. For Portuguese or other languages,
+                  selecting a fixed language gives the most accurate results.
+                </p>
+              </div>
+            </section>
 
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
+            <section className="space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                Templates
+                Enhancement
               </h3>
-              {!newTemplate && (
+              <div className="space-y-1.5">
+                <label className="text-sm text-neutral-300">Custom instructions</label>
+                <textarea
+                  value={instructions}
+                  onChange={(e) => setInstructions(e.target.value)}
+                  onBlur={() => {
+                    void window.api.settings.setGlobalInstructions(instructions).then(onChanged);
+                  }}
+                  rows={4}
+                  placeholder={
+                    'e.g. "Always list action items with an owner and due date." ' +
+                    '"Write in European Portuguese." "Executive summary, no preamble."'
+                  }
+                  className="w-full resize-none rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none"
+                />
+                <p className="text-[11px] text-neutral-500">
+                  Applied to every enhancement as advisory guidance. Cannot change the output format
+                  or remove source-linking (those are enforced by the system).
+                </p>
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Templates
+                </h3>
                 <button
                   type="button"
-                  onClick={() =>
-                    setNewTemplate({ name: '', instructions: '', languageMode: 'global', languageCode: null })
-                  }
+                  onClick={() => setEditorTarget('new')}
                   className="text-[11px] text-neutral-400 hover:text-neutral-200"
                 >
                   + New template
                 </button>
-              )}
-            </div>
-
-            {/* New template form */}
-            {newTemplate && (
-              <div className="space-y-2 rounded-md border border-neutral-700 p-3">
-                <input
-                  placeholder="Template name"
-                  value={newTemplate.name ?? ''}
-                  onChange={(e) => setNewTemplate({ ...newTemplate, name: e.target.value })}
-                  className="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-200 focus:outline-none"
-                />
-                <textarea
-                  placeholder="Instructions (optional)"
-                  value={newTemplate.instructions ?? ''}
-                  onChange={(e) => setNewTemplate({ ...newTemplate, instructions: e.target.value })}
-                  rows={3}
-                  className="w-full resize-none rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-200 focus:outline-none"
-                />
-                <div className="flex gap-2 justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setNewTemplate(null)}
-                    className="text-xs text-neutral-500 hover:text-neutral-300"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void saveTemplate()}
-                    className="rounded bg-neutral-700 px-2.5 py-1 text-xs text-neutral-200 hover:bg-neutral-600"
-                  >
-                    Create
-                  </button>
-                </div>
               </div>
-            )}
 
-            {/* Template list */}
-            <div className="space-y-1.5">
-              {templates.map((t) =>
-                editingTemplate?.id === t.id ? (
-                  <div key={t.id} className="space-y-2 rounded-md border border-neutral-600 p-3">
-                    <input
-                      value={editingTemplate.name}
-                      onChange={(e) => setEditingTemplate({ ...editingTemplate, name: e.target.value })}
-                      className="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-200 focus:outline-none"
-                    />
-                    <textarea
-                      value={editingTemplate.instructions}
-                      onChange={(e) =>
-                        setEditingTemplate({ ...editingTemplate, instructions: e.target.value })
-                      }
-                      rows={3}
-                      className="w-full resize-none rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-200 focus:outline-none"
-                    />
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        type="button"
-                        onClick={() => setEditingTemplate(null)}
-                        className="text-xs text-neutral-500 hover:text-neutral-300"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void saveEditingTemplate()}
-                        className="rounded bg-neutral-700 px-2.5 py-1 text-xs text-neutral-200 hover:bg-neutral-600"
-                      >
-                        Save
-                      </button>
-                    </div>
-                  </div>
-                ) : (
+              {/* Template list — all rows are read-only; Edit opens the editor modal */}
+              <div className="space-y-1.5">
+                {templates.map((t) => (
                   <div
                     key={t.id}
                     className="flex items-start justify-between rounded-md border border-neutral-800 px-3 py-2"
@@ -368,7 +290,7 @@ export function SettingsModal({
                     <div className="flex shrink-0 gap-1 ml-2">
                       <button
                         type="button"
-                        onClick={() => setEditingTemplate(t)}
+                        onClick={() => setEditorTarget(t)}
                         className="text-[10px] text-neutral-500 hover:text-neutral-300"
                       >
                         Edit
@@ -386,28 +308,28 @@ export function SettingsModal({
                       </button>
                     </div>
                   </div>
-                ),
-              )}
-            </div>
-          </section>
+                ))}
+              </div>
+            </section>
 
-          <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Privacy</h3>
-            <p className="text-[11px] leading-relaxed text-neutral-400">
-              No audio is ever stored. Audio is streamed to Deepgram for transcription and dropped;
-              transcript text and notes go to Anthropic only when you enhance a meeting. Everything
-              else stays local.
-            </p>
-            <button
-              type="button"
-              onClick={() => void onWipe()}
-              className="rounded-md border border-red-500/40 px-3 py-1.5 text-xs font-medium text-red-300 hover:bg-red-500/10"
-            >
-              Wipe all local data
-            </button>
-          </section>
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Privacy</h3>
+              <p className="text-[11px] leading-relaxed text-neutral-400">
+                No audio is ever stored. Audio is streamed to Deepgram for transcription and dropped;
+                transcript text and notes go to Anthropic only when you enhance a meeting. Everything
+                else stays local.
+              </p>
+              <button
+                type="button"
+                onClick={() => void onWipe()}
+                className="rounded-md border border-red-500/40 px-3 py-1.5 text-xs font-medium text-red-300 hover:bg-red-500/10"
+              >
+                Wipe all local data
+              </button>
+            </section>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
