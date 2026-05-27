@@ -15,9 +15,11 @@ export type AudioCaptureController = {
 };
 
 export type UseAudioCaptureOptions = {
-  // Called for each frame's interleaved PCM. M2 forwards it to the main process
-  // for transcription; the buffer is never stored locally (PRODUCT_SPEC.md §6.4).
-  onPcm?: (pcm: ArrayBuffer) => void;
+  // Called for each frame's mono PCM plus the per-frame mic/system RMS levels.
+  // The PCM is forwarded to the main process for transcription; the levels let the
+  // main process attribute "Me" (V05 ROADMAP_02). The buffer is never stored
+  // locally (PRODUCT_SPEC.md §6.4).
+  onPcm?: (pcm: ArrayBuffer, micLevel: number, sysLevel: number) => void;
   // The mic device chosen in Settings (§10); falls back to the OS default.
   micDeviceId?: string | null;
 };
@@ -53,7 +55,7 @@ export function useAudioCapture(options: UseAudioCaptureOptions = {}): AudioCapt
     setBytes((n) => n + frame.pcm.byteLength);
     // Forward to transcription if a consumer is listening, then drop the buffer.
     // It is never written to disk (PRODUCT_SPEC.md §6.4).
-    onPcmRef.current?.(frame.pcm);
+    onPcmRef.current?.(frame.pcm, frame.micLevel, frame.sysLevel);
   }, []);
 
   useEffect(() => {

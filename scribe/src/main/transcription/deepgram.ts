@@ -129,16 +129,32 @@ export class DeepgramSession implements TranscriptionSession {
   private openSocket(opts: { sampleRate: number; channels: number }): Promise<void> {
     const params = new URLSearchParams({
       model: 'nova-3',
-      multichannel: 'true',
+      // diarize splits multiple speakers *within* a channel. Two remote people
+      // share one audio stream, so only diarization (not channel-splitting) can
+      // separate them. Required in both the mono (V05) and legacy multichannel paths.
+      diarize: 'true',
+      // smart_format includes punctuation plus number/date/entity formatting for a
+      // more readable transcript (superset of punctuate; both are harmless together).
+      smart_format: 'true',
       punctuate: 'true',
       interim_results: 'true',
       encoding: 'linear16',
       sample_rate: String(opts.sampleRate),
       channels: String(opts.channels),
     });
+    // V05 ROADMAP_02: the renderer now sends one mono channel to halve cost. Only
+    // enable multichannel for the legacy ≥2-channel path (kept working for safety).
+    const multichannel = opts.channels > 1;
+    if (multichannel) params.set('multichannel', 'true');
+
     const setting = this.config.languageSetting ?? { mode: 'fixed', bcp47: 'en' };
     if (setting.mode === 'auto') {
-      params.set('language', 'multi');
+      // detect_language is incompatible with multichannel (HTTP 400), so the legacy
+      // path falls back to nova-3 `multi` (code-switching). The mono path can use
+      // proper single-language detection, which avoids `multi`'s cross-language
+      // hallucination and routes to the more accurate dedicated model.
+      if (multichannel) params.set('language', 'multi');
+      else params.set('detect_language', 'true');
     } else {
       params.set('language', setting.bcp47);
     }
@@ -191,7 +207,7 @@ export class DeepgramSession implements TranscriptionSession {
             this.config.onLanguageDetected(detected);
           }
         }
-        for (const seg of parseDeepgramMessage(parsed)) {
+        for (const seg of parseDeepgramMessage(parsed, { singleChannel: opts.channels === 1 })) {
           if (seg.isFinal) this.finalCb?.(seg);
           else this.partialCb?.(seg);
         }

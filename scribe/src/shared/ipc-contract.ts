@@ -203,6 +203,12 @@ export type UsageTotals = {
   deepgramAudioMs: number;
   claudeInputTokens: number;
   claudeOutputTokens: number;
+  /**
+   * Deepgram cost component (USD). Computed in main from each meeting's billed
+   * channel count, so it stays correct across the 2-channel → 1-channel switch
+   * (V05 ROADMAP_02) — the renderer can't derive it from summed ms alone.
+   */
+  deepgramCostUsd: number;
   estimatedCostUsd: number;
 };
 
@@ -373,6 +379,9 @@ const BackupMeetingSchema = z.object({
     deepgramAudioMs: z.number().int(),
     claudeInputTokens: z.number().int(),
     claudeOutputTokens: z.number().int(),
+    // Billed Deepgram channel count. Default 2 keeps pre-V05 bundles (captured in
+    // 2-channel) costing correctly on restore.
+    deepgramChannels: z.number().int().positive().default(2),
   }),
   segments: z.array(BackupSegmentSchema),
   speakerNames: z.array(BackupSpeakerNameSchema),
@@ -630,7 +639,7 @@ export interface ScribeApi {
   getStatus(): Promise<AppStatus>;
   startTranscription(opts: TranscriptionStart): Promise<void>;
   stopTranscription(): Promise<void>;
-  pushAudioFrame(pcm: ArrayBuffer): void;
+  pushAudioFrame(pcm: ArrayBuffer, micLevel: number, sysLevel: number): void;
   onTranscriptSegment(cb: (seg: TranscriptSegment) => void): () => void;
   onTranscriptionStatus(cb: (status: TranscriptionStatus) => void): () => void;
   /** Fires once when Deepgram (or LLM layer) identifies the transcript language. */

@@ -55,8 +55,14 @@ export type MeetingSummary = {
 
 /** Per-meeting usage snapshot (ROADMAP_01 §3). Figures are cumulative totals. */
 export type MeetingUsage = {
-  /** Total captured audio in milliseconds (single stream; cost is 2× for Deepgram's 2-channel billing). */
+  /** Total captured audio in milliseconds (wall-clock, single stream). */
   deepgramAudioMs: number;
+  /**
+   * Billed Deepgram channel count for this meeting (cost = ms × channels × rate).
+   * Pre-V05 meetings are 2 (stereo capture); V05+ are 1 (mono). Defaults to 2 for
+   * legacy rows via migration (V05 ROADMAP_02).
+   */
+  deepgramChannels: number;
   claudeInputTokens: number;
   claudeOutputTokens: number;
 };

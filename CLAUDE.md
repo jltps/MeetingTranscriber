@@ -176,7 +176,14 @@ Structural rules (these hold regardless of exact folder names):
 - On stop or component unmount: stop every `MediaStreamTrack`, close the
   `AudioContext`, close the Deepgram socket, null out buffers. Verify the mic
   indicator goes off.
-- Mic is channel 0, system/loopback is channel 1, so "Me vs them" is deterministic.
+- Transcription sends a **single mono channel** (mic + system downmixed in the
+  worklet) to halve Deepgram's per-channel billing. Speakers are split by
+  **diarization**, and "Me" is derived in the main process by correlating each
+  segment with the per-frame mic-vs-system RMS levels
+  (`main/transcription/me-attribution.ts`) — it is no longer a physical channel.
+  The per-frame levels are scalars, never audio bytes (§1.1). The legacy 2-channel
+  path (mic = ch0, system = ch1) still works when `channels > 1` is passed. (V05
+  ROADMAP_02 — the mic-energy heuristic is tuned against live calls.)
 - The capture module stays swappable behind its interface (Electron loopback now;
   a native WASAPI addon could replace it later without touching the renderer). Do
   not add the native addon unless the Electron path is proven to fail.
@@ -267,5 +274,13 @@ If the actual script names differ, use those and update this list. `typecheck` a
   onboarding flow + empty states; an accessibility pass (AA contrast both themes,
   focus/keyboard, reduced-motion, ARIA); and the **Scribe → Nexus rebrand** (icon,
   logo, installer identity). UI-only — no §1 behavior changed.
+- **V05 — Transcription quality & cost (shipped; `roadmap/v05`):** real speaker
+  **diarization** (`diarize=true` + `smart_format`) so multiple remote speakers no
+  longer merge into one; **single mono channel** capture that ~halves Deepgram's
+  per-channel bill, with "Me" recovered from a mic-energy heuristic
+  (`main/transcription/me-attribution.ts`); per-meeting billed-channel cost
+  accounting (DB migration v10). Decision on record: **stay on nova-3, not Flux**
+  (a voice-agent model lacking diarization/word-timing/meeting support, at higher
+  cost). The mono "Me" heuristic is tuned by live multi-person validation (§6, §9).
 - Still deferred (don't build unless asked): transcript/enhancement quality eval loop
   (v03 ROADMAP_03), accounts + cloud sync + sharing (v03 ROADMAP_04 later phases), macOS.

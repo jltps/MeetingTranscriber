@@ -155,8 +155,9 @@ export function App() {
   const reconnectingRef = useRef(false);
   reconnectingRef.current = transcription.reconnecting;
   const capture = useAudioCapture({
-    onPcm: (pcm) => {
-      if (connectedRef.current || reconnectingRef.current) window.api.pushAudioFrame(pcm);
+    onPcm: (pcm, micLevel, sysLevel) => {
+      if (connectedRef.current || reconnectingRef.current)
+        window.api.pushAudioFrame(pcm, micLevel, sysLevel);
     },
     micDeviceId: settings?.micDeviceId ?? null,
   });
@@ -292,7 +293,10 @@ export function App() {
     try {
       transcription.reset();
       await window.api.meetings.start(targetId);
-      await transcription.start({ meetingId: targetId, sampleRate: 16000, channels: 2 });
+      // One mono channel: Deepgram bills per channel, so this halves the cost vs the
+      // old 2-channel capture. Speakers are split by diarization; "Me" is recovered
+      // from the mic-energy signal in the main process (V05 ROADMAP_02).
+      await transcription.start({ meetingId: targetId, sampleRate: 16000, channels: 1 });
       await capture.start();
       setActiveId(targetId);
       await meetings.refresh();
@@ -690,7 +694,7 @@ export function App() {
                     title={`Deepgram: ${formatAudioDuration(detail.usage.deepgramAudioMs)} · Claude: ${(detail.usage.claudeInputTokens + detail.usage.claudeOutputTokens).toLocaleString()} tokens`}
                     className="rounded bg-muted px-2 py-0.5 text-[10px] tabular-nums text-muted-foreground"
                   >
-                    ~{formatCost(estimateCost(detail.usage.deepgramAudioMs, detail.usage.claudeInputTokens, detail.usage.claudeOutputTokens))}
+                    ~{formatCost(estimateCost(detail.usage.deepgramAudioMs, detail.usage.claudeInputTokens, detail.usage.claudeOutputTokens, detail.usage.deepgramChannels))}
                     {detail.usage.deepgramAudioMs > 0 && (
                       <> · {formatAudioDuration(detail.usage.deepgramAudioMs)}</>
                     )}

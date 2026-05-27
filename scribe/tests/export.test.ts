@@ -32,7 +32,7 @@ function makeMeeting(overrides: Partial<BackupMeeting> = {}): BackupMeeting {
     templateName: null,
     folderId: null,
     tags: [],
-    usage: { deepgramAudioMs: 2_550_000, claudeInputTokens: 3200, claudeOutputTokens: 1100 },
+    usage: { deepgramAudioMs: 2_550_000, deepgramChannels: 2, claudeInputTokens: 3200, claudeOutputTokens: 1100 },
     segments: [
       { id: 10, channel: 1, speakerLabel: 'Speaker 1', text: 'Hello everyone', startMs: 1000, endMs: 3000 },
       { id: 11, channel: 1, speakerLabel: 'Speaker 2', text: 'Hi there', startMs: 3500, endMs: 5000 },
@@ -104,7 +104,7 @@ describe('meetingToMarkdown', () => {
 
   it('omits duration when deepgramAudioMs is 0', () => {
     const md = meetingToMarkdown(
-      makeMeeting({ usage: { deepgramAudioMs: 0, claudeInputTokens: 0, claudeOutputTokens: 0 } }),
+      makeMeeting({ usage: { deepgramAudioMs: 0, deepgramChannels: 1, claudeInputTokens: 0, claudeOutputTokens: 0 } }),
     );
     expect(md).not.toContain('**Duration:**');
   });

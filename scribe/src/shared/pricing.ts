@@ -7,7 +7,13 @@
  * This module imports nothing from electron, node:*, or React (CLAUDE.md §3).
  */
 export const PRICING = {
-  /** Deepgram Nova-3 streaming — per channel per minute (USD). */
+  /**
+   * Deepgram Nova-3 streaming — per channel per minute (USD). As of May 2026 list
+   * pricing this is ≈ the multilingual rate ($0.0058); a fixed monolingual language
+   * is cheaper (~$0.0048). Deepgram bills *per channel*, and the app currently captures
+   * 2 channels, so the effective per-minute cost is ~2× this value — see the `* 2` in
+   * estimateCost(). V05 ROADMAP_02 drops to a single channel to halve it.
+   */
   deepgramNovaPerMinutePerChannel: 0.0059,
   /** Claude Sonnet — per 1 million input tokens (USD). */
   claudeSonnetInputPer1MTokens: 3.0,
@@ -18,16 +24,17 @@ export const PRICING = {
 /**
  * Estimate the total USD cost for a meeting.
  * `deepgramAudioMs` is the total captured audio duration in milliseconds.
- * Deepgram is billed per-channel (×2 for multichannel capture).
+ * Deepgram is billed per channel, so cost scales with `deepgramChannels`. Defaults
+ * to 2 (the pre-V05 stereo capture); V05+ mono meetings pass 1 (V05 ROADMAP_02).
  */
 export function estimateCost(
   deepgramAudioMs: number,
   claudeInputTokens: number,
   claudeOutputTokens: number,
+  deepgramChannels = 2,
 ): number {
   const deepgramMinutes = deepgramAudioMs / 1000 / 60;
-  // 2-channel: Deepgram charges per channel, so 2× the audio-minutes.
-  const deepgramCost = deepgramMinutes * 2 * PRICING.deepgramNovaPerMinutePerChannel;
+  const deepgramCost = deepgramMinutes * deepgramChannels * PRICING.deepgramNovaPerMinutePerChannel;
 
   const claudeCost =
     (claudeInputTokens / 1_000_000) * PRICING.claudeSonnetInputPer1MTokens +
