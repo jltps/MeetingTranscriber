@@ -1,4 +1,11 @@
 import type { Template } from '../../../shared/types';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
 type TemplatePickerModalProps = {
   templates: Template[];
@@ -10,22 +17,19 @@ type TemplatePickerModalProps = {
  * Modal shown before creating a new note when more than the default "General"
  * template exists (FEATURES §C2). "No template" always available; built-ins
  * labelled with a badge. Designed to be fast — one click picks and closes.
+ * Escape / overlay / close (X) skips (uses global settings).
  */
 export function TemplatePickerModal({ templates, onSelect, onClose }: TemplatePickerModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
-      <div className="flex max-h-[70vh] w-full max-w-md flex-col overflow-hidden rounded-lg border border-border bg-card">
-        <div className="flex items-center justify-between border-b border-border px-5 py-3">
-          <h2 className="text-sm font-semibold text-foreground">Choose a template</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            Skip
-          </button>
-        </div>
-        <div className="overflow-y-auto p-3 space-y-1">
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md gap-0 p-0">
+        <DialogHeader className="border-b border-border px-5 py-3 text-left">
+          <DialogTitle className="text-sm">Choose a template</DialogTitle>
+          <DialogDescription className="sr-only">
+            Pick an enhancement template for this note, or skip to use your global settings.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[60vh] space-y-1 overflow-y-auto p-3">
           {/* "No template" always at top */}
           <button
             type="button"
@@ -58,7 +62,7 @@ export function TemplatePickerModal({ templates, onSelect, onClose }: TemplatePi
             </button>
           ))}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

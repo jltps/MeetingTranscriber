@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { AgendaEvent, CalendarProviderId } from '../../../shared/types';
+import { Button } from '@/components/ui/button';
 
 // Today's / upcoming agenda shown above the meeting list (ROADMAP_06). Each row
 // is labelled by source and carries an "arm auto-start" toggle. The join link is
@@ -55,13 +56,14 @@ export function AgendaPanel({ events, onArm, onSelectMeeting }: AgendaPanelProps
                 {e.joinUrl && <span className="ml-1.5 text-muted-foreground">· has link</span>}
               </span>
               {e.meetingId !== null ? (
-                <button
-                  type="button"
+                <Button
+                  variant="link"
+                  size="xs"
+                  className="h-auto p-0 text-[10px]"
                   onClick={() => onSelectMeeting(e.meetingId as number)}
-                  className="text-[10px] text-primary hover:text-primary"
                 >
                   Open note
-                </button>
+                </Button>
               ) : e.allDay ? (
                 <span className="text-[10px] text-muted-foreground">—</span>
               ) : (
@@ -70,7 +72,7 @@ export function AgendaPanel({ events, onArm, onSelectMeeting }: AgendaPanelProps
                     type="checkbox"
                     checked={e.armed}
                     onChange={(ev) => onArm(e.providerId, e.externalId, ev.target.checked)}
-                    className="h-3 w-3 accent-emerald-400"
+                    className="h-3 w-3 accent-primary"
                   />
                   Auto-start
                 </label>

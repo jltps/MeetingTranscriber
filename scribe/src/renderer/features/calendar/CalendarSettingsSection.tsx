@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { Check } from 'lucide-react';
 import type { CalendarProviderId } from '../../../shared/types';
+import { Button } from '@/components/ui/button';
 
 // Settings → Calendar section (ROADMAP_06). Connect/disconnect each calendar
 // provider. OAuth happens in the system browser (driven by the main process);
@@ -47,25 +49,23 @@ function ProviderRow({ providerId, label, connected, onChanged }: ProviderRowPro
         <span className="text-sm text-muted-foreground">{label}</span>
         {connected ? (
           <div className="flex items-center gap-3">
-            <span className="text-[11px] text-primary">✓ Connected</span>
-            <button
-              type="button"
+            <span className="flex items-center gap-1 text-[11px] text-primary">
+              <Check className="size-3" /> Connected
+            </span>
+            <Button
+              variant="ghost"
+              size="xs"
+              className="text-destructive hover:text-destructive"
               onClick={() => void disconnect()}
               disabled={busy}
-              className="text-[10px] text-destructive hover:text-destructive disabled:opacity-50"
             >
               Disconnect
-            </button>
+            </Button>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => void connect()}
-            disabled={busy}
-            className="rounded-md border border-input px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
-          >
+          <Button variant="outline" size="sm" onClick={() => void connect()} disabled={busy}>
             {busy ? 'Connecting…' : `Connect with ${label.split(' ')[0]}`}
-          </button>
+          </Button>
         )}
       </div>
       {error && <p className="text-[11px] text-destructive">{error}</p>}

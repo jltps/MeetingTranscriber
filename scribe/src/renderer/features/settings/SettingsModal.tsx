@@ -1,12 +1,35 @@
 import { useEffect, useRef, useState } from 'react';
+import { Check, Plus } from 'lucide-react';
 import type { LanguageSetting, Template, TemplateCreate } from '../../../shared/types';
 import type { SettingsView, TestProvider, TestResult, WhisperModelStatus } from '../../../shared/ipc-contract';
 import { TemplateEditorModal } from '../templates/TemplateEditorModal';
 import { CalendarSettingsSection } from '../calendar/CalendarSettingsSection';
 import { useTheme } from '../theme/use-theme';
 import { estimateCost, formatAudioDuration, formatCost } from '../../../shared/pricing';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 const THEME_MODES = ['system', 'light', 'dark'] as const;
+
+// Sentinel for "use the system default mic" — distinct from any real deviceId
+// (Chromium uses 'default'/'communications' as actual device ids).
+const MIC_SYSTEM_DEFAULT = '__system__';
 
 function formatBytes(bytes: number): string {
   if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
@@ -80,29 +103,24 @@ function KeyRow({ label, provider, isSet, onSaved }: KeyRowProps) {
         </span>
       </div>
       <div className="flex gap-2">
-        <input
+        <Input
           type="password"
           value={value}
           placeholder={isSet ? 'Enter a new key to replace' : 'Paste API key'}
           onChange={(e) => setValue(e.target.value)}
-          className="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
+          className="h-8 text-xs"
         />
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={saving || value.trim() === ''}
-          className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
+        <Button size="sm" onClick={() => void save()} disabled={saving || value.trim() === ''}>
           {saving ? 'Saving…' : 'Save'}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
           onClick={() => void test()}
           disabled={testing || (value.trim() === '' && !isSet)}
-          className="rounded-md border border-input px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-50"
         >
           {testing ? 'Testing…' : 'Test'}
-        </button>
+        </Button>
       </div>
       {result && (
         <p className={`text-[11px] ${result.ok ? 'text-primary' : 'text-destructive'}`}>
@@ -217,7 +235,7 @@ export function SettingsModal({
     const load = (): void => {
       void navigator.mediaDevices
         .enumerateDevices()
-        .then((devices) => setMics(devices.filter((d) => d.kind === 'audioinput')));
+        .then((devices) => setMics(devices.filter((d) => d.kind === 'audioinput' && d.deviceId)));
     };
     load();
     navigator.mediaDevices.addEventListener('devicechange', load);
@@ -251,18 +269,14 @@ export function SettingsModal({
         />
       )}
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
-        <div className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-border bg-card">
-          <div className="flex items-center justify-between border-b border-border px-5 py-3">
-            <h2 className="text-base font-semibold text-foreground">Settings</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              Close
-            </button>
-          </div>
+      <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+        <DialogContent className="flex max-h-[85vh] w-full max-w-xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="border-b border-border px-5 py-3 text-left">
+            <DialogTitle className="text-base">Settings</DialogTitle>
+            <DialogDescription className="sr-only">
+              API keys, appearance, audio, transcription, enhancement, templates, usage, and data.
+            </DialogDescription>
+          </DialogHeader>
 
           <div className="space-y-6 overflow-y-auto p-5">
             <section className="space-y-3">
@@ -280,22 +294,19 @@ export function SettingsModal({
               </h3>
               <div className="space-y-1.5">
                 <label className="text-sm text-foreground">Theme</label>
-                <div className="flex gap-2">
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  size="sm"
+                  value={theme?.mode ?? 'system'}
+                  onValueChange={(v) => { if (v) void setMode(v as (typeof THEME_MODES)[number]); }}
+                >
                   {THEME_MODES.map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => void setMode(m)}
-                      className={`rounded-md border px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                        (theme?.mode ?? 'system') === m
-                          ? 'border-primary bg-secondary text-secondary-foreground'
-                          : 'border-input text-muted-foreground hover:bg-muted hover:text-foreground'
-                      }`}
-                    >
+                    <ToggleGroupItem key={m} value={m} className="capitalize">
                       {m}
-                    </button>
+                    </ToggleGroupItem>
                   ))}
-                </div>
+                </ToggleGroup>
                 <p className="text-[11px] text-muted-foreground">
                   {theme ? `Currently ${theme.effective}. ` : ''}
                   &ldquo;System&rdquo; follows your OS appearance.
@@ -307,20 +318,26 @@ export function SettingsModal({
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Audio</h3>
               <div className="space-y-1.5">
                 <label className="text-sm text-muted-foreground">Microphone</label>
-                <select
-                  value={settings.micDeviceId ?? ''}
-                  onChange={(e) => {
-                    void window.api.settings.setMicDevice(e.target.value || null).then(onChanged);
+                <Select
+                  value={settings.micDeviceId ?? MIC_SYSTEM_DEFAULT}
+                  onValueChange={(v) => {
+                    void window.api.settings
+                      .setMicDevice(v === MIC_SYSTEM_DEFAULT ? null : v)
+                      .then(onChanged);
                   }}
-                  className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none"
                 >
-                  <option value="">System default</option>
-                  {mics.map((m, i) => (
-                    <option key={m.deviceId || i} value={m.deviceId}>
-                      {m.label || `Microphone ${i + 1}`}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-full" size="sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={MIC_SYSTEM_DEFAULT}>System default</SelectItem>
+                    {mics.map((m, i) => (
+                      <SelectItem key={m.deviceId} value={m.deviceId}>
+                        {m.label || `Microphone ${i + 1}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <p className="text-[11px] text-muted-foreground">
                   Device names appear after the first capture. Make sure your system output device
                   matches the one your call plays through, or remote audio (CH1) won't be captured.
@@ -328,21 +345,23 @@ export function SettingsModal({
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm text-muted-foreground">Transcription language</label>
-                <select
+                <Select
                   value={langSettingToSelectValue(settings.language)}
-                  onChange={(e) => {
-                    void window.api.settings
-                      .setLanguage(selectValueToLangSetting(e.target.value))
-                      .then(onChanged);
+                  onValueChange={(v) => {
+                    void window.api.settings.setLanguage(selectValueToLangSetting(v)).then(onChanged);
                   }}
-                  className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none"
                 >
-                  {LANGUAGE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-full" size="sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LANGUAGE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <p className="text-[11px] text-muted-foreground">
                   Auto-detect uses nova-3 multilingual mode. For Portuguese or other languages,
                   selecting a fixed language gives the most accurate results.
@@ -359,22 +378,16 @@ export function SettingsModal({
               {/* Provider toggle */}
               <div className="space-y-1.5">
                 <label className="text-sm text-muted-foreground">Provider</label>
-                <div className="flex gap-2">
-                  {(['deepgram', 'whisper'] as const).map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => handleSetProvider(p)}
-                      className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
-                        provider === p
-                          ? 'border-primary bg-secondary text-foreground'
-                          : 'border-input text-muted-foreground hover:bg-muted hover:text-foreground'
-                      }`}
-                    >
-                      {p === 'deepgram' ? 'Deepgram (cloud)' : 'Local (Whisper)'}
-                    </button>
-                  ))}
-                </div>
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  size="sm"
+                  value={provider}
+                  onValueChange={(v) => { if (v) handleSetProvider(v as 'deepgram' | 'whisper'); }}
+                >
+                  <ToggleGroupItem value="deepgram">Deepgram (cloud)</ToggleGroupItem>
+                  <ToggleGroupItem value="whisper">Local (Whisper)</ToggleGroupItem>
+                </ToggleGroup>
                 {provider === 'deepgram' && (
                   <p className="text-[11px] text-muted-foreground">
                     Streams audio to Deepgram&apos;s cloud API. Requires a Deepgram key (set above).
@@ -393,21 +406,21 @@ export function SettingsModal({
                 <div className="space-y-3">
                   <div className="space-y-1.5">
                     <label className="text-sm text-muted-foreground">Active model</label>
-                    <select
-                      value={whisperModel}
-                      onChange={(e) => handleSetWhisperModel(e.target.value)}
-                      className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none"
-                    >
-                      {(['tiny', 'base', 'small', 'medium'] as const).map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                    </select>
+                    <Select value={whisperModel} onValueChange={handleSetWhisperModel}>
+                      <SelectTrigger className="w-full" size="sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(['tiny', 'base', 'small', 'medium'] as const).map((m) => (
+                          <SelectItem key={m} value={m}>
+                            {m}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     {(() => {
                       const active = modelStatuses.find((s) => s.name === whisperModel);
-                      if (!active) return null;
-                      if (active.state !== 'ready') {
+                      if (active && active.state !== 'ready') {
                         return (
                           <p className="text-[11px] text-warning">
                             Download &ldquo;{whisperModel}&rdquo; below before recording.
@@ -429,18 +442,21 @@ export function SettingsModal({
                         <div className="flex shrink-0 items-center gap-2 ml-2">
                           {m.state === 'ready' && (
                             <>
-                              <span className="text-primary">✓ Ready</span>
-                              <button
-                                type="button"
+                              <span className="flex items-center gap-1 text-primary">
+                                <Check className="size-3" /> Ready
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="xs"
+                                className="text-destructive hover:text-destructive"
                                 onClick={() => {
                                   void window.api.whisper.deleteModel(m.name).then(() =>
                                     window.api.whisper.getModels().then(setModelStatuses),
                                   );
                                 }}
-                                className="text-[10px] text-destructive hover:text-destructive"
                               >
                                 Delete
-                              </button>
+                              </Button>
                             </>
                           )}
                           {m.state === 'downloading' && (
@@ -448,27 +464,27 @@ export function SettingsModal({
                               <span className="text-muted-foreground">
                                 {m.progress != null ? `${m.progress}%` : 'Starting…'}
                               </span>
-                              <button
-                                type="button"
+                              <Button
+                                variant="ghost"
+                                size="xs"
                                 onClick={() => void window.api.whisper.cancelDownload()}
-                                className="text-[10px] text-muted-foreground hover:text-foreground"
                               >
                                 Cancel
-                              </button>
+                              </Button>
                             </>
                           )}
                           {m.state === 'not-downloaded' && (
-                            <button
-                              type="button"
+                            <Button
+                              variant="outline"
+                              size="xs"
                               disabled={activeDownload !== null}
                               onClick={() => {
                                 setActiveDownload(m.name);
                                 void window.api.whisper.downloadModel(m.name);
                               }}
-                              className="rounded border border-input px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted disabled:opacity-40"
                             >
                               Download
-                            </button>
+                            </Button>
                           )}
                         </div>
                       </div>
@@ -490,18 +506,18 @@ export function SettingsModal({
               </h3>
               <div className="space-y-1.5">
                 <label className="text-sm text-muted-foreground">Custom instructions</label>
-                <textarea
+                <Textarea
                   value={instructions}
                   onChange={(e) => setInstructions(e.target.value)}
                   onBlur={() => {
                     void window.api.settings.setGlobalInstructions(instructions).then(onChanged);
                   }}
                   rows={4}
+                  className="resize-none text-xs"
                   placeholder={
                     'e.g. "Always list action items with an owner and due date." ' +
                     '"Write in European Portuguese." "Executive summary, no preamble."'
                   }
-                  className="w-full resize-none rounded-md border border-input bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                 />
                 <p className="text-[11px] text-muted-foreground">
                   Applied to every enhancement as advisory guidance. Cannot change the output format
@@ -515,13 +531,9 @@ export function SettingsModal({
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Templates
                 </h3>
-                <button
-                  type="button"
-                  onClick={() => setEditorTarget('new')}
-                  className="text-[11px] text-muted-foreground hover:text-foreground"
-                >
-                  + New template
-                </button>
+                <Button variant="ghost" size="xs" onClick={() => setEditorTarget('new')}>
+                  <Plus /> New template
+                </Button>
               </div>
 
               {/* Template list — all rows are read-only; Edit opens the editor modal */}
@@ -540,24 +552,21 @@ export function SettingsModal({
                       )}
                     </div>
                     <div className="flex shrink-0 gap-1 ml-2">
-                      <button
-                        type="button"
-                        onClick={() => setEditorTarget(t)}
-                        className="text-[10px] text-muted-foreground hover:text-muted-foreground"
-                      >
+                      <Button variant="link" size="xs" onClick={() => setEditorTarget(t)}>
                         Edit
-                      </button>
-                      <button
-                        type="button"
+                      </Button>
+                      <Button
+                        variant="link"
+                        size="xs"
+                        className="text-destructive"
                         onClick={() => {
                           if (window.confirm(`Delete template "${t.name}"?`)) {
                             void window.api.templates.remove(t.id).then(onChanged);
                           }
                         }}
-                        className="text-[10px] text-destructive hover:text-destructive"
                       >
                         Delete
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -626,26 +635,24 @@ export function SettingsModal({
                 Restore replaces all current meetings — settings and API keys are not affected.
               </p>
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => void handleBackup()}
                   disabled={backingUp || restoring}
-                  className="rounded-md border border-input px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
                 >
                   {backingUp ? 'Saving…' : 'Backup all meetings…'}
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => void handleRestore()}
                   disabled={backingUp || restoring}
-                  className="rounded-md border border-input px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
                 >
                   {restoring ? 'Restoring…' : 'Restore from backup…'}
-                </button>
+                </Button>
               </div>
-              {backupMsg && (
-                <p className="text-[11px] text-primary">{backupMsg}</p>
-              )}
+              {backupMsg && <p className="text-[11px] text-primary">{backupMsg}</p>}
               {restoreMsg && (
                 <p className={`text-[11px] ${restoreMsg.startsWith('Error') ? 'text-destructive' : 'text-primary'}`}>
                   {restoreMsg}
@@ -660,17 +667,18 @@ export function SettingsModal({
                 transcript text and notes go to Anthropic only when you enhance a meeting. Everything
                 else stays local.
               </p>
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
                 onClick={() => void onWipe()}
-                className="rounded-md border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10"
               >
                 Wipe all local data
-              </button>
+              </Button>
             </section>
           </div>
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

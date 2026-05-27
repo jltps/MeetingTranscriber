@@ -1,6 +1,14 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { ArrowRightLeft } from 'lucide-react';
 import type { TranscriptSegment } from '../../../shared/types';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export type TranscriptHighlight = { ids: number[]; nonce: number };
 
@@ -62,21 +70,6 @@ const Line = memo(function Line({
 
   const cancelEdit = (): void => setEditing(false);
 
-  // ── Reassign dropdown state ────────────────────────────────────────────────
-  const [showReassign, setShowReassign] = useState(false);
-  const reassignRef = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    if (!showReassign) return;
-    const handler = (e: MouseEvent): void => {
-      if (reassignRef.current && !reassignRef.current.contains(e.target as Node)) {
-        setShowReassign(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showReassign]);
-
   // Show the reassign button only for finalized segments with more than one speaker label.
   const canReassign =
     !interim &&
@@ -132,36 +125,28 @@ const Line = memo(function Line({
       <span className="mr-2 text-[11px] tabular-nums text-muted-foreground">{formatTime(seg.startMs)}</span>
       <span className="text-sm leading-relaxed text-foreground">{seg.text}</span>
 
-      {/* Reassign icon — visible on hover for finalized segments with multiple speakers */}
+      {/* Reassign menu — visible on hover for finalized segments with multiple speakers */}
       {canReassign && otherLabels.length > 0 && (
-        <span ref={reassignRef} className="relative ml-1.5 inline-block align-middle">
-          <button
-            type="button"
-            onClick={() => setShowReassign((v) => !v)}
-            title="Reassign this segment to a different speaker"
-            className="rounded px-1 text-[10px] text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
-          >
-            ⇄
-          </button>
-          {showReassign && (
-            <div className="absolute left-0 top-full z-10 mt-1 min-w-[7rem] rounded border border-input bg-card py-1 shadow-lg">
-              {otherLabels.map((rawL) => (
-                <button
-                  key={rawL}
-                  type="button"
-                  onClick={() => {
-                    setShowReassign(false);
-                    // seg.id is defined — canReassign guards that
-                    onReassignSegment!(seg.id!, rawL);
-                  }}
-                  className="block w-full px-3 py-1 text-left text-xs text-muted-foreground hover:bg-muted"
-                >
-                  {speakerNames?.get(rawL) ?? rawL}
-                </button>
-              ))}
-            </div>
-          )}
-        </span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              title="Reassign this segment to a different speaker"
+              className="ml-1.5 inline-flex align-middle text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 data-[state=open]:opacity-100"
+            >
+              <ArrowRightLeft />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {otherLabels.map((rawL) => (
+              // seg.id is defined — canReassign guards that
+              <DropdownMenuItem key={rawL} onSelect={() => onReassignSegment!(seg.id!, rawL)}>
+                {speakerNames?.get(rawL) ?? rawL}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </div>
   );

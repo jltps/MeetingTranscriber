@@ -23,6 +23,18 @@ import { AutoStartPrompt } from '../features/calendar/AutoStartPrompt';
 import { useDebouncedCallback } from '../lib/debounce';
 import { CaptureProbe } from './CaptureProbe';
 import { estimateCost, formatAudioDuration, formatCost } from '../../shared/pricing';
+import { Download, Mic, Sparkles, Square } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+const NO_TEMPLATE = 'none';
 
 function parseEnhanced(json: string | null): EnhancedNotes | null {
   if (!json) return null;
@@ -470,25 +482,29 @@ export function App() {
                   className="min-w-0 flex-1 bg-transparent text-base font-medium text-foreground focus:outline-none"
                   placeholder="Untitled meeting"
                 />
-                <select
-                  value={detail.templateId ?? ''}
-                  onChange={(e) => {
-                    const newId = e.target.value ? Number(e.target.value) : null;
+                <Select
+                  value={detail.templateId == null ? NO_TEMPLATE : String(detail.templateId)}
+                  onValueChange={(v) => {
+                    const newId = v === NO_TEMPLATE ? null : Number(v);
                     void window.api.meetings.setTemplate(detail.id, newId).then(() => {
                       void window.api.meetings.get(detail.id).then((d) => {
                         if (d) setDetail(d);
                       });
                     });
                   }}
-                  className="rounded border border-input bg-transparent px-2 py-1 text-xs text-muted-foreground focus:outline-none"
                 >
-                  <option value="">No template</option>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger size="sm" className="shrink-0 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_TEMPLATE}>No template</SelectItem>
+                    {templates.map((t) => (
+                      <SelectItem key={t.id} value={String(t.id)}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {running && (
                   <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-destructive">
                     <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-destructive" />
@@ -521,61 +537,50 @@ export function App() {
                   </span>
                 )}
                 {hasEnhanced && (
-                  <div className="flex overflow-hidden rounded-md border border-input text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setView('original')}
-                      className={`px-2.5 py-1 ${view === 'original' ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
-                    >
-                      Original
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setView('enhanced')}
-                      className={`px-2.5 py-1 ${view === 'enhanced' ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
-                    >
-                      Enhanced
-                    </button>
-                  </div>
+                  <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    size="sm"
+                    value={view}
+                    onValueChange={(v) => { if (v) setView(v as 'original' | 'enhanced'); }}
+                  >
+                    <ToggleGroupItem value="original">Original</ToggleGroupItem>
+                    <ToggleGroupItem value="enhanced">Enhanced</ToggleGroupItem>
+                  </ToggleGroup>
                 )}
                 {!running && (
                   <>
-                    <button
-                      type="button"
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => void exportMeeting(detail.id)}
                       disabled={exporting}
                       title="Export meeting to Markdown file"
-                      className="rounded-md border border-input px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
                     >
+                      <Download />
                       {exporting ? 'Exporting…' : 'Export'}
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => void enhanceMeeting(detail.id)}
                       disabled={enhancing}
-                      className="rounded-md border border-input px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
                     >
+                      <Sparkles />
                       {enhancing ? 'Enhancing…' : 'Enhance'}
-                    </button>
+                    </Button>
                   </>
                 )}
                 {running ? (
-                  <button
-                    type="button"
-                    onClick={() => void stop()}
-                    className="rounded-md bg-destructive px-4 py-1.5 text-sm font-semibold text-destructive-foreground hover:bg-destructive/90"
-                  >
+                  <Button variant="destructive" size="sm" onClick={() => void stop()}>
+                    <Square />
                     Stop
-                  </button>
+                  </Button>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => void start()}
-                    disabled={busy}
-                    className="rounded-md bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                  >
+                  <Button size="sm" onClick={() => void start()} disabled={busy}>
+                    <Mic />
                     {busy ? 'Starting…' : 'Start'}
-                  </button>
+                  </Button>
                 )}
               </div>
             </header>
@@ -611,22 +616,17 @@ export function App() {
                 )}
               </section>
               <section className="flex w-[42%] shrink-0 flex-col overflow-hidden p-6">
-                <div className="mb-3 flex overflow-hidden rounded-md border border-input text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setRightTab('transcript')}
-                    className={`px-3 py-1 ${rightTab === 'transcript' ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
-                  >
-                    Transcript
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRightTab('chat')}
-                    className={`px-3 py-1 ${rightTab === 'chat' ? 'bg-secondary text-foreground' : 'text-muted-foreground'}`}
-                  >
-                    Chat
-                  </button>
-                </div>
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  size="sm"
+                  value={rightTab}
+                  onValueChange={(v) => { if (v) setRightTab(v as 'transcript' | 'chat'); }}
+                  className="mb-3"
+                >
+                  <ToggleGroupItem value="transcript">Transcript</ToggleGroupItem>
+                  <ToggleGroupItem value="chat">Chat</ToggleGroupItem>
+                </ToggleGroup>
                 <div className="min-h-0 flex-1">
                   {rightTab === 'chat' ? (
                     <ChatPanel

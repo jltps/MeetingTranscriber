@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { Send } from 'lucide-react';
 import type { ChatController, ChatTurn } from './use-chat';
 import { parseCitations } from './parse-citations';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 
 // A grounded answer with its [id=N] markers rendered as chips that flash the cited
 // transcript line (reuses TranscriptPanel's existing highlight via onCiteClick).
@@ -119,7 +122,7 @@ export function ChatPanel({
       </div>
 
       <div className="mt-3 flex items-end gap-2">
-        <textarea
+        <Textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
@@ -132,16 +135,16 @@ export function ChatPanel({
           rows={2}
           disabled={!available || busy}
           placeholder={available ? 'Ask about this meeting…' : 'No transcript yet'}
-          className="min-h-0 flex-1 resize-none rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+          className="min-h-0 flex-1 resize-none"
         />
-        <button
-          type="button"
+        <Button
+          size="icon"
           onClick={submit}
           disabled={!available || busy || !input.trim()}
-          className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          aria-label="Send"
         >
-          {busy ? '…' : 'Send'}
-        </button>
+          <Send />
+        </Button>
       </div>
     </div>
   );

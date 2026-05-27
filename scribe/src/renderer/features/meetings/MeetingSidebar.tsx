@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { MessageSquare, Plus, Search, Settings, X } from 'lucide-react';
 import type { MeetingStatus, MeetingSummary, Template } from '../../../shared/types';
 import { useDebouncedCallback } from '../../lib/debounce';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 function statusDot(status: MeetingStatus): string {
   if (status === 'transcribing') return 'bg-destructive animate-pulse';
@@ -57,42 +61,39 @@ export function MeetingSidebar({
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <span className="text-sm font-semibold tracking-wide">Scribe</span>
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            aria-label="Settings"
-            className="rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            ⚙
-          </button>
-          <button
-            type="button"
-            onClick={onNew}
-            className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-          >
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon-sm" onClick={onOpenSettings} aria-label="Settings">
+                <Settings />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Settings</TooltipContent>
+          </Tooltip>
+          <Button size="sm" onClick={onNew}>
+            <Plus />
             New Note
-          </button>
+          </Button>
         </div>
       </div>
 
-      <div className="border-b border-border p-3">
-        <input
-          type="search"
-          value={text}
-          placeholder="Search notes & transcripts"
-          onChange={(e) => {
-            setText(e.target.value);
-            debouncedSearch(e.target.value);
-          }}
-          className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-input focus:outline-none"
-        />
-        <button
-          type="button"
-          onClick={onOpenCrossChat}
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted"
-        >
-          💬 Ask across meetings
-        </button>
+      <div className="space-y-2 border-b border-border p-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            value={text}
+            placeholder="Search notes & transcripts"
+            onChange={(e) => {
+              setText(e.target.value);
+              debouncedSearch(e.target.value);
+            }}
+            className="h-8 pl-8 text-xs"
+          />
+        </div>
+        <Button variant="outline" size="sm" onClick={onOpenCrossChat} className="w-full">
+          <MessageSquare />
+          Ask across meetings
+        </Button>
       </div>
 
       {agendaSlot}
@@ -134,15 +135,16 @@ export function MeetingSidebar({
                     })()}
                   </span>
                 </button>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
                   aria-label="Delete meeting"
                   disabled={disabled}
                   onClick={() => onDelete(m.id)}
-                  className="hidden shrink-0 px-3 text-muted-foreground hover:text-destructive disabled:opacity-50 group-hover:block"
+                  className="mr-1 hidden self-center text-muted-foreground hover:text-destructive group-hover:inline-flex"
                 >
-                  ✕
-                </button>
+                  <X />
+                </Button>
               </li>
             ))}
           </ul>

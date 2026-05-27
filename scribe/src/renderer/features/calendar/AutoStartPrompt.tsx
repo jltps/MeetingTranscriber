@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react';
+import { Mic } from 'lucide-react';
 import type { AgendaEvent } from '../../../shared/types';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 // Confirm/countdown prompt shown when an armed meeting reaches its start time
 // (ROADMAP_06). We err toward asking rather than surprising the user with live
@@ -36,35 +46,29 @@ export function AutoStartPrompt({ event, onStart, onDismiss }: AutoStartPromptPr
     return () => clearInterval(id);
   }, [event.externalId, onDismiss]);
 
+  // Escape / overlay click → dismiss (errs toward not recording, per ROADMAP_06).
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-full max-w-sm rounded-lg border border-input bg-card p-5 shadow-xl">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
-          Meeting starting
-        </div>
-        <h2 className="mt-3 truncate text-base font-medium text-foreground">{event.title || 'Calendar event'}</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {formatTime(event.startMs)} · from your calendar
-        </p>
-        <p className="mt-4 text-sm text-muted-foreground">Start recording this meeting now?</p>
-        <div className="mt-5 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onDismiss}
-            className="rounded-md border border-input px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted"
-          >
+    <Dialog open onOpenChange={(o) => { if (!o) onDismiss(); }}>
+      <DialogContent showCloseButton={false} className="max-w-sm">
+        <DialogHeader>
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+            Meeting starting
+          </div>
+          <DialogTitle className="mt-1 truncate">{event.title || 'Calendar event'}</DialogTitle>
+          <DialogDescription>{formatTime(event.startMs)} · from your calendar</DialogDescription>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">Start recording this meeting now?</p>
+        <DialogFooter>
+          <Button variant="outline" onClick={onDismiss}>
             Dismiss
-          </button>
-          <button
-            type="button"
-            onClick={onStart}
-            className="rounded-md bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-          >
+          </Button>
+          <Button onClick={onStart}>
+            <Mic />
             Start recording ({remaining}s)
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
