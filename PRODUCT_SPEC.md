@@ -11,7 +11,7 @@ fed to Claude Code. Build in the milestone order given in §11. Do not skip the
 non-goals in §3 — they existed to keep v1 shippable.
 
 > **Status (historical document).** v1 (§11, milestones M0–M6) is **shipped**. The
-> app is at v0.4.0 and has since absorbed most of the §3 non-goals and §13 roadmap:
+> app is at v0.6.0 and has since absorbed most of the §3 non-goals and §13 roadmap:
 > multi-language + auto-detect, enhancement prompt control + templates, reliability
 > hardening + usage/cost, speaker naming, export/backup, local Whisper, calendar
 > (Google + Microsoft, free/busy only), and cross-meeting chat are all built. It has

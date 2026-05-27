@@ -17,7 +17,7 @@ The app lives in [`scribe/`](scribe/). This file is the project overview; see th
 
 ## Status
 
-Shipping at **v0.5.0**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
+Shipping at **v0.6.0**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
 largely built, the product was renamed **Scribe → Nexus** (V04), **V05 — transcription
 quality & cost — has shipped**, and **V06 — templates & AI capabilities — has shipped**:
 
