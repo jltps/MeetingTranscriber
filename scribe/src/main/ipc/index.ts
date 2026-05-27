@@ -7,6 +7,7 @@ import { registerMeetingsIpc } from './meetings';
 import { registerSettingsIpc } from './settings';
 import { registerSpeakersIpc } from './speakers';
 import { registerTemplatesIpc } from './templates';
+import { registerThemeIpc } from './theme';
 import { registerTranscriptionIpc } from './transcription';
 import { registerWhisperIpc } from './whisper';
 
@@ -20,6 +21,7 @@ export function registerIpcHandlers(): void {
   registerSpeakersIpc();
   registerExportIpc();
   registerSettingsIpc();
+  registerThemeIpc();
   registerWhisperIpc();
   registerCalendarIpc();
   registerChatIpc();

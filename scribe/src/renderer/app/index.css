@@ -1,6 +1,109 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+/* Theme is driven by prefers-color-scheme, which the main process controls via
+   nativeTheme.themeSource (system|light|dark). So a single media query expresses
+   all three modes with zero FOUC and no inline script (prod CSP is script-src
+   'self'). Point Tailwind's dark: variant at the same query for consistency. */
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+/* Semantic design tokens. Light is the default; the dark block overrides under
+   the media query. Component code only ever references these (via the @theme
+   utilities below), never literal palette colors. Names follow the shadcn
+   convention so block 02 maps onto them directly. */
+:root {
+  --background: #fafafa;
+  --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+  --muted: #f0f0f0;
+  --muted-foreground: #525252;
+  --secondary: #e9e9e9;
+  --secondary-foreground: #171717;
+  --border: #e5e5e5;
+  --input: #d4d4d4;
+  --ring: #0d9488;
+  --primary: #0d9488; /* emerald/teal brand accent */
+  --primary-foreground: #ffffff;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --warning: #b45309;
+  --info: #0284c7;
+  --speaker-self: #047857;
+  --speaker-other: #0284c7;
+  --note-user: #171717;
+  --note-ai: #6b7280;
+  --source-link: #6b7280;
+  --radius: 0.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #e5e5e5;
+    --card: #171717;
+    --card-foreground: #e5e5e5;
+    --popover: #171717;
+    --popover-foreground: #e5e5e5;
+    --muted: #262626;
+    --muted-foreground: #a3a3a3;
+    --secondary: #404040;
+    --secondary-foreground: #e5e5e5;
+    --border: #262626;
+    --input: #404040;
+    --ring: #2dd4bf;
+    --primary: #2dd4bf;
+    --primary-foreground: #0a0a0a;
+    --destructive: #ef4444;
+    --destructive-foreground: #0a0a0a;
+    --warning: #fbbf24;
+    --info: #38bdf8;
+    --speaker-self: #34d399;
+    --speaker-other: #38bdf8;
+    --note-user: #e5e5e5;
+    --note-ai: #8b97a6;
+    --source-link: #9ca3af;
+  }
+}
+
+/* Expose tokens as Tailwind color utilities (bg-background, text-foreground,
+   border-border, bg-primary, text-warning, …). `inline` keeps the var reference
+   live so a prefers-color-scheme change reskins everything without a rebuild. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-speaker-self: var(--speaker-self);
+  --color-speaker-other: var(--speaker-other);
+  --radius-DEFAULT: var(--radius);
+}
+
+/* Tailwind v4 defaults the bare `border`/`divide` color to currentColor; keep
+   the v3 behaviour (use the border token) so existing bare-border usage is safe. */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
+}
 
 html,
 body,
@@ -45,18 +148,18 @@ body {
   padding-left: 1.4rem;
 }
 .notes-editor :where(blockquote) {
-  border-left: 3px solid #374151;
+  border-left: 3px solid var(--border);
   padding-left: 0.75rem;
-  color: #9ca3af;
+  color: var(--muted-foreground);
 }
 .notes-editor :where(code) {
-  background: #1f2937;
+  background: var(--muted);
   padding: 0.1em 0.3em;
   border-radius: 3px;
   font-size: 0.85em;
 }
 .notes-editor :where(pre) {
-  background: #1f2937;
+  background: var(--muted);
   padding: 0.75rem;
   border-radius: 6px;
   overflow-x: auto;
@@ -72,7 +175,7 @@ body {
 }
 .notes-editor :where(p.is-editor-empty:first-child)::before {
   content: 'Type your notes…';
-  color: #525252;
+  color: var(--muted-foreground);
   float: left;
   height: 0;
   pointer-events: none;
@@ -82,10 +185,10 @@ body {
    bright/primary, AI-added text reads dimmed. Editing AI text flips it to
    .note-user via the EnhancedOwnership plugin. */
 .notes-editor :where(.note-user) {
-  color: #e5e5e5;
+  color: var(--note-user);
 }
 .notes-editor :where(.note-ai) {
-  color: #8b97a6;
+  color: var(--note-ai);
 }
 
 /* Source-link icon (§8.4): a non-editable magnifying glass next to AI blocks. */
@@ -100,7 +203,7 @@ body {
   border: none;
   border-radius: 3px;
   background: transparent;
-  color: #6b7280;
+  color: var(--source-link);
   font-size: 0.95em;
   line-height: 1;
   vertical-align: baseline;
@@ -108,6 +211,6 @@ body {
   user-select: none;
 }
 .source-link:hover {
-  color: #38bdf8;
-  background: rgba(56, 189, 248, 0.14);
+  color: var(--info);
+  background: color-mix(in oklab, var(--info) 14%, transparent);
 }

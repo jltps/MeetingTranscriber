@@ -38,28 +38,28 @@ export function AutoStartPrompt({ event, onStart, onDismiss }: AutoStartPromptPr
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-full max-w-sm rounded-lg border border-neutral-700 bg-neutral-900 p-5 shadow-xl">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-400">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+      <div className="w-full max-w-sm rounded-lg border border-input bg-card p-5 shadow-xl">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
           Meeting starting
         </div>
-        <h2 className="mt-3 truncate text-base font-medium text-neutral-100">{event.title || 'Calendar event'}</h2>
-        <p className="mt-1 text-xs text-neutral-500">
+        <h2 className="mt-3 truncate text-base font-medium text-foreground">{event.title || 'Calendar event'}</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
           {formatTime(event.startMs)} · from your calendar
         </p>
-        <p className="mt-4 text-sm text-neutral-300">Start recording this meeting now?</p>
+        <p className="mt-4 text-sm text-muted-foreground">Start recording this meeting now?</p>
         <div className="mt-5 flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={onDismiss}
-            className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm font-medium text-neutral-300 hover:bg-neutral-800"
+            className="rounded-md border border-input px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted"
           >
             Dismiss
           </button>
           <button
             type="button"
             onClick={onStart}
-            className="rounded-md bg-emerald-400 px-4 py-1.5 text-sm font-semibold text-neutral-950 hover:bg-emerald-300"
+            className="rounded-md bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
           >
             Start recording ({remaining}s)
           </button>

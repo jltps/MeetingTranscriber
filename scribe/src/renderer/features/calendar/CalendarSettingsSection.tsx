@@ -44,15 +44,15 @@ function ProviderRow({ providerId, label, connected, onChanged }: ProviderRowPro
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm text-neutral-300">{label}</span>
+        <span className="text-sm text-muted-foreground">{label}</span>
         {connected ? (
           <div className="flex items-center gap-3">
-            <span className="text-[11px] text-emerald-400">✓ Connected</span>
+            <span className="text-[11px] text-primary">✓ Connected</span>
             <button
               type="button"
               onClick={() => void disconnect()}
               disabled={busy}
-              className="text-[10px] text-red-400 hover:text-red-300 disabled:opacity-50"
+              className="text-[10px] text-destructive hover:text-destructive disabled:opacity-50"
             >
               Disconnect
             </button>
@@ -62,13 +62,13 @@ function ProviderRow({ providerId, label, connected, onChanged }: ProviderRowPro
             type="button"
             onClick={() => void connect()}
             disabled={busy}
-            className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+            className="rounded-md border border-input px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
           >
             {busy ? 'Connecting…' : `Connect with ${label.split(' ')[0]}`}
           </button>
         )}
       </div>
-      {error && <p className="text-[11px] text-red-400">{error}</p>}
+      {error && <p className="text-[11px] text-destructive">{error}</p>}
     </div>
   );
 }
@@ -87,8 +87,8 @@ export function CalendarSettingsSection({
 }: CalendarSettingsSectionProps) {
   return (
     <section className="space-y-3">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Calendar</h3>
-      <p className="text-[11px] text-neutral-500">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Calendar</h3>
+      <p className="text-[11px] text-muted-foreground">
         Connect a calendar to see upcoming meetings and auto-start recording at their scheduled
         time. Scribe reads only your busy times — never event titles — and never joins the call.
       </p>

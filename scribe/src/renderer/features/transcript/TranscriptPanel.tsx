@@ -94,7 +94,7 @@ const Line = memo(function Line({
     <div
       data-segment-id={seg.id}
       className={`group rounded px-1 transition-colors ${interim ? 'opacity-50' : ''} ${
-        highlighted ? 'bg-amber-400/20' : ''
+        highlighted ? 'bg-warning/20' : ''
       }`}
     >
       {/* Speaker label — click to rename (finalized segments only) */}
@@ -108,8 +108,8 @@ const Line = memo(function Line({
             if (e.key === 'Enter') commitEdit();
             if (e.key === 'Escape') cancelEdit();
           }}
-          className={`mr-2 w-24 rounded border border-neutral-600 bg-neutral-800 px-1 py-0 text-xs font-semibold focus:outline-none ${
-            isMe ? 'text-emerald-400' : 'text-sky-400'
+          className={`mr-2 w-24 rounded border border-input bg-muted px-1 py-0 text-xs font-semibold focus:outline-none ${
+            isMe ? 'text-speaker-self' : 'text-speaker-other'
           }`}
         />
       ) : (
@@ -121,7 +121,7 @@ const Line = memo(function Line({
             if (e.key === 'Enter' || e.key === ' ') startEdit();
           }}
           title={onRenameSpeaker && !interim ? 'Click to rename speaker' : undefined}
-          className={`mr-2 text-xs font-semibold ${isMe ? 'text-emerald-400' : 'text-sky-400'} ${
+          className={`mr-2 text-xs font-semibold ${isMe ? 'text-speaker-self' : 'text-speaker-other'} ${
             onRenameSpeaker && !interim ? 'cursor-pointer hover:underline' : ''
           }`}
         >
@@ -129,8 +129,8 @@ const Line = memo(function Line({
         </span>
       )}
 
-      <span className="mr-2 text-[11px] tabular-nums text-neutral-600">{formatTime(seg.startMs)}</span>
-      <span className="text-sm leading-relaxed text-neutral-200">{seg.text}</span>
+      <span className="mr-2 text-[11px] tabular-nums text-muted-foreground">{formatTime(seg.startMs)}</span>
+      <span className="text-sm leading-relaxed text-foreground">{seg.text}</span>
 
       {/* Reassign icon — visible on hover for finalized segments with multiple speakers */}
       {canReassign && otherLabels.length > 0 && (
@@ -139,12 +139,12 @@ const Line = memo(function Line({
             type="button"
             onClick={() => setShowReassign((v) => !v)}
             title="Reassign this segment to a different speaker"
-            className="rounded px-1 text-[10px] text-neutral-600 opacity-0 transition-opacity hover:text-neutral-300 group-hover:opacity-100"
+            className="rounded px-1 text-[10px] text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
           >
             ⇄
           </button>
           {showReassign && (
-            <div className="absolute left-0 top-full z-10 mt-1 min-w-[7rem] rounded border border-neutral-700 bg-neutral-900 py-1 shadow-lg">
+            <div className="absolute left-0 top-full z-10 mt-1 min-w-[7rem] rounded border border-input bg-card py-1 shadow-lg">
               {otherLabels.map((rawL) => (
                 <button
                   key={rawL}
@@ -154,7 +154,7 @@ const Line = memo(function Line({
                     // seg.id is defined — canReassign guards that
                     onReassignSegment!(seg.id!, rawL);
                   }}
-                  className="block w-full px-3 py-1 text-left text-xs text-neutral-300 hover:bg-neutral-800"
+                  className="block w-full px-3 py-1 text-left text-xs text-muted-foreground hover:bg-muted"
                 >
                   {speakerNames?.get(rawL) ?? rawL}
                 </button>
@@ -243,14 +243,14 @@ export function TranscriptPanel({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="mb-3 text-xs uppercase tracking-wide text-neutral-500">Live transcript</div>
+      <div className="mb-3 text-xs uppercase tracking-wide text-muted-foreground">Live transcript</div>
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto rounded-lg border border-neutral-800 bg-neutral-900 p-4"
+        className="flex-1 overflow-y-auto rounded-lg border border-border bg-card p-4"
       >
         {empty ? (
-          <p className="text-sm leading-relaxed text-neutral-600">
+          <p className="text-sm leading-relaxed text-muted-foreground">
             Transcript appears here once you start. CH0 (your mic) is labelled "Me"; CH1 (system
             audio) speakers are separated by diarization.
           </p>

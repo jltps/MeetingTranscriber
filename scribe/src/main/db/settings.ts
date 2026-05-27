@@ -1,4 +1,5 @@
-import { SetLanguageSchema } from '../../shared/ipc-contract';
+import { SetLanguageSchema, ThemeModeSchema } from '../../shared/ipc-contract';
+import type { ThemeMode } from '../../shared/ipc-contract';
 import type { LanguageSetting } from '../../shared/types';
 import type { WhisperModelName } from '../transcription/whisper-models';
 import { WHISPER_MODEL_NAMES } from '../transcription/whisper-models';
@@ -46,6 +47,18 @@ export function getLanguage(): LanguageSetting {
 /** Global custom instructions appended to every enhancement prompt (FEATURES §B). */
 export function getGlobalInstructions(): string {
   return getSetting('global_instructions') ?? '';
+}
+
+// ── Appearance / theming (ROADMAP_V04_01) ──────────────────────────────────
+
+/** Persisted theme mode. Defaults to 'system' (follow the OS). */
+export function getThemeMode(): ThemeMode {
+  const parsed = ThemeModeSchema.safeParse(getSetting('theme_mode'));
+  return parsed.success ? parsed.data : 'system';
+}
+
+export function setThemeMode(mode: ThemeMode): void {
+  setSetting('theme_mode', ThemeModeSchema.parse(mode));
 }
 
 // ── Local Whisper settings (ROADMAP_05) ────────────────────────────────────

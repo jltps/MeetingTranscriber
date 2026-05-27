@@ -6,6 +6,7 @@ import { initDb, closeDb } from './db';
 import { registerIpcHandlers } from './ipc';
 import { disposeTranscription } from './ipc/transcription';
 import { logger } from './logger';
+import { initTheme, initialBackgroundColor, registerThemeWindow } from './theme';
 
 // electron-vite sets this only in dev (renderer served by the Vite dev server).
 const devUrl = process.env.ELECTRON_RENDERER_URL;
@@ -52,7 +53,8 @@ function createWindow(): void {
     width: 1100,
     height: 720,
     show: false,
-    backgroundColor: '#0b0e12',
+    // Theme-driven so the native frame never flashes the wrong colour (ROADMAP_V04_01).
+    backgroundColor: initialBackgroundColor(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -62,6 +64,9 @@ function createWindow(): void {
   });
 
   win.once('ready-to-show', () => win.show());
+
+  // Keep the native background in step with the effective theme (ROADMAP_V04_01).
+  registerThemeWindow(win);
 
   // Renderer is untrusted: deny popups and block all in-app navigation (§1.3, §7).
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -77,6 +82,8 @@ app
     hardenSession();
     setupAudioCapture(session.defaultSession);
     initDb();
+    // Before the window loads, so prefers-color-scheme is correct on first paint.
+    initTheme();
     registerIpcHandlers();
     createWindow();
 

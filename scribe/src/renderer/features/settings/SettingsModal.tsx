@@ -3,7 +3,10 @@ import type { LanguageSetting, Template, TemplateCreate } from '../../../shared/
 import type { SettingsView, TestProvider, TestResult, WhisperModelStatus } from '../../../shared/ipc-contract';
 import { TemplateEditorModal } from '../templates/TemplateEditorModal';
 import { CalendarSettingsSection } from '../calendar/CalendarSettingsSection';
+import { useTheme } from '../theme/use-theme';
 import { estimateCost, formatAudioDuration, formatCost } from '../../../shared/pricing';
+
+const THEME_MODES = ['system', 'light', 'dark'] as const;
 
 function formatBytes(bytes: number): string {
   if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
@@ -71,8 +74,8 @@ function KeyRow({ label, provider, isSet, onSaved }: KeyRowProps) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <label className="text-sm text-neutral-300">{label}</label>
-        <span className={`text-[11px] ${isSet ? 'text-emerald-400' : 'text-neutral-500'}`}>
+        <label className="text-sm text-muted-foreground">{label}</label>
+        <span className={`text-[11px] ${isSet ? 'text-primary' : 'text-muted-foreground'}`}>
           {isSet ? 'key saved' : 'not set'}
         </span>
       </div>
@@ -82,13 +85,13 @@ function KeyRow({ label, provider, isSet, onSaved }: KeyRowProps) {
           value={value}
           placeholder={isSet ? 'Enter a new key to replace' : 'Paste API key'}
           onChange={(e) => setValue(e.target.value)}
-          className="flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none"
+          className="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
         />
         <button
           type="button"
           onClick={() => void save()}
           disabled={saving || value.trim() === ''}
-          className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-900 hover:bg-white disabled:opacity-50"
+          className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
@@ -96,13 +99,13 @@ function KeyRow({ label, provider, isSet, onSaved }: KeyRowProps) {
           type="button"
           onClick={() => void test()}
           disabled={testing || (value.trim() === '' && !isSet)}
-          className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800 disabled:opacity-50"
+          className="rounded-md border border-input px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-50"
         >
           {testing ? 'Testing…' : 'Test'}
         </button>
       </div>
       {result && (
-        <p className={`text-[11px] ${result.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+        <p className={`text-[11px] ${result.ok ? 'text-primary' : 'text-destructive'}`}>
           {result.ok ? 'Connection OK' : (result.message ?? 'Connection failed')}
         </p>
       )}
@@ -127,6 +130,7 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
   const [instructions, setInstructions] = useState(settings.globalInstructions);
+  const { theme, setMode } = useTheme();
 
   // null = editor closed, 'new' = creating, Template = editing
   const [editorTarget, setEditorTarget] = useState<'new' | Template | null>(null);
@@ -248,13 +252,13 @@ export function SettingsModal({
       )}
 
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6">
-        <div className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900">
-          <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-3">
-            <h2 className="text-base font-semibold text-neutral-100">Settings</h2>
+        <div className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-border bg-card">
+          <div className="flex items-center justify-between border-b border-border px-5 py-3">
+            <h2 className="text-base font-semibold text-foreground">Settings</h2>
             <button
               type="button"
               onClick={onClose}
-              className="rounded px-2 py-1 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+              className="rounded px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               Close
             </button>
@@ -262,24 +266,53 @@ export function SettingsModal({
 
           <div className="space-y-6 overflow-y-auto p-5">
             <section className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">API keys</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">API keys</h3>
               <KeyRow label="Deepgram" provider="deepgram" isSet={settings.deepgramKeySet} onSaved={onChanged} />
               <KeyRow label="Anthropic" provider="anthropic" isSet={settings.anthropicKeySet} onSaved={onChanged} />
-              <p className="text-[11px] text-neutral-500">
+              <p className="text-[11px] text-muted-foreground">
                 Keys are encrypted with your OS secure storage and never leave this machine.
               </p>
             </section>
 
             <section className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Audio</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Appearance
+              </h3>
               <div className="space-y-1.5">
-                <label className="text-sm text-neutral-300">Microphone</label>
+                <label className="text-sm text-foreground">Theme</label>
+                <div className="flex gap-2">
+                  {THEME_MODES.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => void setMode(m)}
+                      className={`rounded-md border px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+                        (theme?.mode ?? 'system') === m
+                          ? 'border-primary bg-secondary text-secondary-foreground'
+                          : 'border-input text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {theme ? `Currently ${theme.effective}. ` : ''}
+                  &ldquo;System&rdquo; follows your OS appearance.
+                </p>
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Audio</h3>
+              <div className="space-y-1.5">
+                <label className="text-sm text-muted-foreground">Microphone</label>
                 <select
                   value={settings.micDeviceId ?? ''}
                   onChange={(e) => {
                     void window.api.settings.setMicDevice(e.target.value || null).then(onChanged);
                   }}
-                  className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none"
+                  className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none"
                 >
                   <option value="">System default</option>
                   {mics.map((m, i) => (
@@ -288,13 +321,13 @@ export function SettingsModal({
                     </option>
                   ))}
                 </select>
-                <p className="text-[11px] text-neutral-500">
+                <p className="text-[11px] text-muted-foreground">
                   Device names appear after the first capture. Make sure your system output device
                   matches the one your call plays through, or remote audio (CH1) won't be captured.
                 </p>
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm text-neutral-300">Transcription language</label>
+                <label className="text-sm text-muted-foreground">Transcription language</label>
                 <select
                   value={langSettingToSelectValue(settings.language)}
                   onChange={(e) => {
@@ -302,7 +335,7 @@ export function SettingsModal({
                       .setLanguage(selectValueToLangSetting(e.target.value))
                       .then(onChanged);
                   }}
-                  className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none"
+                  className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none"
                 >
                   {LANGUAGE_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -310,7 +343,7 @@ export function SettingsModal({
                     </option>
                   ))}
                 </select>
-                <p className="text-[11px] text-neutral-500">
+                <p className="text-[11px] text-muted-foreground">
                   Auto-detect uses nova-3 multilingual mode. For Portuguese or other languages,
                   selecting a fixed language gives the most accurate results.
                 </p>
@@ -319,13 +352,13 @@ export function SettingsModal({
 
             {/* ── Transcription provider + local Whisper model manager ── */}
             <section className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Transcription
               </h3>
 
               {/* Provider toggle */}
               <div className="space-y-1.5">
-                <label className="text-sm text-neutral-300">Provider</label>
+                <label className="text-sm text-muted-foreground">Provider</label>
                 <div className="flex gap-2">
                   {(['deepgram', 'whisper'] as const).map((p) => (
                     <button
@@ -334,8 +367,8 @@ export function SettingsModal({
                       onClick={() => handleSetProvider(p)}
                       className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
                         provider === p
-                          ? 'border-neutral-400 bg-neutral-700 text-neutral-100'
-                          : 'border-neutral-700 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'
+                          ? 'border-primary bg-secondary text-foreground'
+                          : 'border-input text-muted-foreground hover:bg-muted hover:text-foreground'
                       }`}
                     >
                       {p === 'deepgram' ? 'Deepgram (cloud)' : 'Local (Whisper)'}
@@ -343,12 +376,12 @@ export function SettingsModal({
                   ))}
                 </div>
                 {provider === 'deepgram' && (
-                  <p className="text-[11px] text-neutral-500">
+                  <p className="text-[11px] text-muted-foreground">
                     Streams audio to Deepgram&apos;s cloud API. Requires a Deepgram key (set above).
                   </p>
                 )}
                 {provider === 'whisper' && (
-                  <p className="text-[11px] text-neutral-500">
+                  <p className="text-[11px] text-muted-foreground">
                     Transcribes on-device using whisper.cpp ONNX. No API key needed; audio never leaves
                     your machine. Latency ≈ 5 s per chunk.
                   </p>
@@ -359,11 +392,11 @@ export function SettingsModal({
               {provider === 'whisper' && (
                 <div className="space-y-3">
                   <div className="space-y-1.5">
-                    <label className="text-sm text-neutral-300">Active model</label>
+                    <label className="text-sm text-muted-foreground">Active model</label>
                     <select
                       value={whisperModel}
                       onChange={(e) => handleSetWhisperModel(e.target.value)}
-                      className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 focus:outline-none"
+                      className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none"
                     >
                       {(['tiny', 'base', 'small', 'medium'] as const).map((m) => (
                         <option key={m} value={m}>
@@ -376,7 +409,7 @@ export function SettingsModal({
                       if (!active) return null;
                       if (active.state !== 'ready') {
                         return (
-                          <p className="text-[11px] text-amber-400">
+                          <p className="text-[11px] text-warning">
                             Download &ldquo;{whisperModel}&rdquo; below before recording.
                           </p>
                         );
@@ -386,17 +419,17 @@ export function SettingsModal({
                   </div>
 
                   {/* Model status table */}
-                  <div className="rounded-md border border-neutral-800 divide-y divide-neutral-800">
+                  <div className="rounded-md border border-border divide-y divide-border">
                     {modelStatuses.map((m) => (
                       <div key={m.name} className="flex items-center justify-between px-3 py-2 text-xs">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-neutral-200">ggml-{m.name}.bin</span>
-                          <span className="text-neutral-600">{formatBytes(m.sizeBytes)}</span>
+                          <span className="font-mono text-foreground">ggml-{m.name}.bin</span>
+                          <span className="text-muted-foreground">{formatBytes(m.sizeBytes)}</span>
                         </div>
                         <div className="flex shrink-0 items-center gap-2 ml-2">
                           {m.state === 'ready' && (
                             <>
-                              <span className="text-emerald-400">✓ Ready</span>
+                              <span className="text-primary">✓ Ready</span>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -404,7 +437,7 @@ export function SettingsModal({
                                     window.api.whisper.getModels().then(setModelStatuses),
                                   );
                                 }}
-                                className="text-[10px] text-red-400 hover:text-red-300"
+                                className="text-[10px] text-destructive hover:text-destructive"
                               >
                                 Delete
                               </button>
@@ -412,13 +445,13 @@ export function SettingsModal({
                           )}
                           {m.state === 'downloading' && (
                             <>
-                              <span className="text-neutral-400">
+                              <span className="text-muted-foreground">
                                 {m.progress != null ? `${m.progress}%` : 'Starting…'}
                               </span>
                               <button
                                 type="button"
                                 onClick={() => void window.api.whisper.cancelDownload()}
-                                className="text-[10px] text-neutral-400 hover:text-neutral-200"
+                                className="text-[10px] text-muted-foreground hover:text-foreground"
                               >
                                 Cancel
                               </button>
@@ -432,7 +465,7 @@ export function SettingsModal({
                                 setActiveDownload(m.name);
                                 void window.api.whisper.downloadModel(m.name);
                               }}
-                              className="rounded border border-neutral-700 px-2 py-0.5 text-[10px] text-neutral-300 hover:bg-neutral-800 disabled:opacity-40"
+                              className="rounded border border-input px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted disabled:opacity-40"
                             >
                               Download
                             </button>
@@ -452,11 +485,11 @@ export function SettingsModal({
             />
 
             <section className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Enhancement
               </h3>
               <div className="space-y-1.5">
-                <label className="text-sm text-neutral-300">Custom instructions</label>
+                <label className="text-sm text-muted-foreground">Custom instructions</label>
                 <textarea
                   value={instructions}
                   onChange={(e) => setInstructions(e.target.value)}
@@ -468,9 +501,9 @@ export function SettingsModal({
                     'e.g. "Always list action items with an owner and due date." ' +
                     '"Write in European Portuguese." "Executive summary, no preamble."'
                   }
-                  className="w-full resize-none rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none"
+                  className="w-full resize-none rounded-md border border-input bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
                 />
-                <p className="text-[11px] text-neutral-500">
+                <p className="text-[11px] text-muted-foreground">
                   Applied to every enhancement as advisory guidance. Cannot change the output format
                   or remove source-linking (those are enforced by the system).
                 </p>
@@ -479,13 +512,13 @@ export function SettingsModal({
 
             <section className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Templates
                 </h3>
                 <button
                   type="button"
                   onClick={() => setEditorTarget('new')}
-                  className="text-[11px] text-neutral-400 hover:text-neutral-200"
+                  className="text-[11px] text-muted-foreground hover:text-foreground"
                 >
                   + New template
                 </button>
@@ -496,12 +529,12 @@ export function SettingsModal({
                 {templates.map((t) => (
                   <div
                     key={t.id}
-                    className="flex items-start justify-between rounded-md border border-neutral-800 px-3 py-2"
+                    className="flex items-start justify-between rounded-md border border-border px-3 py-2"
                   >
                     <div className="min-w-0">
-                      <span className="text-xs font-medium text-neutral-200">{t.name}</span>
+                      <span className="text-xs font-medium text-foreground">{t.name}</span>
                       {t.instructions && (
-                        <p className="mt-0.5 text-[10px] text-neutral-500 line-clamp-1">
+                        <p className="mt-0.5 text-[10px] text-muted-foreground line-clamp-1">
                           {t.instructions}
                         </p>
                       )}
@@ -510,7 +543,7 @@ export function SettingsModal({
                       <button
                         type="button"
                         onClick={() => setEditorTarget(t)}
-                        className="text-[10px] text-neutral-500 hover:text-neutral-300"
+                        className="text-[10px] text-muted-foreground hover:text-muted-foreground"
                       >
                         Edit
                       </button>
@@ -521,7 +554,7 @@ export function SettingsModal({
                             void window.api.templates.remove(t.id).then(onChanged);
                           }
                         }}
-                        className="text-[10px] text-red-400 hover:text-red-300"
+                        className="text-[10px] text-destructive hover:text-destructive"
                       >
                         Delete
                       </button>
@@ -532,7 +565,7 @@ export function SettingsModal({
             </section>
 
             <section className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Usage &amp; Cost
               </h3>
               {(() => {
@@ -540,7 +573,7 @@ export function SettingsModal({
                 const hasAny = t.deepgramAudioMs > 0 || t.claudeInputTokens > 0;
                 if (!hasAny) {
                   return (
-                    <p className="text-[11px] text-neutral-500">
+                    <p className="text-[11px] text-muted-foreground">
                       No usage recorded yet. Cost will appear after your first transcription and enhancement.
                     </p>
                   );
@@ -549,35 +582,35 @@ export function SettingsModal({
                 const claudeCost = estimateCost(0, t.claudeInputTokens, t.claudeOutputTokens);
                 return (
                   <div className="space-y-2">
-                    <div className="rounded-md border border-neutral-800 divide-y divide-neutral-800 text-xs">
+                    <div className="rounded-md border border-border divide-y divide-border text-xs">
                       {t.deepgramAudioMs > 0 && (
                         <div className="flex items-center justify-between px-3 py-2">
-                          <span className="text-neutral-400">
+                          <span className="text-muted-foreground">
                             Deepgram transcription
-                            <span className="ml-1.5 text-neutral-600">
+                            <span className="ml-1.5 text-muted-foreground">
                               {formatAudioDuration(t.deepgramAudioMs)}
                             </span>
                           </span>
-                          <span className="tabular-nums text-neutral-300">{formatCost(deepgramCost)}</span>
+                          <span className="tabular-nums text-muted-foreground">{formatCost(deepgramCost)}</span>
                         </div>
                       )}
                       {t.claudeInputTokens > 0 && (
                         <div className="flex items-center justify-between px-3 py-2">
-                          <span className="text-neutral-400">
+                          <span className="text-muted-foreground">
                             Claude enhancement
-                            <span className="ml-1.5 text-neutral-600">
+                            <span className="ml-1.5 text-muted-foreground">
                               {(t.claudeInputTokens + t.claudeOutputTokens).toLocaleString()} tokens
                             </span>
                           </span>
-                          <span className="tabular-nums text-neutral-300">{formatCost(claudeCost)}</span>
+                          <span className="tabular-nums text-muted-foreground">{formatCost(claudeCost)}</span>
                         </div>
                       )}
                       <div className="flex items-center justify-between px-3 py-2 font-medium">
-                        <span className="text-neutral-300">Total</span>
-                        <span className="tabular-nums text-neutral-200">{formatCost(t.estimatedCostUsd)}</span>
+                        <span className="text-muted-foreground">Total</span>
+                        <span className="tabular-nums text-foreground">{formatCost(t.estimatedCostUsd)}</span>
                       </div>
                     </div>
-                    <p className="text-[11px] text-neutral-600">
+                    <p className="text-[11px] text-muted-foreground">
                       Estimates based on standard list pricing. Actual charges depend on your Deepgram
                       and Anthropic account terms.
                     </p>
@@ -587,8 +620,8 @@ export function SettingsModal({
             </section>
 
             <section className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Data</h3>
-              <p className="text-[11px] leading-relaxed text-neutral-400">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Data</h3>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
                 Back up all your meetings to a JSON file, or restore from a previous backup.
                 Restore replaces all current meetings — settings and API keys are not affected.
               </p>
@@ -597,7 +630,7 @@ export function SettingsModal({
                   type="button"
                   onClick={() => void handleBackup()}
                   disabled={backingUp || restoring}
-                  className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+                  className="rounded-md border border-input px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
                 >
                   {backingUp ? 'Saving…' : 'Backup all meetings…'}
                 </button>
@@ -605,24 +638,24 @@ export function SettingsModal({
                   type="button"
                   onClick={() => void handleRestore()}
                   disabled={backingUp || restoring}
-                  className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+                  className="rounded-md border border-input px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
                 >
                   {restoring ? 'Restoring…' : 'Restore from backup…'}
                 </button>
               </div>
               {backupMsg && (
-                <p className="text-[11px] text-emerald-400">{backupMsg}</p>
+                <p className="text-[11px] text-primary">{backupMsg}</p>
               )}
               {restoreMsg && (
-                <p className={`text-[11px] ${restoreMsg.startsWith('Error') ? 'text-red-400' : 'text-emerald-400'}`}>
+                <p className={`text-[11px] ${restoreMsg.startsWith('Error') ? 'text-destructive' : 'text-primary'}`}>
                   {restoreMsg}
                 </p>
               )}
             </section>
 
             <section className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Privacy</h3>
-              <p className="text-[11px] leading-relaxed text-neutral-400">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Privacy</h3>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
                 No audio is ever stored. Audio is streamed to Deepgram for transcription and dropped;
                 transcript text and notes go to Anthropic only when you enhance a meeting. Everything
                 else stays local.
@@ -630,7 +663,7 @@ export function SettingsModal({
               <button
                 type="button"
                 onClick={() => void onWipe()}
-                className="rounded-md border border-red-500/40 px-3 py-1.5 text-xs font-medium text-red-300 hover:bg-red-500/10"
+                className="rounded-md border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10"
               >
                 Wipe all local data
               </button>

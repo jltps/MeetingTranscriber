@@ -33,39 +33,39 @@ export function AgendaPanel({ events, onArm, onSelectMeeting }: AgendaPanelProps
   if (upcoming.length === 0) return null;
 
   return (
-    <div className="border-b border-neutral-800 p-3">
-      <h3 className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+    <div className="border-b border-border p-3">
+      <h3 className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         Upcoming
       </h3>
       <ul className="space-y-1">
         {upcoming.map((e) => (
           <li
             key={`${e.providerId}:${e.externalId}`}
-            className="rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-2"
+            className="rounded-md border border-border bg-background px-2.5 py-2"
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate text-xs font-medium text-neutral-200">{e.title || 'Busy'}</span>
-              <span className="shrink-0 rounded bg-neutral-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-neutral-400">
+              <span className="truncate text-xs font-medium text-foreground">{e.title || 'Busy'}</span>
+              <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-muted-foreground">
                 {SOURCE_LABEL[e.providerId]}
               </span>
             </div>
             <div className="mt-1 flex items-center justify-between gap-2">
-              <span className="text-[11px] tabular-nums text-neutral-500">
+              <span className="text-[11px] tabular-nums text-muted-foreground">
                 {formatWhen(e)}
-                {e.joinUrl && <span className="ml-1.5 text-neutral-600">· has link</span>}
+                {e.joinUrl && <span className="ml-1.5 text-muted-foreground">· has link</span>}
               </span>
               {e.meetingId !== null ? (
                 <button
                   type="button"
                   onClick={() => onSelectMeeting(e.meetingId as number)}
-                  className="text-[10px] text-emerald-400 hover:text-emerald-300"
+                  className="text-[10px] text-primary hover:text-primary"
                 >
                   Open note
                 </button>
               ) : e.allDay ? (
-                <span className="text-[10px] text-neutral-600">—</span>
+                <span className="text-[10px] text-muted-foreground">—</span>
               ) : (
-                <label className="flex cursor-pointer items-center gap-1 text-[10px] text-neutral-400">
+                <label className="flex cursor-pointer items-center gap-1 text-[10px] text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={e.armed}

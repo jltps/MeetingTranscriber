@@ -20,7 +20,7 @@ function AssistantText({
 }) {
   const byId = new Map((turn.citations ?? []).map((c) => [c.segmentId, c]));
   return (
-    <div className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-200">
+    <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
       {parseCitations(turn.content).map((node, i) => {
         if (node.kind === 'text') return <span key={i}>{node.text}</span>;
         const cite = byId.get(node.segmentId);
@@ -30,7 +30,7 @@ function AssistantText({
             type="button"
             onClick={() => onCiteClick(cite.meetingId, cite.segmentId)}
             title={`Jump to "${cite.meetingTitle}"`}
-            className="mx-0.5 inline-flex items-center rounded bg-sky-500/20 px-1 text-[11px] font-medium text-sky-300 hover:bg-sky-500/30"
+            className="mx-0.5 inline-flex items-center rounded bg-info/20 px-1 text-[11px] font-medium text-info hover:bg-info/30"
           >
             {abbreviate(cite.meetingTitle)} #{cite.segmentId}
           </button>
@@ -38,7 +38,7 @@ function AssistantText({
           // Hallucinated id (not in the retrieved set) — shown inert.
           <span
             key={i}
-            className="mx-0.5 inline-flex items-center rounded bg-neutral-800 px-1 text-[11px] text-neutral-500"
+            className="mx-0.5 inline-flex items-center rounded bg-muted px-1 text-[11px] text-muted-foreground"
           >
             #{node.segmentId}
           </span>
@@ -109,26 +109,26 @@ export function CrossChatView({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between gap-4 border-b border-neutral-800 px-6 py-3">
-        <span className="text-base font-medium text-neutral-200">Ask across meetings</span>
+      <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-3">
+        <span className="text-base font-medium text-foreground">Ask across meetings</span>
         <button
           type="button"
           onClick={onClose}
-          className="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800"
+          className="rounded-md border border-input px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
         >
           Close
         </button>
       </header>
 
       {/* Scope selector */}
-      <div className="border-b border-neutral-800 px-6 py-2">
+      <div className="border-b border-border px-6 py-2">
         <button
           type="button"
           onClick={() => setScopeOpen((v) => !v)}
-          className="flex w-full items-center justify-between text-left text-xs text-neutral-400 hover:text-neutral-200"
+          className="flex w-full items-center justify-between text-left text-xs text-muted-foreground hover:text-foreground"
         >
           <span>{scopeLabel}</span>
-          <span className="text-neutral-600">{scopeOpen ? '▴ scope' : '▾ scope'}</span>
+          <span className="text-muted-foreground">{scopeOpen ? '▴ scope' : '▾ scope'}</span>
         </button>
         {scopeOpen && (
           <div className="mt-2">
@@ -137,26 +137,26 @@ export function CrossChatView({
                 type="search"
                 placeholder="Filter meetings by content…"
                 onChange={(e) => runFilter(e.target.value)}
-                className="flex-1 rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
+                className="flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-input focus:outline-none"
               />
               {selectedIds.size > 0 && (
                 <button
                   type="button"
                   onClick={() => setSelectedIds(new Set())}
-                  className="shrink-0 rounded px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-800"
+                  className="shrink-0 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
                 >
                   Clear ({selectedIds.size})
                 </button>
               )}
             </div>
-            <div className="max-h-40 overflow-y-auto rounded-md border border-neutral-800">
+            <div className="max-h-40 overflow-y-auto rounded-md border border-border">
               {scopeList.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-neutral-600">No meetings.</p>
+                <p className="px-3 py-2 text-xs text-muted-foreground">No meetings.</p>
               ) : (
                 scopeList.map((m) => (
                   <label
                     key={m.id}
-                    className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/50"
+                    className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50"
                   >
                     <input
                       type="checkbox"
@@ -175,7 +175,7 @@ export function CrossChatView({
       {/* Thread */}
       <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
         {messages.length === 0 && !busy ? (
-          <p className="text-sm leading-relaxed text-neutral-600">
+          <p className="text-sm leading-relaxed text-muted-foreground">
             Ask a question spanning your meetings — e.g. "What did we decide about pricing?" or
             "Summarize everything about Project X." Answers cite the meeting and transcript line
             they came from.
@@ -184,7 +184,7 @@ export function CrossChatView({
           messages.map((turn, i) =>
             turn.role === 'user' ? (
               <div key={i} className="flex justify-end">
-                <div className="max-w-[80%] rounded-lg bg-neutral-700 px-3 py-2 text-sm text-neutral-100">
+                <div className="max-w-[80%] rounded-lg bg-secondary px-3 py-2 text-sm text-foreground">
                   {turn.content}
                 </div>
               </div>
@@ -192,7 +192,7 @@ export function CrossChatView({
               <div key={i} className="max-w-[95%]">
                 <AssistantText turn={turn} onCiteClick={onCiteClick} />
                 {turn.usage && (
-                  <div className="mt-1 text-[10px] tabular-nums text-neutral-600">
+                  <div className="mt-1 text-[10px] tabular-nums text-muted-foreground">
                     ~{formatCost(estimateCost(0, turn.usage.inputTokens, turn.usage.outputTokens))} ·{' '}
                     {(turn.usage.inputTokens + turn.usage.outputTokens).toLocaleString()} tokens
                   </div>
@@ -204,24 +204,24 @@ export function CrossChatView({
         {busy && (
           <div className="max-w-[95%]">
             {streamingText ? (
-              <div className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-200">
+              <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
                 {streamingText}
-                <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-neutral-400 align-middle" />
+                <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-muted-foreground align-middle" />
               </div>
             ) : (
-              <span className="text-sm text-neutral-500">Searching meetings…</span>
+              <span className="text-sm text-muted-foreground">Searching meetings…</span>
             )}
           </div>
         )}
         {error && (
-          <div className="rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          <div className="rounded border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {error}
           </div>
         )}
       </div>
 
       {/* Composer */}
-      <div className="flex items-end gap-2 border-t border-neutral-800 px-6 py-3">
+      <div className="flex items-end gap-2 border-t border-border px-6 py-3">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -233,13 +233,13 @@ export function CrossChatView({
           }}
           rows={2}
           placeholder="Ask across meetings…"
-          className="min-h-0 flex-1 resize-none rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:ring-1 focus:ring-neutral-600"
+          className="min-h-0 flex-1 resize-none rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         />
         <button
           type="button"
           onClick={submit}
           disabled={busy || !input.trim()}
-          className="rounded-md bg-emerald-400 px-3 py-2 text-sm font-semibold text-neutral-950 hover:bg-emerald-300 disabled:opacity-50"
+          className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
           {busy ? '…' : 'Send'}
         </button>

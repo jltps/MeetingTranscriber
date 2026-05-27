@@ -68,6 +68,9 @@ export const IPC = {
   settingsAcceptPrivacy: 'settings:acceptPrivacy',
   settingsWipe: 'settings:wipe',
 
+  themeGet: 'theme:get', // → ThemeView
+  themeSet: 'theme:set', // ThemeMode → ThemeView
+
   exportMeeting: 'export:meeting', // meetingId → { success, path? }
   exportBackup:  'export:backup',  // void → { success, path?, meetingCount }
   exportRestore: 'export:restore', // void → { success, meetingCount }
@@ -186,6 +189,21 @@ export type UsageTotals = {
   estimatedCostUsd: number;
 };
 
+// ─── Appearance / theming (ROADMAP_V04_01) ──────────────────────────────────
+
+/** User-chosen theme mode. 'system' follows the OS via nativeTheme.themeSource. */
+export const ThemeModeSchema = z.enum(['system', 'light', 'dark']);
+export type ThemeMode = z.infer<typeof ThemeModeSchema>;
+
+/** Theme state for the renderer: the chosen mode + the currently effective theme. */
+export type ThemeView = { mode: ThemeMode; effective: 'light' | 'dark' };
+
+export interface ThemeApi {
+  get(): Promise<ThemeView>;
+  /** Persist the mode + drive nativeTheme.themeSource. Returns the resolved view. */
+  set(mode: ThemeMode): Promise<ThemeView>;
+}
+
 export type SettingsView = {
   deepgramKeySet: boolean;
   anthropicKeySet: boolean;
@@ -204,6 +222,8 @@ export type SettingsView = {
   googleCalendarConnected: boolean;
   /** Whether a Microsoft/Outlook calendar is connected (ROADMAP_06). Never the token. */
   microsoftCalendarConnected: boolean;
+  /** Current appearance theme (ROADMAP_V04_01). */
+  theme: ThemeView;
 };
 export type TestResult = { ok: boolean; message?: string };
 
@@ -547,6 +567,7 @@ export interface ScribeApi {
   speakers: SpeakersApi;
   enhance(meetingId: number): Promise<EnhanceResult>;
   settings: SettingsApi;
+  theme: ThemeApi;
   export: ExportApi;
   whisper: WhisperApi;
   calendar: CalendarApi;

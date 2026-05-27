@@ -4,9 +4,9 @@ import type { MeetingStatus, MeetingSummary, Template } from '../../../shared/ty
 import { useDebouncedCallback } from '../../lib/debounce';
 
 function statusDot(status: MeetingStatus): string {
-  if (status === 'transcribing') return 'bg-red-500 animate-pulse';
-  if (status === 'ended') return 'bg-emerald-500';
-  return 'bg-neutral-600';
+  if (status === 'transcribing') return 'bg-destructive animate-pulse';
+  if (status === 'ended') return 'bg-primary';
+  return 'bg-muted-foreground';
 }
 
 function formatWhen(ms: number): string {
@@ -53,29 +53,29 @@ export function MeetingSidebar({
   const debouncedSearch = useDebouncedCallback(onSearch, 250);
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-r border-neutral-800 bg-neutral-900">
-      <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
+    <aside className="flex w-72 shrink-0 flex-col border-r border-border bg-card">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <span className="text-sm font-semibold tracking-wide">Scribe</span>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={onOpenSettings}
             aria-label="Settings"
-            className="rounded-md px-2 py-1 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+            className="rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             ⚙
           </button>
           <button
             type="button"
             onClick={onNew}
-            className="rounded-md bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-900 hover:bg-white"
+            className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
           >
             New Note
           </button>
         </div>
       </div>
 
-      <div className="border-b border-neutral-800 p-3">
+      <div className="border-b border-border p-3">
         <input
           type="search"
           value={text}
@@ -84,12 +84,12 @@ export function MeetingSidebar({
             setText(e.target.value);
             debouncedSearch(e.target.value);
           }}
-          className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
+          className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-input focus:outline-none"
         />
         <button
           type="button"
           onClick={onOpenCrossChat}
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-neutral-800 px-2.5 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800"
+          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted"
         >
           💬 Ask across meetings
         </button>
@@ -99,7 +99,7 @@ export function MeetingSidebar({
 
       <div className="flex-1 overflow-y-auto">
         {meetings.length === 0 ? (
-          <p className="px-4 py-6 text-center text-xs text-neutral-500">
+          <p className="px-4 py-6 text-center text-xs text-muted-foreground">
             {searching ? 'No matches' : 'No meetings yet'}
           </p>
         ) : (
@@ -107,8 +107,8 @@ export function MeetingSidebar({
             {meetings.map((m) => (
               <li
                 key={m.id}
-                className={`group flex items-stretch border-b border-neutral-800/60 ${
-                  m.id === selectedId ? 'bg-neutral-800' : 'hover:bg-neutral-800/50'
+                className={`group flex items-stretch border-b border-border/60 ${
+                  m.id === selectedId ? 'bg-muted' : 'hover:bg-muted/50'
                 }`}
               >
                 <button
@@ -120,14 +120,14 @@ export function MeetingSidebar({
                 >
                   <span className={`h-2 w-2 shrink-0 rounded-full ${statusDot(m.status)}`} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm text-neutral-200">{m.title}</span>
-                    <span className="block text-[11px] text-neutral-500">
+                    <span className="block truncate text-sm text-foreground">{m.title}</span>
+                    <span className="block text-[11px] text-muted-foreground">
                       {formatWhen(m.createdAt)}
                     </span>
                     {m.templateId && (() => {
                       const templateName = templates.find((t) => t.id === m.templateId)?.name;
                       return templateName ? (
-                        <span className="mt-0.5 block truncate text-[10px] text-neutral-600">
+                        <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
                           {templateName}
                         </span>
                       ) : null;
@@ -139,7 +139,7 @@ export function MeetingSidebar({
                   aria-label="Delete meeting"
                   disabled={disabled}
                   onClick={() => onDelete(m.id)}
-                  className="hidden shrink-0 px-3 text-neutral-500 hover:text-red-400 disabled:opacity-50 group-hover:block"
+                  className="hidden shrink-0 px-3 text-muted-foreground hover:text-destructive disabled:opacity-50 group-hover:block"
                 >
                   ✕
                 </button>

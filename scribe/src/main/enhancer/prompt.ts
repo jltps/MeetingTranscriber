@@ -8,7 +8,6 @@ import type { EnhancerSegment } from './enhancer';
 // ─────────────────────────────────────────────────────────────────────────────
 export const PROMPT_VERSION = 3;
 
-
 // ── Structural sections ───────────────────────────────────────────────────────
 // Prompt assembly (VERSION 3):
 //   [templateInstructions OR ROLE_SECTION]  →  [globalInstructions]  →  [language]  →  CONTRACT_SECTION

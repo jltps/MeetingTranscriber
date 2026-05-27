@@ -93,6 +93,10 @@ const api: ScribeApi = {
     acceptPrivacy: () => ipcRenderer.invoke(IPC.settingsAcceptPrivacy),
     wipe: () => ipcRenderer.invoke(IPC.settingsWipe),
   },
+  theme: {
+    get: () => ipcRenderer.invoke(IPC.themeGet),
+    set: (mode) => ipcRenderer.invoke(IPC.themeSet, mode),
+  },
   whisper: {
     getModels: () => ipcRenderer.invoke(IPC.whisperModelsGet),
     downloadModel: (name: string) => ipcRenderer.invoke(IPC.whisperModelDownload, name),
