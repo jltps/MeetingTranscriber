@@ -91,11 +91,28 @@ const api: ScribeApi = {
       ipcRenderer.invoke(IPC.settingsSetWhisperModel, model),
     test: (provider, key) => ipcRenderer.invoke(IPC.settingsTest, { provider, key }),
     acceptPrivacy: () => ipcRenderer.invoke(IPC.settingsAcceptPrivacy),
+    completeOnboarding: () => ipcRenderer.invoke(IPC.settingsCompleteOnboarding),
     wipe: () => ipcRenderer.invoke(IPC.settingsWipe),
   },
   theme: {
     get: () => ipcRenderer.invoke(IPC.themeGet),
     set: (mode) => ipcRenderer.invoke(IPC.themeSet, mode),
+  },
+  organization: {
+    listFolders: () => ipcRenderer.invoke(IPC.foldersList),
+    createFolder: (name, parentId) => ipcRenderer.invoke(IPC.foldersCreate, { name, parentId }),
+    renameFolder: (id, name) => ipcRenderer.invoke(IPC.foldersRename, { id, name }),
+    moveFolder: (id, parentId) => ipcRenderer.invoke(IPC.foldersMove, { id, parentId }),
+    deleteFolder: (id) => ipcRenderer.invoke(IPC.foldersDelete, id),
+    listTags: () => ipcRenderer.invoke(IPC.tagsList),
+    createTag: (name) => ipcRenderer.invoke(IPC.tagsCreate, name),
+    deleteTag: (id) => ipcRenderer.invoke(IPC.tagsDelete, id),
+    setMeetingFolder: (meetingId, folderId) =>
+      ipcRenderer.invoke(IPC.meetingsSetFolder, { meetingId, folderId }),
+    addMeetingTag: (meetingId, tagId) =>
+      ipcRenderer.invoke(IPC.meetingsAddTag, { meetingId, tagId }),
+    removeMeetingTag: (meetingId, tagId) =>
+      ipcRenderer.invoke(IPC.meetingsRemoveTag, { meetingId, tagId }),
   },
   whisper: {
     getModels: () => ipcRenderer.invoke(IPC.whisperModelsGet),

@@ -10,6 +10,7 @@ import type {
 import type { UsageTotals } from '../../shared/ipc-contract';
 import { estimateCost } from '../enhancer/pricing';
 import type { EnhancerSegment } from '../enhancer/enhancer';
+import { tagsByMeeting, tagsForMeeting } from './organization';
 
 // All meeting/notes/transcript persistence (PRODUCT_SPEC.md §11). better-sqlite3
 // is synchronous and main-process only. The FTS index (search_fts) is rebuilt for
@@ -23,6 +24,8 @@ type MeetingRow = {
   started_at: number | null;
   ended_at: number | null;
   template_id: number | null;
+  folder_id: number | null;
+  updated_at: number | null;
   deepgram_audio_ms: number;
   claude_input_tokens: number;
   claude_output_tokens: number;
@@ -36,6 +39,8 @@ type SegmentRow = {
   end_ms: number;
 };
 
+// Tags default to [] here; list/detail callers attach them (one batched query for
+// lists via tagsByMeeting, a single lookup for one meeting via tagsForMeeting).
 function toSummary(row: MeetingRow): MeetingSummary {
   return {
     id: row.id,
@@ -45,6 +50,9 @@ function toSummary(row: MeetingRow): MeetingSummary {
     startedAt: row.started_at,
     endedAt: row.ended_at,
     templateId: row.template_id,
+    folderId: row.folder_id,
+    updatedAt: row.updated_at,
+    tags: [],
   };
 }
 
@@ -57,33 +65,47 @@ function rowToUsage(row: MeetingRow): MeetingUsage {
 }
 
 const SUMMARY_COLUMNS =
-  'id, title, status, created_at, started_at, ended_at, template_id, deepgram_audio_ms, claude_input_tokens, claude_output_tokens';
+  'id, title, status, created_at, started_at, ended_at, template_id, folder_id, updated_at, deepgram_audio_ms, claude_input_tokens, claude_output_tokens';
 
 function getSummary(id: number): MeetingSummary {
   const row = getDb()
     .prepare(`SELECT ${SUMMARY_COLUMNS} FROM meetings WHERE id = ?`)
     .get(id) as MeetingRow | undefined;
   if (!row) throw new Error(`Meeting ${id} not found`);
-  return toSummary(row);
+  return { ...toSummary(row), tags: tagsForMeeting(id) };
 }
 
-export function createMeeting(): MeetingSummary {
+export function createMeeting(folderId: number | null = null): MeetingSummary {
   const db = getDb();
   const createdAt = Date.now();
   const info = db
-    .prepare(`INSERT INTO meetings (title, status, created_at) VALUES (?, 'draft', ?)`)
-    .run('Untitled meeting', createdAt);
+    .prepare(
+      `INSERT INTO meetings (title, status, created_at, updated_at, folder_id) VALUES (?, 'draft', ?, ?, ?)`,
+    )
+    .run('Untitled meeting', createdAt, createdAt, folderId);
   const id = Number(info.lastInsertRowid);
   db.prepare(`INSERT INTO notes (meeting_id, raw_user_md) VALUES (?, '')`).run(id);
   rebuildMeetingFts(id);
-  return { id, title: 'Untitled meeting', status: 'draft', createdAt, startedAt: null, endedAt: null, templateId: null };
+  return {
+    id,
+    title: 'Untitled meeting',
+    status: 'draft',
+    createdAt,
+    startedAt: null,
+    endedAt: null,
+    templateId: null,
+    folderId,
+    updatedAt: createdAt,
+    tags: [],
+  };
 }
 
 export function listMeetings(): MeetingSummary[] {
   const rows = getDb()
     .prepare(`SELECT ${SUMMARY_COLUMNS} FROM meetings ORDER BY created_at DESC`)
     .all() as MeetingRow[];
-  return rows.map(toSummary);
+  const tags = tagsByMeeting();
+  return rows.map((r) => ({ ...toSummary(r), tags: tags.get(r.id) ?? [] }));
 }
 
 export function getMeeting(id: number): MeetingDetail | null {
@@ -97,6 +119,7 @@ export function getMeeting(id: number): MeetingDetail | null {
     .get(id) as { raw_user_md: string; enhanced_json: string | null; enhanced_lang: string | null } | undefined;
   return {
     ...toSummary(row),
+    tags: tagsForMeeting(id),
     rawUserMd: note?.raw_user_md ?? '',
     enhancedJson: note?.enhanced_json ?? null,
     templateId: row.template_id,
@@ -164,31 +187,33 @@ export function setMeetingTemplate(meetingId: number, templateId: number | null)
 }
 
 export function saveNotes(id: number, markdown: string): void {
-  getDb()
-    .prepare(
-      `INSERT INTO notes (meeting_id, raw_user_md) VALUES (?, ?)
-       ON CONFLICT(meeting_id) DO UPDATE SET raw_user_md = excluded.raw_user_md`,
-    )
-    .run(id, markdown);
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO notes (meeting_id, raw_user_md) VALUES (?, ?)
+     ON CONFLICT(meeting_id) DO UPDATE SET raw_user_md = excluded.raw_user_md`,
+  ).run(id, markdown);
+  db.prepare(`UPDATE meetings SET updated_at = ? WHERE id = ?`).run(Date.now(), id);
   rebuildMeetingFts(id);
 }
 
 export function updateTitle(id: number, title: string): void {
-  getDb().prepare(`UPDATE meetings SET title = ? WHERE id = ?`).run(title, id);
+  getDb()
+    .prepare(`UPDATE meetings SET title = ?, updated_at = ? WHERE id = ?`)
+    .run(title, Date.now(), id);
   rebuildMeetingFts(id);
 }
 
 export function startMeeting(id: number): MeetingSummary {
   getDb()
-    .prepare(`UPDATE meetings SET status = 'transcribing', started_at = ? WHERE id = ?`)
-    .run(Date.now(), id);
+    .prepare(`UPDATE meetings SET status = 'transcribing', started_at = ?, updated_at = ? WHERE id = ?`)
+    .run(Date.now(), Date.now(), id);
   return getSummary(id);
 }
 
 export function endMeeting(id: number): MeetingSummary {
   getDb()
-    .prepare(`UPDATE meetings SET status = 'ended', ended_at = ? WHERE id = ?`)
-    .run(Date.now(), id);
+    .prepare(`UPDATE meetings SET status = 'ended', ended_at = ?, updated_at = ? WHERE id = ?`)
+    .run(Date.now(), Date.now(), id);
   rebuildMeetingFts(id);
   return getSummary(id);
 }
@@ -225,11 +250,11 @@ export function saveEnhancedNotes(
   enhancedJson: string,
   enhancedLang: string | null = null,
 ): void {
-  getDb()
-    .prepare(
-      `UPDATE notes SET enhanced_json = ?, enhanced_at = ?, enhanced_lang = ? WHERE meeting_id = ?`,
-    )
-    .run(enhancedJson, Date.now(), enhancedLang, id);
+  const db = getDb();
+  db.prepare(
+    `UPDATE notes SET enhanced_json = ?, enhanced_at = ?, enhanced_lang = ? WHERE meeting_id = ?`,
+  ).run(enhancedJson, Date.now(), enhancedLang, id);
+  db.prepare(`UPDATE meetings SET updated_at = ? WHERE id = ?`).run(Date.now(), id);
 }
 
 export function getEnhancerSegments(meetingId: number): EnhancerSegment[] {
@@ -270,14 +295,18 @@ export function getTranscript(meetingId: number): PersistedSegment[] {
 export function searchMeetings(query: string): MeetingSummary[] {
   const match = toFtsMatch(query);
   if (!match) return [];
+  const cols = SUMMARY_COLUMNS.split(', ')
+    .map((c) => `m.${c}`)
+    .join(', ');
   const rows = getDb()
     .prepare(
-      `SELECT m.id, m.title, m.status, m.created_at, m.started_at, m.ended_at
+      `SELECT ${cols}
        FROM search_fts f JOIN meetings m ON m.id = f.rowid
        WHERE search_fts MATCH ? ORDER BY rank`,
     )
     .all(match) as MeetingRow[];
-  return rows.map(toSummary);
+  const tags = tagsByMeeting();
+  return rows.map((r) => ({ ...toSummary(r), tags: tags.get(r.id) ?? [] }));
 }
 
 // Rebuild the single FTS row for a meeting (rowid = meeting id) from its current

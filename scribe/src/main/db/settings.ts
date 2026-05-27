@@ -49,6 +49,21 @@ export function getGlobalInstructions(): string {
   return getSetting('global_instructions') ?? '';
 }
 
+// ── First-run onboarding (ROADMAP_V04_07) ───────────────────────────────────
+
+/**
+ * Whether the first-run flow is complete. Legacy-safe: installs that predate the
+ * flag but already accepted privacy are treated as onboarded, so they aren't
+ * re-onboarded. A "wipe" clears both keys, so a fresh start re-onboards.
+ */
+export function getOnboardingDone(): boolean {
+  return getSetting('onboarding_done') === '1' || getSetting('privacy_accepted') === '1';
+}
+
+export function setOnboardingDone(): void {
+  setSetting('onboarding_done', '1');
+}
+
 // ── Appearance / theming (ROADMAP_V04_01) ──────────────────────────────────
 
 /** Persisted theme mode. Defaults to 'system' (follow the OS). */
@@ -93,7 +108,10 @@ export function wipeAllData(): void {
     db.prepare('DELETE FROM transcript_segments').run();
     db.prepare('DELETE FROM notes').run();
     db.prepare('DELETE FROM calendar_events').run();
+    db.prepare('DELETE FROM meeting_tags').run();
     db.prepare('DELETE FROM meetings').run();
+    db.prepare('DELETE FROM tags').run();
+    db.prepare('DELETE FROM folders').run();
     db.prepare('DELETE FROM search_fts').run();
     // Clears every setting, including the encrypted API keys + calendar OAuth tokens.
     db.prepare('DELETE FROM settings').run();

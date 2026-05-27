@@ -90,6 +90,18 @@ export function stopCalendarSync(): void {
   }
 }
 
+/**
+ * Reset live calendar state after a data wipe (ROADMAP_V04_07 follow-up). The wipe
+ * already deleted the OAuth tokens + cached events from the DB; this stops the poll
+ * loop and pushes the now-empty agenda so the running session matches (no lingering
+ * "connected" sync or stale agenda). Providers re-check the DB, so they read as
+ * disconnected immediately.
+ */
+export function resetCalendar(): void {
+  stopCalendarSync();
+  pushAgenda();
+}
+
 /** Disconnect a provider: revoke tokens, drop its cached events, refresh agenda. */
 export async function disconnectProvider(id: CalendarProviderId): Promise<void> {
   await getProvider(id).disconnect();

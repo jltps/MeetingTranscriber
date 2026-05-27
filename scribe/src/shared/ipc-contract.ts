@@ -11,11 +11,14 @@ import type {
   ChatMessage,
   CrossChatCitation,
   EnhancedNotes,
+  Folder,
   LanguageSetting,
   MeetingDetail,
   MeetingSummary,
   PersistedSegment,
+  RetrievalScope,
   SpeakerName,
+  Tag,
   Template,
   TemplateCreate,
   TranscriptSegment,
@@ -66,6 +69,7 @@ export const IPC = {
   settingsSetGlobalInstructions: 'settings:setGlobalInstructions',
   settingsTest: 'settings:test',
   settingsAcceptPrivacy: 'settings:acceptPrivacy',
+  settingsCompleteOnboarding: 'settings:completeOnboarding',
   settingsWipe: 'settings:wipe',
 
   themeGet: 'theme:get', // → ThemeView
@@ -99,6 +103,19 @@ export const IPC = {
 
   // Cross-meeting querying (ROADMAP_07 Phase 2)
   crossChatAsk: 'chat:askAcross', // { scope, messages } → CrossChatResult (streams via chat:token)
+
+  // Note organization — folders + tags (ROADMAP_V04_04)
+  foldersList: 'folders:list',
+  foldersCreate: 'folders:create',
+  foldersRename: 'folders:rename',
+  foldersMove: 'folders:move',
+  foldersDelete: 'folders:delete',
+  tagsList: 'tags:list',
+  tagsCreate: 'tags:create',
+  tagsDelete: 'tags:delete',
+  meetingsSetFolder: 'meetings:setFolder',
+  meetingsAddTag: 'meetings:addTag',
+  meetingsRemoveTag: 'meetings:removeTag',
 } as const;
 
 export const AppStatusSchema = z.object({
@@ -212,6 +229,8 @@ export type SettingsView = {
   /** Free-text instructions appended to every enhancement (FEATURES §B1). */
   globalInstructions: string;
   privacyAccepted: boolean;
+  /** Whether the first-run onboarding flow is complete (ROADMAP_V04_07). */
+  onboardingDone: boolean;
   /** Aggregate usage totals across all meetings (ROADMAP_01 §3). */
   usageTotals: UsageTotals;
   /** 'deepgram' (default) or 'whisper' (local, ROADMAP_05). */
@@ -314,6 +333,7 @@ export interface SettingsApi {
   setWhisperModel(model: string): Promise<void>;
   test(provider: TestProvider, key?: string): Promise<TestResult>;
   acceptPrivacy(): Promise<void>;
+  completeOnboarding(): Promise<void>;
   wipe(): Promise<void>;
 }
 
@@ -346,6 +366,9 @@ const BackupMeetingSchema = z.object({
   enhancedAt: z.number().int().nullable(),
   enhancedLang: z.string().nullable(),
   templateName: z.string().nullable(),
+  // Organization (backup v2). Default keeps v1 bundles (without these) valid.
+  folderId: z.number().int().positive().nullable().default(null),
+  tags: z.array(z.string()).default([]),
   usage: z.object({
     deepgramAudioMs: z.number().int(),
     claudeInputTokens: z.number().int(),
@@ -365,16 +388,34 @@ const BackupTemplateSchema = z.object({
   updatedAt: z.number().int(),
 });
 
+const BackupFolderSchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string(),
+  parentId: z.number().int().positive().nullable(),
+  createdAt: z.number().int(),
+});
+
+const BackupTagSchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string(),
+  createdAt: z.number().int(),
+});
+
 /**
  * Schema for validating a Scribe backup file before restoring (ROADMAP_04 §2).
- * Parsed from the user-selected JSON — validated before any DB writes.
+ * Parsed from the user-selected JSON — validated before any DB writes. v2 adds
+ * folders + tags (ROADMAP_V04_04); v1 bundles still validate (folders/tags default
+ * to empty, per-meeting folderId/tags default via BackupMeetingSchema). `app`
+ * stays the literal 'scribe' so older backups keep validating.
  */
 export const BackupBundleSchema = z.object({
-  version: z.literal(1),
+  version: z.union([z.literal(1), z.literal(2)]),
   app: z.literal('scribe'),
   exportedAt: z.string(),
   meetings: z.array(BackupMeetingSchema),
   templates: z.array(BackupTemplateSchema),
+  folders: z.array(BackupFolderSchema).default([]),
+  tags: z.array(BackupTagSchema).default([]),
 });
 export type BackupBundle = z.infer<typeof BackupBundleSchema>;
 export type BackupMeeting = z.infer<typeof BackupMeetingSchema>;
@@ -524,7 +565,9 @@ export type ChatResult = {
 export const RetrievalScopeSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('all') }),
   z.object({ mode: z.literal('meetings'), meetingIds: z.array(MeetingIdSchema).min(1) }),
-]);
+  z.object({ mode: z.literal('folder'), folderId: MeetingIdSchema }),
+  z.object({ mode: z.literal('tag'), tagId: MeetingIdSchema }),
+]) satisfies z.ZodType<RetrievalScope>;
 
 export const CrossChatAskSchema = z.object({
   scope: RetrievalScopeSchema,
@@ -552,6 +595,36 @@ export interface ChatApi {
   onToken(cb: (e: ChatToken) => void): () => void;
 }
 
+// ─── Note organization — folders + tags (ROADMAP_V04_04) ─────────────────────
+
+export const FolderCreateSchema = z.object({
+  name: z.string().min(1).max(80),
+  parentId: MeetingIdSchema.nullable(),
+});
+export const FolderRenameSchema = z.object({ id: MeetingIdSchema, name: z.string().min(1).max(80) });
+export const FolderMoveSchema = z.object({ id: MeetingIdSchema, parentId: MeetingIdSchema.nullable() });
+export const TagNameSchema = z.string().min(1).max(40);
+export const MeetingSetFolderSchema = z.object({
+  meetingId: MeetingIdSchema,
+  folderId: MeetingIdSchema.nullable(),
+});
+export const MeetingTagSchema = z.object({ meetingId: MeetingIdSchema, tagId: MeetingIdSchema });
+
+/** Folders + tags management. Folder delete nulls its meetings (never deletes them). */
+export interface OrganizationApi {
+  listFolders(): Promise<Folder[]>;
+  createFolder(name: string, parentId: number | null): Promise<Folder>;
+  renameFolder(id: number, name: string): Promise<void>;
+  moveFolder(id: number, parentId: number | null): Promise<void>;
+  deleteFolder(id: number): Promise<void>;
+  listTags(): Promise<Tag[]>;
+  createTag(name: string): Promise<Tag>;
+  deleteTag(id: number): Promise<void>;
+  setMeetingFolder(meetingId: number, folderId: number | null): Promise<void>;
+  addMeetingTag(meetingId: number, tagId: number): Promise<void>;
+  removeMeetingTag(meetingId: number, tagId: number): Promise<void>;
+}
+
 /** The typed surface exposed to the renderer as window.api. */
 export interface ScribeApi {
   getStatus(): Promise<AppStatus>;
@@ -565,6 +638,7 @@ export interface ScribeApi {
   meetings: MeetingsApi;
   templates: TemplatesApi;
   speakers: SpeakersApi;
+  organization: OrganizationApi;
   enhance(meetingId: number): Promise<EnhanceResult>;
   settings: SettingsApi;
   theme: ThemeApi;

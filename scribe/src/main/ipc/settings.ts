@@ -15,8 +15,10 @@ import {
   getGlobalInstructions,
   getLanguage,
   getSetting,
+  getOnboardingDone,
   getTranscriptionProvider,
   getWhisperModel,
+  setOnboardingDone,
   setTranscriptionProvider,
   setWhisperModel,
   setSetting,
@@ -30,6 +32,7 @@ import {
   setDeepgramKey,
 } from '../secrets/api-keys';
 import { isGoogleConnected, isMicrosoftConnected } from '../secrets/calendar-tokens';
+import { resetCalendar } from '../calendar';
 import { themeView } from '../theme';
 import { testDeepgramKey } from '../transcription/deepgram';
 import { testAnthropicKey } from '../enhancer/anthropic';
@@ -45,6 +48,7 @@ export function registerSettingsIpc(): void {
     language: getLanguage(),
     globalInstructions: getGlobalInstructions(),
     privacyAccepted: getSetting('privacy_accepted') === '1',
+    onboardingDone: getOnboardingDone(),
     usageTotals: getUsageTotals(),
     transcriptionProvider: getTranscriptionProvider(),
     whisperModel: getWhisperModel(),
@@ -88,8 +92,15 @@ export function registerSettingsIpc(): void {
     setSetting('privacy_accepted', '1');
   });
 
+  ipcMain.handle(IPC.settingsCompleteOnboarding, () => {
+    setOnboardingDone();
+  });
+
   ipcMain.handle(IPC.settingsWipe, () => {
     wipeAllData();
+    // Match live state to the wiped DB: stop the calendar poll + clear the agenda
+    // (tokens/events are already gone, so providers now read as disconnected).
+    resetCalendar();
     logger.info('all local data wiped');
   });
 

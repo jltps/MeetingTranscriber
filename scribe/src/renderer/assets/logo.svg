@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Nexus">
+  <defs>
+    <linearGradient id="nexus-grad" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#10b981"/>
+      <stop offset="1" stop-color="#0f766e"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="256" height="256" rx="56" ry="56" fill="url(#nexus-grad)"/>
+  <!-- Monogram "N": two vertical bars + a diagonal (matches build/make-icons.mjs geometry). -->
+  <g fill="#ffffff">
+    <rect x="70" y="64" width="28" height="128"/>
+    <rect x="158" y="64" width="28" height="128"/>
+    <polygon points="70,64 98,64 186,192 158,192"/>
+  </g>
+</svg>

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Plus } from 'lucide-react';
 import type { LanguageSetting, Template, TemplateCreate } from '../../../shared/types';
-import type { SettingsView, TestProvider, TestResult, WhisperModelStatus } from '../../../shared/ipc-contract';
+import type { SettingsView, WhisperModelStatus } from '../../../shared/ipc-contract';
 import { TemplateEditorModal } from '../templates/TemplateEditorModal';
 import { CalendarSettingsSection } from '../calendar/CalendarSettingsSection';
+import { KeyRow } from './KeyRow';
 import { useTheme } from '../theme/use-theme';
 import { estimateCost, formatAudioDuration, formatCost } from '../../../shared/pricing';
 import {
@@ -14,7 +15,6 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -54,81 +54,6 @@ function langSettingToSelectValue(lang: LanguageSetting): string {
 function selectValueToLangSetting(value: string): LanguageSetting {
   if (value === 'auto') return { mode: 'auto' };
   return { mode: 'fixed', bcp47: value };
-}
-
-type KeyRowProps = {
-  label: string;
-  provider: TestProvider;
-  isSet: boolean;
-  onSaved: () => void;
-};
-
-function KeyRow({ label, provider, isSet, onSaved }: KeyRowProps) {
-  const [value, setValue] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [result, setResult] = useState<TestResult | null>(null);
-
-  const save = async (): Promise<void> => {
-    setSaving(true);
-    setResult(null);
-    try {
-      await window.api.settings.setKeys(
-        provider === 'deepgram' ? { deepgram: value } : { anthropic: value },
-      );
-      setValue('');
-      onSaved();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const test = async (): Promise<void> => {
-    setTesting(true);
-    setResult(null);
-    try {
-      // Test the key in the box if there is one; otherwise test the saved key.
-      setResult(await window.api.settings.test(provider, value.trim() || undefined));
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <label className="text-sm text-muted-foreground">{label}</label>
-        <span className={`text-[11px] ${isSet ? 'text-primary' : 'text-muted-foreground'}`}>
-          {isSet ? 'key saved' : 'not set'}
-        </span>
-      </div>
-      <div className="flex gap-2">
-        <Input
-          type="password"
-          value={value}
-          placeholder={isSet ? 'Enter a new key to replace' : 'Paste API key'}
-          onChange={(e) => setValue(e.target.value)}
-          className="h-8 text-xs"
-        />
-        <Button size="sm" onClick={() => void save()} disabled={saving || value.trim() === ''}>
-          {saving ? 'Saving…' : 'Save'}
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => void test()}
-          disabled={testing || (value.trim() === '' && !isSet)}
-        >
-          {testing ? 'Testing…' : 'Test'}
-        </Button>
-      </div>
-      {result && (
-        <p className={`text-[11px] ${result.ok ? 'text-primary' : 'text-destructive'}`}>
-          {result.ok ? 'Connection OK' : (result.message ?? 'Connection failed')}
-        </p>
-      )}
-    </div>
-  );
 }
 
 type SettingsModalProps = {

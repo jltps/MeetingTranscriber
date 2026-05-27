@@ -1,4 +1,5 @@
 import { getEnhancerSegments, getMeeting, listMeetings, searchMeetings } from '../../db/meetings';
+import { meetingIdsInFolder, meetingIdsWithTag } from '../../db/organization';
 import { getSpeakerNames } from '../../db/speakers';
 import type { Retriever, RetrievalScope, RetrievedSegment } from './retriever';
 import { rankSegments } from './scorer';
@@ -33,11 +34,14 @@ export class FtsRetriever implements Retriever {
   }
 }
 
-// 'meetings' mode honours the explicit selection. 'all' mode uses FTS to rank
-// relevant meetings, falling back to recent meetings when the query has no usable
-// terms (e.g. "summarize everything"), so retrieval still has something to rank.
+// Explicit scopes ('meetings', 'folder' incl. descendants, 'tag') honour their
+// selection directly. 'all' mode uses FTS to rank relevant meetings, falling back
+// to recent meetings when the query has no usable terms (e.g. "summarize
+// everything"), so retrieval still has something to rank.
 function shortlistMeetings(query: string, scope: RetrievalScope): number[] {
   if (scope.mode === 'meetings') return scope.meetingIds;
+  if (scope.mode === 'folder') return meetingIdsInFolder(scope.folderId);
+  if (scope.mode === 'tag') return meetingIdsWithTag(scope.tagId);
   const matched = searchMeetings(query).map((m) => m.id);
   if (matched.length > 0) return matched.slice(0, MEETING_SHORTLIST_K);
   return listMeetings()

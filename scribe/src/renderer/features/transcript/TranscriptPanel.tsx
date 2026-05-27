@@ -1,7 +1,8 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ArrowRightLeft } from 'lucide-react';
+import { ArrowRightLeft, Mic } from 'lucide-react';
 import type { TranscriptSegment } from '../../../shared/types';
+import { EmptyState } from '../../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -114,7 +115,7 @@ const Line = memo(function Line({
             if (e.key === 'Enter' || e.key === ' ') startEdit();
           }}
           title={onRenameSpeaker && !interim ? 'Click to rename speaker' : undefined}
-          className={`mr-2 text-xs font-semibold ${isMe ? 'text-speaker-self' : 'text-speaker-other'} ${
+          className={`mr-2 rounded text-xs font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring ${isMe ? 'text-speaker-self' : 'text-speaker-other'} ${
             onRenameSpeaker && !interim ? 'cursor-pointer hover:underline' : ''
           }`}
         >
@@ -132,6 +133,7 @@ const Line = memo(function Line({
             <Button
               variant="ghost"
               size="icon-xs"
+              aria-label="Reassign this segment to a different speaker"
               title="Reassign this segment to a different speaker"
               className="ml-1.5 inline-flex align-middle text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 data-[state=open]:opacity-100"
             >
@@ -235,10 +237,11 @@ export function TranscriptPanel({
         className="flex-1 overflow-y-auto rounded-lg border border-border bg-card p-4"
       >
         {empty ? (
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Transcript appears here once you start. CH0 (your mic) is labelled "Me"; CH1 (system
-            audio) speakers are separated by diarization.
-          </p>
+          <EmptyState
+            icon={Mic}
+            title="Nothing captured yet"
+            description={'Start recording to see the live transcript. CH0 (your mic) is labelled “Me”; CH1 (system audio) speakers are split by diarization.'}
+          />
         ) : (
           <>
             {/* Virtualized finals list */}

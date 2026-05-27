@@ -45,6 +45,12 @@ export type MeetingSummary = {
   endedAt: number | null;
   /** Template used for this meeting's enhancement, if any (FEATURES §C, Tweak 3). */
   templateId: number | null;
+  /** Folder this meeting is filed under, or null when unfiled (ROADMAP_V04_04). */
+  folderId: number | null;
+  /** Last-modified timestamp for the "updated" sort; null on legacy rows (ROADMAP_V04_04). */
+  updatedAt: number | null;
+  /** Tag names applied to this meeting (ROADMAP_V04_04). */
+  tags: string[];
 };
 
 /** Per-meeting usage snapshot (ROADMAP_01 §3). Figures are cumulative totals. */
@@ -65,6 +71,23 @@ export type MeetingDetail = MeetingSummary & {
   enhancedLang: string | null;
   /** Usage stats for cost display (ROADMAP_01 §3). */
   usage: MeetingUsage;
+};
+
+// ─── Note organization (ROADMAP_V04_04) ────────────────────────────────────
+
+/** A folder in the meeting hierarchy. parentId is null for top-level folders. */
+export type Folder = {
+  id: number;
+  name: string;
+  parentId: number | null;
+  createdAt: number;
+};
+
+/** A flat, case-insensitive-unique label applied to meetings (many-to-many). */
+export type Tag = {
+  id: number;
+  name: string;
+  createdAt: number;
 };
 
 /** How a template resolves its language (FEATURES §C1). */
@@ -116,8 +139,15 @@ export type ChatCitation = {
   segmentId: number;
 };
 
-/** Which meetings a cross-meeting query covers (ROADMAP_07 Phase 2). */
-export type RetrievalScope = { mode: 'all' } | { mode: 'meetings'; meetingIds: number[] };
+/**
+ * Which meetings a cross-meeting query covers (ROADMAP_07 Phase 2; folder/tag
+ * scopes added in ROADMAP_V04_04). 'folder' includes the folder's descendants.
+ */
+export type RetrievalScope =
+  | { mode: 'all' }
+  | { mode: 'meetings'; meetingIds: number[] }
+  | { mode: 'folder'; folderId: number }
+  | { mode: 'tag'; tagId: number };
 
 /**
  * A cross-meeting citation. Segment ids are global, so each pins down both the

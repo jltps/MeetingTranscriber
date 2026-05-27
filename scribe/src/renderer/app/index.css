@@ -28,15 +28,17 @@
   --accent-foreground: #171717;
   --border: #e5e5e5;
   --input: #d4d4d4;
-  --ring: #0d9488;
-  --primary: #0d9488; /* emerald/teal brand accent */
+  /* Accents are the 700 step so white text / accent-coloured text clears WCAG AA
+     (4.5:1) on the light surfaces (ROADMAP_V04_08). */
+  --ring: #0f766e;
+  --primary: #0f766e; /* emerald/teal brand accent (teal-700) */
   --primary-foreground: #ffffff;
-  --destructive: #dc2626;
+  --destructive: #b91c1c;
   --destructive-foreground: #ffffff;
   --warning: #b45309;
-  --info: #0284c7;
+  --info: #0369a1;
   --speaker-self: #047857;
-  --speaker-other: #0284c7;
+  --speaker-other: #0369a1;
   --note-user: #171717;
   --note-ai: #6b7280;
   --source-link: #6b7280;
@@ -117,6 +119,30 @@
   }
 }
 
+/* Respect the OS "reduce motion" setting (ROADMAP_V04_08): neutralize the recording
+   pulse, the reconnect spinner, and Radix/tw-animate-css dialog/menu/palette
+   transitions. Meaning is preserved — the recording dot stays lit, "Reconnecting…"
+   text remains; only the motion stops. JS-driven layout (resizable drag) is unaffected. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Frameless window drag regions (ROADMAP_V04_03). The title-bar strip is draggable;
+   interactive children opt out with .titlebar-no-drag so clicks aren't swallowed. */
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 html,
 body,
 #root {
@@ -125,6 +151,10 @@ body,
 
 body {
   margin: 0;
+  /* Set on body so portaled content (Radix dialogs/menus rendered under <body>,
+     outside the App's text-foreground root) inherits the theme colours too. */
+  background-color: var(--background);
+  color: var(--foreground);
 }
 
 /* Notes editor (TipTap). Tailwind's preflight resets lists/headings, so the

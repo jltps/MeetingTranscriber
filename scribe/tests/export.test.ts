@@ -30,6 +30,8 @@ function makeMeeting(overrides: Partial<BackupMeeting> = {}): BackupMeeting {
     enhancedAt: null,
     enhancedLang: null,
     templateName: null,
+    folderId: null,
+    tags: [],
     usage: { deepgramAudioMs: 2_550_000, claudeInputTokens: 3200, claudeOutputTokens: 1100 },
     segments: [
       { id: 10, channel: 1, speakerLabel: 'Speaker 1', text: 'Hello everyone', startMs: 1000, endMs: 3000 },
@@ -149,8 +151,53 @@ describe('BackupBundleSchema', () => {
     expect(() => BackupBundleSchema.parse(makeBundle())).not.toThrow();
   });
 
-  it('rejects wrong version', () => {
-    expect(() => BackupBundleSchema.parse(makeBundle({ version: 2 }))).toThrow();
+  it('accepts both v1 and v2 versions', () => {
+    expect(() => BackupBundleSchema.parse(makeBundle({ version: 1 }))).not.toThrow();
+    expect(() => BackupBundleSchema.parse(makeBundle({ version: 2 }))).not.toThrow();
+  });
+
+  it('rejects an unsupported version', () => {
+    expect(() => BackupBundleSchema.parse(makeBundle({ version: 3 }))).toThrow();
+  });
+
+  it('defaults folders/tags to empty for a v1 bundle (back-compat)', () => {
+    const parsed = BackupBundleSchema.parse(makeBundle({ version: 1 }));
+    expect(parsed.folders).toEqual([]);
+    expect(parsed.tags).toEqual([]);
+  });
+
+  it('accepts a v2 bundle carrying folders + tags and per-meeting org', () => {
+    const bundle = makeBundle({
+      version: 2,
+      folders: [{ id: 1, name: 'Clients', parentId: null, createdAt: 1000 }],
+      tags: [{ id: 7, name: 'urgent', createdAt: 1000 }],
+      meetings: [
+        {
+          id: 1,
+          title: 'Filed meeting',
+          status: 'ended',
+          createdAt: 1000,
+          startedAt: 1001,
+          endedAt: 2000,
+          templateId: null,
+          rawUserMd: 'notes',
+          enhancedJson: null,
+          enhancedAt: null,
+          enhancedLang: null,
+          templateName: null,
+          folderId: 1,
+          tags: ['urgent'],
+          usage: { deepgramAudioMs: 100, claudeInputTokens: 50, claudeOutputTokens: 20 },
+          segments: [],
+          speakerNames: [],
+        },
+      ],
+    });
+    const parsed = BackupBundleSchema.parse(bundle);
+    expect(parsed.folders[0].name).toBe('Clients');
+    expect(parsed.tags[0].name).toBe('urgent');
+    expect(parsed.meetings[0].folderId).toBe(1);
+    expect(parsed.meetings[0].tags).toEqual(['urgent']);
   });
 
   it('rejects wrong app identifier', () => {

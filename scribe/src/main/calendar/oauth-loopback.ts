@@ -14,10 +14,10 @@ import { shell } from 'electron';
 const DEFAULT_TIMEOUT_MS = 3 * 60 * 1000; // user has 3 min to complete consent
 
 const CALLBACK_HTML =
-  '<!doctype html><html><head><meta charset="utf-8"><title>Scribe</title></head>' +
+  '<!doctype html><html><head><meta charset="utf-8"><title>Nexus</title></head>' +
   '<body style="font-family:sans-serif;background:#0b0e12;color:#e5e5e5;display:flex;' +
   'align-items:center;justify-content:center;height:100vh;margin:0">' +
-  '<div style="text-align:center"><h2>Scribe is connected.</h2>' +
+  '<div style="text-align:center"><h2>Nexus is connected.</h2>' +
   '<p>You can close this tab and return to the app.</p></div></body></html>';
 
 export type CaptureLoopbackOptions = {

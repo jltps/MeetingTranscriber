@@ -11,14 +11,21 @@ fed to Claude Code. Build in the milestone order given in §11. Do not skip the
 non-goals in §3 — they existed to keep v1 shippable.
 
 > **Status (historical document).** v1 (§11, milestones M0–M6) is **shipped**. The
-> app is at v0.3.0 and has since absorbed most of the §3 non-goals and §13 roadmap:
+> app is at v0.4.0 and has since absorbed most of the §3 non-goals and §13 roadmap:
 > multi-language + auto-detect, enhancement prompt control + templates, reliability
 > hardening + usage/cost, speaker naming, export/backup, local Whisper, calendar
-> (Google + Microsoft, free/busy only), and cross-meeting chat are all built. This
-> file is kept as the **original v1 intent**; for *how* the code should behave today
-> see `CLAUDE.md`, for shipped-feature specs see `roadmap/v02` and `roadmap/v03`, and
-> for the live overview see `README.md`. Where this spec and the code disagree, **the
-> code wins** (CLAUDE.md). §3 and §13 are annotated below with what has since shipped.
+> (Google + Microsoft, free/busy only), and cross-meeting chat are all built. It has
+> also completed **V04 — a UI/UX + rebrand phase** (Tailwind-v4 design tokens with
+> light/dark/system theming, shadcn/ui + lucide components, a frameless custom title
+> bar replacing the native menu, folders + tags, a command palette, window-state
+> persistence + responsive layout, an onboarding flow, and an accessibility pass) and
+> was **renamed Scribe → Nexus**. The rename is cosmetic only: the `scribe/` directory,
+> the `com.scribe.app` app id, and the `scribe.sqlite` database are unchanged so
+> existing installs keep their data. This file keeps the original **"Scribe"** name as
+> historical v1 intent; for *how* the code should behave today see `CLAUDE.md`, for
+> shipped-feature specs see `roadmap/v02`–`roadmap/v04`, and for the live overview see
+> `README.md`. Where this spec and the code disagree, **the code wins** (CLAUDE.md).
+> §3 and §13 are annotated below with what has since shipped.
 
 ---
 

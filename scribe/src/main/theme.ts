@@ -1,4 +1,5 @@
 import { BrowserWindow, nativeTheme } from 'electron';
+import type { TitleBarOverlay } from 'electron';
 import type { ThemeMode, ThemeView } from '../shared/ipc-contract';
 import { getThemeMode, setThemeMode } from './db/settings';
 
@@ -11,6 +12,18 @@ import { getThemeMode, setThemeMode } from './db/settings';
 // Window background colours — kept in sync with --background in index.css so the
 // native frame never flashes the wrong colour before the renderer paints.
 const BACKGROUND = { dark: '#0a0a0a', light: '#fafafa' } as const;
+// Foreground (mirrors --foreground) — used as the title-bar overlay symbol colour.
+const FOREGROUND = { dark: '#e5e5e5', light: '#171717' } as const;
+
+// The frameless title bar (ROADMAP_V04_03). The renderer's TitleBar height (h-10)
+// MUST match this so the OS-drawn window controls align vertically.
+export const TITLEBAR_HEIGHT = 40;
+
+/** Window Controls Overlay config, themed to the effective theme. Windows/Linux only. */
+export function overlayConfig(): TitleBarOverlay {
+  const t = effectiveTheme();
+  return { color: BACKGROUND[t], symbolColor: FOREGROUND[t], height: TITLEBAR_HEIGHT };
+}
 
 export function effectiveTheme(): 'light' | 'dark' {
   return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
@@ -42,13 +55,16 @@ export function initialBackgroundColor(): string {
 }
 
 /**
- * Keep a window's native background in step with the effective theme. Fires when
- * the OS theme flips while in 'system' mode, or when the user switches modes.
- * (Block 03 will extend this hook to re-colour the title-bar overlay.)
+ * Keep a window's native chrome in step with the effective theme. Fires when the
+ * OS theme flips while in 'system' mode, or when the user switches modes — recolours
+ * both the window background and the title-bar overlay controls (ROADMAP_V04_03).
  */
 export function registerThemeWindow(win: BrowserWindow): void {
   const update = (): void => {
-    if (!win.isDestroyed()) win.setBackgroundColor(backgroundColor());
+    if (win.isDestroyed()) return;
+    win.setBackgroundColor(backgroundColor());
+    // titleBarOverlay is Windows/Linux only; macOS is out of scope (§12).
+    if (process.platform !== 'darwin') win.setTitleBarOverlay(overlayConfig());
   };
   nativeTheme.on('updated', update);
   win.on('closed', () => nativeTheme.removeListener('updated', update));

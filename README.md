@@ -1,6 +1,6 @@
-# Scribe
+# Nexus
 
-A **bot-free, device-audio meeting notepad for Windows**. Scribe transcribes your
+A **bot-free, device-audio meeting notepad for Windows**. Nexus transcribes your
 whole meeting by capturing your computer's audio + microphone locally — it **never
 joins the call** as a participant and **never stores audio**. You jot rough notes
 during the call; afterwards an LLM fleshes them out from the full transcript,
@@ -17,8 +17,9 @@ The app lives in [`scribe/`](scribe/). This file is the project overview; see th
 
 ## Status
 
-Shipping at **v0.3.0**. v1 (milestones M0–M6) is complete, and the post-v1
-backlog is largely built:
+Shipping at **v0.4.0**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
+largely built, and **V04 — the UI/UX + rebrand phase — has shipped** (the product was
+renamed **Scribe → Nexus**):
 
 **v1 — core (shipped)**
 - Mic + Windows loopback system audio captured as a 2-channel 16 kHz PCM stream
@@ -51,14 +52,32 @@ backlog is largely built:
 - **Cross-meeting intelligence**: per-meeting chat and cross-meeting querying with
   grounded citations.
 
-Not yet built: transcript/enhancement quality eval loop (ROADMAP_03) and the
-sync/sharing phases of the data block (ROADMAP_04).
+**v4 — UI/UX + rebrand (shipped)**
+- **Design system**: Tailwind v4 CSS-variable tokens, **light/dark/system** theming
+  synced to the OS; shadcn/ui + lucide components throughout.
+- **App shell**: frameless window with a branded **custom title bar** (native menu
+  removed); window size/position/split persisted across launches; responsive
+  narrow-width layout.
+- **Organization**: **folders + tags** for notes, which also scope cross-meeting chat.
+- **Command palette** (Ctrl/Cmd-K) + keyboard shortcuts over an action registry.
+- **Onboarding** flow (welcome → privacy → connect keys → ready) + polished empty
+  states with a connect-keys CTA.
+- **Accessibility**: AA contrast in both themes, keyboard operability + visible focus,
+  reduced-motion, ARIA/live regions (`eslint-plugin-jsx-a11y` in CI).
+- **Rebrand to Nexus**: app icon, in-app logo, and installer identity. The rename is
+  cosmetic — the `com.scribe.app` id and `scribe.sqlite` DB are unchanged so existing
+  installs keep their meetings, keys, and layout.
+
+Not yet built: transcript/enhancement quality eval loop (v03 ROADMAP_03) and the
+sync/sharing phases of the data block (v03 ROADMAP_04).
 
 ## Tech stack
 
 - **Electron 33** + **React 18** + **TypeScript** (strict) + **Vite**
   (`electron-vite`).
-- **Tailwind CSS** for styling, **TipTap** (ProseMirror) for the notes editor.
+- **Tailwind CSS v4** (CSS-variable design tokens, light/dark/system theming) +
+  **shadcn/ui** on **Radix** + **lucide** icons + **cmdk** (command palette) for the UI;
+  **TipTap** (ProseMirror) for the notes editor.
 - **better-sqlite3** for local storage (main process only).
 - Web Audio API + **AudioWorklet** for capture/mix/resample to 16 kHz.
 - **Deepgram** streaming (cloud) or local **Whisper** for transcription, both
@@ -75,7 +94,7 @@ sync/sharing phases of the data block (ROADMAP_04).
    via Electron `safeStorage` (Windows DPAPI); network calls originate in main.
 3. **Renderer is untrusted** — `contextIsolation: true`, `nodeIntegration: false`,
    typed IPC bridge only.
-4. **No bot, no meeting-platform integration** — Scribe only touches OS audio.
+4. **No bot, no meeting-platform integration** — Nexus only touches OS audio.
    Calendar access is read-only free/busy, used solely to know *when* to start.
 5. **Your notes are sacred** — enhancement expands them, never deletes or silently
    rewrites them.
@@ -114,17 +133,20 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 ├─ README.md            # this file
 ├─ PRODUCT_SPEC.md      # original v1 product intent (now shipped — historical)
 ├─ CLAUDE.md            # standing conventions & invariants (how the code behaves)
-├─ BUILD_GUIDE.md       # how to build/extend Scribe with Claude Code
+├─ BUILD_GUIDE.md       # how to build/extend Nexus with Claude Code
 ├─ reference/           # M1 audio capture reference (study, not source)
 ├─ roadmap/
 │  ├─ v02/FEATURES_LANGUAGE_PROMPT_TEMPLATES.md   # language/prompts/templates
-│  └─ v03/ROADMAP_*.md                            # post-v1 backlog blocks
+│  ├─ v03/ROADMAP_*.md                            # post-v1 backlog blocks
+│  └─ v04/ROADMAP_*.md                            # UI/UX + rebrand phase (Nexus)
 └─ scribe/              # the application
+   ├─ build/            # brand assets: icon.ico, icon.png, make-icons.mjs
    └─ src/
       ├─ main/          # Electron main: window, ipc/, db/, audio/, transcription/,
-      │                 # enhancer/, chat/, calendar/, secrets/
+      │                 # enhancer/, chat/, calendar/, secrets/, theme, window-state
       ├─ preload/       # contextBridge: typed window.api only
-      ├─ renderer/      # React app: app/, features/, audio/, lib/
+      ├─ renderer/      # React app: app/, features/, components/ (ui/ = shadcn),
+      │                 # assets/, audio/, lib/
       └─ shared/        # types + ipc-contract.ts (Zod) — no node/electron/react
 ```
 
@@ -137,6 +159,7 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 | `BUILD_GUIDE.md` | The build *process* — milestone discipline for v1 and the roadmap-driven flow for extensions. |
 | `roadmap/v02/…` | Language, enhancement-prompt control, and templates (shipped). |
 | `roadmap/v03/…` | Reliability, speaker naming, quality, data, Whisper, calendar, cross-meeting (see `ROADMAP_00_INDEX.md`). |
+| `roadmap/v04/…` | UI/UX + rebrand: design tokens/theming, shadcn/ui, app shell, folders/tags, command palette, layout, onboarding, accessibility, Nexus rebrand. |
 | `scribe/docs/CALENDAR_SETUP.md` | One-time Google / Microsoft OAuth client setup. |
 
 **Ground truth is the code, not the docs.** Where any doc disagrees with the

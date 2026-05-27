@@ -63,6 +63,8 @@ export function TemplateEditorModal({ template, onSave, onClose }: TemplateEdito
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Template name"
+            // Editor opens to author a template — focusing its first field on open is expected.
+            // eslint-disable-next-line jsx-a11y/no-autofocus
             autoFocus
           />
         </div>

@@ -10,7 +10,7 @@ import { NotesEditor } from '../features/notes/NotesEditor';
 import { EnhancedNotesEditor } from '../features/notes/EnhancedNotesEditor';
 import { useSettings } from '../features/settings/use-settings';
 import { SettingsModal } from '../features/settings/SettingsModal';
-import { PrivacyNotice } from '../features/settings/PrivacyNotice';
+import { OnboardingFlow } from '../features/onboarding/OnboardingFlow';
 import { TemplatePickerModal } from '../features/templates/TemplatePickerModal';
 import { ChatPanel } from '../features/chat/ChatPanel';
 import { useChat } from '../features/chat/use-chat';
@@ -21,9 +21,21 @@ import { useAutoStartScheduler } from '../features/calendar/use-auto-start-sched
 import { AgendaPanel } from '../features/calendar/AgendaPanel';
 import { AutoStartPrompt } from '../features/calendar/AutoStartPrompt';
 import { useDebouncedCallback } from '../lib/debounce';
+import type { ImperativePanelHandle } from 'react-resizable-panels';
+import { useOrganization } from '../features/organization/use-organization';
+import { MeetingOrgControls } from '../features/organization/MeetingOrgControls';
+import { useTheme } from '../features/theme/use-theme';
+import { useLayoutMode } from '../features/layout/use-responsive';
+import { LayoutShell } from '../features/layout/LayoutShell';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { CommandPalette } from '../features/commands/CommandPalette';
+import { buildActions } from '../features/commands/actions';
+import { useShortcuts } from '../features/commands/use-shortcuts';
 import { CaptureProbe } from './CaptureProbe';
+import { TitleBar } from './TitleBar';
 import { estimateCost, formatAudioDuration, formatCost } from '../../shared/pricing';
-import { Download, Mic, Sparkles, Square } from 'lucide-react';
+import { Download, Mic, NotebookPen, Sparkles, Square } from 'lucide-react';
+import { EmptyState } from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
@@ -54,6 +66,8 @@ export function App() {
   const transcription = useTranscription();
   const { settings, refresh: refreshSettings } = useSettings();
   const calendar = useCalendar();
+  const org = useOrganization();
+  const { theme, setMode } = useTheme();
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const chat = useChat(selectedId);
@@ -83,6 +97,26 @@ export function App() {
   const [exportError, setExportError] = useState<string | null>(null);
 
   const [showSettings, setShowSettings] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  // First-run onboarding (ROADMAP_V04_07). Local-state controlled so the flow doesn't
+  // vanish mid-way when its privacy step persists; shown once when settings load unonboarded.
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  // Layout (ROADMAP_V04_06): responsive mode, narrow-mode meeting tab, sidebar drawer.
+  const layoutMode = useLayoutMode();
+  const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [mainTab, setMainTab] = useState<'notes' | 'transcript' | 'chat'>('notes');
+  const toggleSidebar = useCallback(() => {
+    if (layoutMode === 'wide') {
+      const p = sidebarPanelRef.current;
+      if (p) {
+        if (p.isCollapsed()) p.expand();
+        else p.collapse();
+      }
+    } else {
+      setDrawerOpen((o) => !o);
+    }
+  }, [layoutMode]);
   const [highlight, setHighlight] = useState<TranscriptHighlight | null>(null);
   /** BCP-47 code detected by Deepgram during the current/last auto-detect session. */
   const [detectedLang, setDetectedLang] = useState<string | null>(null);
@@ -90,6 +124,8 @@ export function App() {
   const [templates, setTemplates] = useState<Template[]>([]);
   /** Whether the template picker modal is open before creating a new meeting. */
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  /** Folder a pending new note should land in (set when the picker is opened). */
+  const [pendingFolderId, setPendingFolderId] = useState<number | null>(null);
 
   /** Speaker display names for the currently selected meeting (ROADMAP_02). */
   const [speakerNames, setSpeakerNames] = useState<Map<string, string>>(new Map());
@@ -106,6 +142,11 @@ export function App() {
   useEffect(() => {
     void window.api.templates.list().then(setTemplates);
   }, []);
+
+  // Show first-run onboarding once settings load unonboarded (ROADMAP_V04_07).
+  useEffect(() => {
+    if (settings && !settings.onboardingDone) setShowOnboarding(true);
+  }, [settings]);
 
   const connectedRef = useRef(false);
   connectedRef.current = transcription.connected;
@@ -188,26 +229,49 @@ export function App() {
     }
   };
 
-  const onNewNote = (): void => {
+  // Create a note, optionally with a template and filed into a folder (ROADMAP_V04_04).
+  const createNote = async (templateId: number | null, folderId: number | null): Promise<void> => {
+    const meeting = await meetings.create();
+    if (templateId !== null) await window.api.meetings.setTemplate(meeting.id, templateId);
+    if (folderId !== null) await window.api.organization.setMeetingFolder(meeting.id, folderId);
+    if (templateId !== null || folderId !== null) await meetings.refresh();
+    setSelectedId(meeting.id);
+  };
+
+  const onNewNote = (folderId: number | null = null): void => {
     // Show template picker when more than just the default "General" template exists.
     // Otherwise create immediately for the one-click-default experience (FEATURES §C2).
     if (templates.length > 1) {
+      setPendingFolderId(folderId);
       setShowTemplatePicker(true);
     } else {
-      void (async () => {
-        const meeting = await meetings.create();
-        setSelectedId(meeting.id);
-      })();
+      void createNote(null, folderId);
     }
   };
 
   const createNoteWithTemplate = async (templateId: number | null): Promise<void> => {
     setShowTemplatePicker(false);
-    const meeting = await meetings.create();
-    if (templateId !== null) {
-      await window.api.meetings.setTemplate(meeting.id, templateId);
+    await createNote(templateId, pendingFolderId);
+    setPendingFolderId(null);
+  };
+
+  // Per-meeting folder/tag assignment (ROADMAP_V04_04): mutate, then refresh the
+  // list (summaries carry folder/tags) and the open detail (header controls).
+  const refreshAfterOrg = async (meetingId: number): Promise<void> => {
+    await meetings.refresh();
+    if (detail?.id === meetingId) {
+      const d = await window.api.meetings.get(meetingId);
+      if (d) setDetail(d);
     }
-    setSelectedId(meeting.id);
+  };
+  const setMeetingFolder = (meetingId: number, folderId: number | null): void => {
+    void window.api.organization.setMeetingFolder(meetingId, folderId).then(() => refreshAfterOrg(meetingId));
+  };
+  const addMeetingTag = (meetingId: number, tagId: number): void => {
+    void window.api.organization.addMeetingTag(meetingId, tagId).then(() => refreshAfterOrg(meetingId));
+  };
+  const removeMeetingTag = (meetingId: number, tagId: number): void => {
+    void window.api.organization.removeMeetingTag(meetingId, tagId).then(() => refreshAfterOrg(meetingId));
   };
 
   const onDelete = async (id: number): Promise<void> => {
@@ -361,6 +425,39 @@ export function App() {
   // while recording (ROADMAP_07 Phase 1).
   const chatAvailable = !running && loadedSegments.length > 0;
 
+  // Command palette + keyboard shortcuts (ROADMAP_V04_05). The action registry is
+  // rebuilt from live state each render so closures + `enabled` flags stay fresh.
+  const cycleTheme = (): void => {
+    const order = ['system', 'light', 'dark'] as const;
+    const cur = theme?.mode ?? 'system';
+    void setMode(order[(order.indexOf(cur) + 1) % order.length]);
+  };
+  const actions = buildActions({
+    onNewNote: () => onNewNote(),
+    openSettings: () => setShowSettings(true),
+    openCrossChat: () => setShowCrossChat(true),
+    toggleTheme: cycleTheme,
+    toggleSidebar,
+    focusSearch: () =>
+      document.querySelector<HTMLInputElement>('[data-search-input]')?.focus(),
+    exportMeeting: () => {
+      if (detail) void exportMeeting(detail.id);
+    },
+    enhanceMeeting: () => {
+      if (detail) void enhanceMeeting(detail.id);
+    },
+    startRecording: () => void start(),
+    stopRecording: () => void stop(),
+    setView,
+    setRightTab,
+    hasMeeting: detail !== null,
+    running,
+    hasEnhanced,
+    view,
+    rightTab,
+  });
+  useShortcuts(actions, () => setPaletteOpen((o) => !o));
+
   /** A chat citation jump: flash the cited transcript line and switch back to it. */
   const onCiteFromChat = useCallback((segmentId: number): void => {
     setHighlight({ ids: [segmentId], nonce: Date.now() });
@@ -389,15 +486,19 @@ export function App() {
     setSelectedId(null);
     await meetings.refresh();
     await refreshSettings();
+    await org.reload();
     setTemplates(await window.api.templates.list());
   };
 
   return (
-    <div className="flex h-full bg-background text-foreground">
-      {settings && !settings.privacyAccepted && (
-        <PrivacyNotice
-          onAccept={() => {
-            void window.api.settings.acceptPrivacy().then(refreshSettings);
+    <div className="flex h-full flex-col bg-background text-foreground">
+      {showOnboarding && settings && (
+        <OnboardingFlow
+          settings={settings}
+          onChanged={refreshSettings}
+          onComplete={() => {
+            setShowOnboarding(false);
+            void refreshSettings();
           }}
         />
       )}
@@ -432,46 +533,93 @@ export function App() {
         />
       )}
 
-      <MeetingSidebar
-        meetings={list}
-        templates={templates}
-        selectedId={selectedId}
-        searching={meetings.results !== null}
-        disabled={running}
-        onSelect={(id) => {
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        actions={actions}
+        meetings={meetings.results ?? meetings.meetings}
+        onOpenMeeting={(id) => {
           setShowCrossChat(false);
           setSelectedId(id);
         }}
-        onNew={() => void onNewNote()}
-        onSearch={(q) => void meetings.search(q)}
-        onDelete={(id) => void onDelete(id)}
-        onOpenSettings={() => setShowSettings(true)}
-        onOpenCrossChat={() => setShowCrossChat(true)}
-        agendaSlot={
-          <AgendaPanel
-            events={calendar.agenda}
-            onArm={calendar.armEvent}
-            onSelectMeeting={(id) => setSelectedId(id)}
-          />
-        }
       />
 
-      <main className="flex flex-1 flex-col overflow-hidden">
+      <TitleBar
+        onOpenSettings={() => setShowSettings(true)}
+        onOpenCrossChat={() => setShowCrossChat(true)}
+        onToggleSidebar={toggleSidebar}
+      />
+
+      <LayoutShell
+        mode={layoutMode}
+        sidebarRef={sidebarPanelRef}
+        drawerOpen={drawerOpen}
+        onCloseDrawer={() => setDrawerOpen(false)}
+        sidebar={
+          <MeetingSidebar
+            meetings={list}
+            templates={templates}
+            folders={org.folders}
+            tags={org.tags}
+            org={org}
+            selectedId={selectedId}
+            searching={meetings.results !== null}
+            disabled={running}
+            onSelect={(id) => {
+              setShowCrossChat(false);
+              setSelectedId(id);
+              setDrawerOpen(false);
+            }}
+            onNew={(folderId) => {
+              onNewNote(folderId);
+              setDrawerOpen(false);
+            }}
+            onSearch={(q) => void meetings.search(q)}
+            onDelete={(id) => void onDelete(id)}
+            onSetMeetingFolder={setMeetingFolder}
+            onAddMeetingTag={addMeetingTag}
+            onRemoveMeetingTag={removeMeetingTag}
+            agendaSlot={
+              <AgendaPanel
+                events={calendar.agenda}
+                onArm={calendar.armEvent}
+                onSelectMeeting={(id) => {
+                  setSelectedId(id);
+                  setDrawerOpen(false);
+                }}
+              />
+            }
+          />
+        }
+      >
+        <main className="flex h-full flex-col overflow-hidden">
         {showCrossChat ? (
           <CrossChatView
             controller={crossChat}
             meetings={meetings.meetings ?? []}
+            folders={org.folders}
+            tags={org.tags}
             onCiteClick={onCiteFromCrossChat}
             onClose={() => setShowCrossChat(false)}
+            keyMissing={!settings?.anthropicKeySet}
+            onConnectKeys={() => setShowSettings(true)}
           />
         ) : detail === null ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-            Select a meeting or create a new note.
-          </div>
+          <EmptyState
+            icon={NotebookPen}
+            title="No note open"
+            description="Pick a note from the sidebar, or start a new one to capture a meeting."
+            action={{ label: 'New note', onClick: () => onNewNote() }}
+            secondaryAction={
+              settings && (!settings.anthropicKeySet || !settings.deepgramKeySet)
+                ? { label: 'Connect API keys', onClick: () => setShowSettings(true) }
+                : undefined
+            }
+          />
         ) : (
           <>
-            <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-3">
-              <div className="flex min-w-0 flex-1 items-center gap-3">
+            <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-6 py-3">
+              <div className="flex min-w-[12rem] flex-1 items-center gap-3">
                 <input
                   value={title}
                   onChange={(e) => {
@@ -479,7 +627,8 @@ export function App() {
                     saveTitle(detail.id, e.target.value);
                   }}
                   onFocus={(e) => e.target.select()}
-                  className="min-w-0 flex-1 bg-transparent text-base font-medium text-foreground focus:outline-none"
+                  aria-label="Meeting title"
+                  className="min-w-0 flex-1 rounded bg-transparent text-base font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   placeholder="Untitled meeting"
                 />
                 <Select
@@ -505,8 +654,19 @@ export function App() {
                     ))}
                   </SelectContent>
                 </Select>
+                <MeetingOrgControls
+                  meetingId={detail.id}
+                  folderId={detail.folderId}
+                  tagNames={detail.tags}
+                  folders={org.folders}
+                  tags={org.tags}
+                  onSetFolder={setMeetingFolder}
+                  onAddTag={addMeetingTag}
+                  onRemoveTag={removeMeetingTag}
+                  onCreateTag={org.createTag}
+                />
                 {running && (
-                  <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-destructive">
+                  <span role="status" className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-destructive">
                     <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-destructive" />
                     Recording
                     {detectedLang && settings?.language.mode === 'auto' && (
@@ -517,13 +677,13 @@ export function App() {
                   </span>
                 )}
                 {running && transcription.reconnecting && (
-                  <span className="flex shrink-0 items-center gap-1.5 rounded bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning">
+                  <span role="status" className="flex shrink-0 items-center gap-1.5 rounded bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning">
                     <span className="h-2 w-2 animate-spin rounded-full border border-warning border-t-transparent" />
                     Reconnecting…
                   </span>
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 ml-auto">
                 {/* Per-meeting cost chip — shown once transcription or enhancement has been used */}
                 {!running && detail && (detail.usage.deepgramAudioMs > 0 || detail.usage.claudeInputTokens > 0) && (
                   <span
@@ -586,53 +746,121 @@ export function App() {
             </header>
 
             {(error || enhanceError) && (
-              <div className="border-b border-destructive/30 bg-destructive/10 px-6 py-2 text-xs text-destructive">
+              <div role="alert" className="border-b border-destructive/30 bg-destructive/10 px-6 py-2 text-xs text-destructive">
                 {error ?? enhanceError}
               </div>
             )}
             {view === 'enhanced' && degraded && (
-              <div className="border-b border-warning/30 bg-warning/10 px-6 py-2 text-xs text-warning">
+              <div role="status" className="border-b border-warning/30 bg-warning/10 px-6 py-2 text-xs text-warning">
                 Degraded result: structured enhancement failed, so this is a plain-text fallback.
               </div>
             )}
 
-            <div className="flex flex-1 overflow-hidden">
-              <section className="flex-1 overflow-y-auto border-r border-border p-6">
-                {view === 'enhanced' && enhanced ? (
-                  <EnhancedNotesEditor
-                    key={`enhanced-${detail.id}`}
-                    meetingId={detail.id}
-                    notes={enhanced}
-                    onSave={(id, notes) => void window.api.meetings.saveEnhanced(id, notes)}
-                    onJump={(ids) => setHighlight({ ids, nonce: Date.now() })}
-                  />
-                ) : (
-                  <NotesEditor
-                    key={detail.id}
-                    meetingId={detail.id}
-                    initialMarkdown={detail.rawUserMd}
-                    onSave={(id, markdown) => void window.api.meetings.saveNotes(id, markdown)}
-                  />
-                )}
-              </section>
-              <section className="flex w-[42%] shrink-0 flex-col overflow-hidden p-6">
+            {layoutMode === 'wide' ? (
+              <ResizablePanelGroup
+                direction="horizontal"
+                autoSaveId="scribe:split"
+                className="flex-1 overflow-hidden"
+              >
+                <ResizablePanel defaultSize={58} minSize={30} className="overflow-y-auto border-r border-border p-6">
+                  {view === 'enhanced' && enhanced ? (
+                    <EnhancedNotesEditor
+                      key={`enhanced-${detail.id}`}
+                      meetingId={detail.id}
+                      notes={enhanced}
+                      onSave={(id, notes) => void window.api.meetings.saveEnhanced(id, notes)}
+                      onJump={(ids) => setHighlight({ ids, nonce: Date.now() })}
+                    />
+                  ) : (
+                    <NotesEditor
+                      key={detail.id}
+                      meetingId={detail.id}
+                      initialMarkdown={detail.rawUserMd}
+                      onSave={(id, markdown) => void window.api.meetings.saveNotes(id, markdown)}
+                    />
+                  )}
+                </ResizablePanel>
+                <ResizableHandle withHandle />
+                <ResizablePanel defaultSize={42} minSize={25} className="flex flex-col overflow-hidden p-6">
+                  <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    size="sm"
+                    value={rightTab}
+                    onValueChange={(v) => { if (v) setRightTab(v as 'transcript' | 'chat'); }}
+                    className="mb-3"
+                  >
+                    <ToggleGroupItem value="transcript">Transcript</ToggleGroupItem>
+                    <ToggleGroupItem value="chat">Chat</ToggleGroupItem>
+                  </ToggleGroup>
+                  <div className="min-h-0 flex-1">
+                    {rightTab === 'chat' ? (
+                      <ChatPanel
+                      controller={chat}
+                      onCiteClick={onCiteFromChat}
+                      available={chatAvailable}
+                      keyMissing={!settings?.anthropicKeySet}
+                      onConnectKeys={() => setShowSettings(true)}
+                    />
+                    ) : (
+                      <TranscriptPanel
+                        finals={finals}
+                        interims={interims}
+                        highlight={highlight}
+                        speakerNames={speakerNames}
+                        onRenameSpeaker={onRenameSpeaker}
+                        onReassignSegment={onReassignSegment}
+                        distinctRawLabels={distinctRawLabels}
+                      />
+                    )}
+                  </div>
+                  <details className="mt-4 text-xs text-muted-foreground">
+                    <summary className="cursor-pointer select-none">Capture diagnostics</summary>
+                    <div className="mt-3">
+                      <CaptureProbe controller={capture} />
+                    </div>
+                  </details>
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            ) : (
+              <div className="flex flex-1 flex-col overflow-hidden p-4">
                 <ToggleGroup
                   type="single"
                   variant="outline"
                   size="sm"
-                  value={rightTab}
-                  onValueChange={(v) => { if (v) setRightTab(v as 'transcript' | 'chat'); }}
+                  value={mainTab}
+                  onValueChange={(v) => { if (v) setMainTab(v as 'notes' | 'transcript' | 'chat'); }}
                   className="mb-3"
                 >
+                  <ToggleGroupItem value="notes">Notes</ToggleGroupItem>
                   <ToggleGroupItem value="transcript">Transcript</ToggleGroupItem>
                   <ToggleGroupItem value="chat">Chat</ToggleGroupItem>
                 </ToggleGroup>
-                <div className="min-h-0 flex-1">
-                  {rightTab === 'chat' ? (
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  {mainTab === 'notes' ? (
+                    view === 'enhanced' && enhanced ? (
+                      <EnhancedNotesEditor
+                        key={`enhanced-${detail.id}`}
+                        meetingId={detail.id}
+                        notes={enhanced}
+                        onSave={(id, notes) => void window.api.meetings.saveEnhanced(id, notes)}
+                        onJump={(ids) => setHighlight({ ids, nonce: Date.now() })}
+                      />
+                    ) : (
+                      <NotesEditor
+                        key={detail.id}
+                        meetingId={detail.id}
+                        initialMarkdown={detail.rawUserMd}
+                        onSave={(id, markdown) => void window.api.meetings.saveNotes(id, markdown)}
+                      />
+                    )
+                  ) : mainTab === 'chat' ? (
                     <ChatPanel
                       controller={chat}
                       onCiteClick={onCiteFromChat}
                       available={chatAvailable}
+                      keyMissing={!settings?.anthropicKeySet}
+                      onConnectKeys={() => setShowSettings(true)}
                     />
                   ) : (
                     <TranscriptPanel
@@ -646,17 +874,12 @@ export function App() {
                     />
                   )}
                 </div>
-                <details className="mt-4 text-xs text-muted-foreground">
-                  <summary className="cursor-pointer select-none">Capture diagnostics</summary>
-                  <div className="mt-3">
-                    <CaptureProbe controller={capture} />
-                  </div>
-                </details>
-              </section>
-            </div>
+              </div>
+            )}
           </>
         )}
-      </main>
+        </main>
+      </LayoutShell>
     </div>
   );
 }

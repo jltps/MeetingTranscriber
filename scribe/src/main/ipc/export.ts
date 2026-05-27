@@ -132,8 +132,8 @@ export function registerExportIpc(): void {
     const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
     const { canceled, filePath } = await dialog.showSaveDialog({
-      title: 'Backup Scribe data',
-      defaultPath: `scribe-backup-${dateStamp}.json`,
+      title: 'Backup Nexus data',
+      defaultPath: `nexus-backup-${dateStamp}.json`,
       filters: [{ name: 'JSON', extensions: ['json'] }],
     });
     if (canceled || !filePath) {
@@ -148,7 +148,7 @@ export function registerExportIpc(): void {
   // ── Phase 2b: restore from a backup file ───────────────────────────────
   ipcMain.handle(IPC.exportRestore, async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
-      title: 'Restore Scribe backup',
+      title: 'Restore Nexus backup',
       filters: [{ name: 'JSON', extensions: ['json'] }],
       properties: ['openFile'],
     });

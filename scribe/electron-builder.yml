@@ -1,5 +1,8 @@
+# appId stays com.scribe.app — it keys the per-user data dir (DB + encrypted keys).
+# Changing it would orphan every existing install's meetings (§1.5). The rename is
+# cosmetic only: productName/icon/installer identity below (ROADMAP_V04_09).
 appId: com.scribe.app
-productName: Scribe
+productName: Nexus
 directories:
   output: release
 # Keep source/test files out of the package; out/** and production node_modules
@@ -12,17 +15,29 @@ files:
 # The better-sqlite3 native addon can't be loaded from inside an asar archive.
 asarUnpack:
   - '**/*.node'
+# Bundle the window icon so the running packaged app shows the Nexus mark
+# (the .exe icon itself isn't embedded — signAndEditExecutable is off below).
+extraResources:
+  - from: build/icon.png
+    to: icon.png
 # Native deps are already built for Electron's ABI via .npmrc (runtime=electron),
 # so don't let electron-builder rebuild them (this machine has no C++ toolchain).
 npmRebuild: false
 win:
   target:
     - nsis
-  # We don't sign and ship no custom icon, so skip rcedit/signtool. This avoids
+  icon: build/icon.ico
+  # We don't sign, so skip rcedit/signtool on the app .exe — this avoids
   # electron-builder's winCodeSign download, whose macOS symlinks can't be
-  # extracted without admin/Developer Mode on Windows.
+  # extracted without admin/Developer Mode on Windows. The icon below is still
+  # used by NSIS (installer/shortcut) and the running window (main/index.ts);
+  # the packaged .exe keeps the default icon because edit is disabled here.
   signAndEditExecutable: false
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  shortcutName: Nexus
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico

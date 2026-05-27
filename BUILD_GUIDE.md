@@ -1,16 +1,21 @@
-# BUILD_GUIDE.md — building Scribe with Claude Code
+# BUILD_GUIDE.md — building Nexus with Claude Code
 
-How to go from an empty folder to a packaged Windows build of Scribe, using
+How to go from an empty folder to a packaged Windows build of Nexus, using
 Claude Code as the implementer. This guide is the *process*; `PRODUCT_SPEC.md` is
 *what* v1 was and `CLAUDE.md` is *how* the code should look.
 
-> **Where the project is now.** v1 (milestones M0–M6) is **shipped**, and most of
-> the post-v1 backlog is too (language/templates, reliability, speaker naming,
-> export/backup, local Whisper, calendar, cross-meeting chat). Phases 1–3 below are
-> the historical *bootstrap* record — useful for understanding the build discipline
-> and re-reading a milestone before touching it. For extending the shipped app, jump
-> to [Phase 5 — Beyond v1](#phase-5--beyond-v1-extending-the-shipped-app). The docs
-> live at the repo root; the app lives in the **`scribe/`** subdirectory, so every
+> **Where the project is now.** v1 (milestones M0–M6) is **shipped**, most of the
+> post-v1 backlog is too (language/templates, reliability, speaker naming,
+> export/backup, local Whisper, calendar, cross-meeting chat), and **V04 — the UI/UX
+> + rebrand phase — has shipped** (design tokens + theming, shadcn/ui, frameless title
+> bar, folders/tags, command palette, window-state, onboarding, accessibility). The
+> product was **renamed Scribe → Nexus** in V04; the `scribe/` directory and the
+> `com.scribe.app`/`scribe.sqlite` identifiers are deliberately unchanged so existing
+> data is preserved. Phases 1–3 below are the historical *bootstrap* record — useful
+> for understanding the build discipline and re-reading a milestone before touching it.
+> For extending the shipped app, jump to
+> [Phase 5 — Beyond v1](#phase-5--beyond-v1-extending-the-shipped-app). The docs live
+> at the repo root; the app lives in the **`scribe/`** subdirectory, so every
 > `pnpm …` command below runs from `scribe/`.
 
 ---
@@ -226,6 +231,10 @@ v1 is built. New work comes from the post-v1 backlog, not from `PRODUCT_SPEC.md`
   naming, quality, data/export/sync, local Whisper, calendar, cross-meeting). Read
   `ROADMAP_00_INDEX.md` first for the dependency order and status. Most are shipped;
   the quality eval loop (03) and the sync/sharing phases (04) are not.
+- **`roadmap/v04/ROADMAP_*.md`** — the UI/UX + rebrand phase (design tokens + theming,
+  shadcn/ui component system, frameless app shell, folders/tags, command palette,
+  layout/window-state, onboarding, accessibility, and the Nexus rebrand). *All shipped.*
+  UI-only — no block changed audio/transcription/enhancer/calendar or any §1 behavior.
 
 The same discipline that built v1 still applies — only the anchor document changes:
 

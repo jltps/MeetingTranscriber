@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Send } from 'lucide-react';
+import { MessageSquare, Send } from 'lucide-react';
 import type { ChatController, ChatTurn } from './use-chat';
 import { parseCitations } from './parse-citations';
+import { EmptyState } from '../../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -28,7 +29,7 @@ function AssistantText({
             onClick={cited.has(node.segmentId) ? () => onCiteClick(node.segmentId) : undefined}
             disabled={!cited.has(node.segmentId)}
             title={cited.has(node.segmentId) ? 'Jump to transcript' : undefined}
-            className={`mx-0.5 inline-flex items-center rounded px-1 text-[11px] font-medium tabular-nums ${
+            className={`mx-0.5 inline-flex items-center rounded px-1 text-[11px] font-medium tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               cited.has(node.segmentId)
                 ? 'cursor-pointer bg-info/20 text-info hover:bg-info/30'
                 : 'bg-muted text-muted-foreground'
@@ -46,11 +47,16 @@ export function ChatPanel({
   controller,
   onCiteClick,
   available,
+  keyMissing = false,
+  onConnectKeys,
 }: {
   controller: ChatController;
   onCiteClick: (segmentId: number) => void;
   /** Whether the meeting has a transcript to chat about. */
   available: boolean;
+  /** True when the Anthropic key isn't set (chat needs it). */
+  keyMissing?: boolean;
+  onConnectKeys?: () => void;
 }) {
   const { messages, streamingText, busy, error, ask } = controller;
   const [input, setInput] = useState('');
@@ -73,18 +79,27 @@ export function ChatPanel({
       <div className="mb-3 text-xs uppercase tracking-wide text-muted-foreground">Ask this meeting</div>
       <div
         ref={scrollRef}
+        aria-live="polite"
+        aria-atomic="false"
         className="flex-1 space-y-4 overflow-y-auto rounded-lg border border-border bg-card p-4"
       >
         {!available ? (
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Chat becomes available once this meeting has a transcript. Record or open an ended
-            meeting, then ask questions grounded in what was said.
-          </p>
+          <EmptyState
+            icon={MessageSquare}
+            title="Chat needs a transcript"
+            description="Record this meeting or open an ended one, then ask questions grounded in what was said."
+          />
         ) : messages.length === 0 && !busy ? (
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Ask a question about this meeting — e.g. "What did we decide?" or "List the action
-            items." Answers cite the transcript lines they came from.
-          </p>
+          <EmptyState
+            icon={MessageSquare}
+            title="Ask this meeting"
+            description={'e.g. “What did we decide?” or “List the action items.” Answers cite the transcript lines they came from.'}
+            action={
+              keyMissing && onConnectKeys
+                ? { label: 'Connect API keys', onClick: onConnectKeys }
+                : undefined
+            }
+          />
         ) : (
           <>
             {messages.map((turn, i) =>

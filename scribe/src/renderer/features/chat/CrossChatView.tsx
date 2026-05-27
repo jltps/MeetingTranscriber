@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Send } from 'lucide-react';
-import type { MeetingSummary, RetrievalScope } from '../../../shared/types';
+import { ChevronDown, ChevronUp, MessagesSquare, Send } from 'lucide-react';
+import { EmptyState } from '../../components/EmptyState';
+import type { Folder, MeetingSummary, RetrievalScope, Tag } from '../../../shared/types';
 import { estimateCost, formatCost } from '../../../shared/pricing';
 import { useDebouncedCallback } from '../../lib/debounce';
 import type { CrossChatController, CrossChatTurn } from './use-cross-chat';
@@ -8,6 +9,16 @@ import { parseCitations } from './parse-citations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { flattenFolders } from '../organization/use-organization';
+
+const ANY = 'any';
 
 function abbreviate(title: string): string {
   return title.length > 18 ? `${title.slice(0, 17)}…` : title;
@@ -34,7 +45,7 @@ function AssistantText({
             type="button"
             onClick={() => onCiteClick(cite.meetingId, cite.segmentId)}
             title={`Jump to "${cite.meetingTitle}"`}
-            className="mx-0.5 inline-flex items-center rounded bg-info/20 px-1 text-[11px] font-medium text-info hover:bg-info/30"
+            className="mx-0.5 inline-flex items-center rounded bg-info/20 px-1 text-[11px] font-medium text-info outline-none hover:bg-info/30 focus-visible:ring-2 focus-visible:ring-ring"
           >
             {abbreviate(cite.meetingTitle)} #{cite.segmentId}
           </button>
@@ -55,18 +66,28 @@ function AssistantText({
 export function CrossChatView({
   controller,
   meetings,
+  folders,
+  tags,
   onCiteClick,
   onClose,
+  keyMissing = false,
+  onConnectKeys,
 }: {
   controller: CrossChatController;
   /** Full meeting list, for the scope selector. */
   meetings: MeetingSummary[];
+  folders: Folder[];
+  tags: Tag[];
   onCiteClick: (meetingId: number, segmentId: number) => void;
   onClose: () => void;
+  keyMissing?: boolean;
+  onConnectKeys?: () => void;
 }) {
   const { messages, streamingText, busy, error, ask } = controller;
   const [input, setInput] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [scopeFolderId, setScopeFolderId] = useState<number | null>(null);
+  const [scopeTagId, setScopeTagId] = useState<number | null>(null);
   const [scopeOpen, setScopeOpen] = useState(false);
   // Content-search filter for the scope list (reuses meetings.search). null = full list.
   const [filtered, setFiltered] = useState<MeetingSummary[] | null>(null);
@@ -82,18 +103,22 @@ export function CrossChatView({
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, streamingText]);
 
-  const scope: RetrievalScope = useMemo(
-    () =>
-      selectedIds.size === 0
-        ? { mode: 'all' }
-        : { mode: 'meetings', meetingIds: [...selectedIds] },
-    [selectedIds],
-  );
+  // Precedence: folder (incl. descendants) > tag > explicit meetings > all.
+  const scope: RetrievalScope = useMemo(() => {
+    if (scopeFolderId !== null) return { mode: 'folder', folderId: scopeFolderId };
+    if (scopeTagId !== null) return { mode: 'tag', tagId: scopeTagId };
+    if (selectedIds.size > 0) return { mode: 'meetings', meetingIds: [...selectedIds] };
+    return { mode: 'all' };
+  }, [scopeFolderId, scopeTagId, selectedIds]);
 
   const scopeLabel =
-    selectedIds.size === 0
-      ? `Asking across all ${meetings.length} meetings`
-      : `Asking across ${selectedIds.size} selected`;
+    scopeFolderId !== null
+      ? `Asking across folder "${folders.find((f) => f.id === scopeFolderId)?.name ?? '?'}"`
+      : scopeTagId !== null
+        ? `Asking across tag "${tags.find((t) => t.id === scopeTagId)?.name ?? '?'}"`
+        : selectedIds.size === 0
+          ? `Asking across all ${meetings.length} meetings`
+          : `Asking across ${selectedIds.size} selected`;
 
   const toggle = (id: number): void =>
     setSelectedIds((prev) => {
@@ -133,11 +158,53 @@ export function CrossChatView({
           </span>
         </button>
         {scopeOpen && (
-          <div className="mt-2">
+          <div className="mt-2 space-y-2">
+            <div className="flex items-center gap-2">
+              <Select
+                value={scopeFolderId === null ? ANY : String(scopeFolderId)}
+                onValueChange={(v) => {
+                  setScopeFolderId(v === ANY ? null : Number(v));
+                  if (v !== ANY) setScopeTagId(null);
+                }}
+              >
+                <SelectTrigger size="sm" className="h-8 flex-1 text-xs">
+                  <SelectValue placeholder="Folder" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ANY}>Any folder</SelectItem>
+                  {flattenFolders(folders).map((f) => (
+                    <SelectItem key={f.id} value={String(f.id)}>
+                      {' '.repeat(f.depth * 2)}
+                      {f.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={scopeTagId === null ? ANY : String(scopeTagId)}
+                onValueChange={(v) => {
+                  setScopeTagId(v === ANY ? null : Number(v));
+                  if (v !== ANY) setScopeFolderId(null);
+                }}
+              >
+                <SelectTrigger size="sm" className="h-8 flex-1 text-xs">
+                  <SelectValue placeholder="Tag" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ANY}>Any tag</SelectItem>
+                  {tags.map((t) => (
+                    <SelectItem key={t.id} value={String(t.id)}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="mb-2 flex items-center gap-2">
               <Input
                 type="search"
                 placeholder="Filter meetings by content…"
+                disabled={scopeFolderId !== null || scopeTagId !== null}
                 onChange={(e) => runFilter(e.target.value)}
                 className="h-8 flex-1 text-xs"
               />
@@ -176,13 +243,23 @@ export function CrossChatView({
       </div>
 
       {/* Thread */}
-      <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
+      <div
+        ref={scrollRef}
+        aria-live="polite"
+        aria-atomic="false"
+        className="flex-1 space-y-4 overflow-y-auto px-6 py-4"
+      >
         {messages.length === 0 && !busy ? (
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Ask a question spanning your meetings — e.g. "What did we decide about pricing?" or
-            "Summarize everything about Project X." Answers cite the meeting and transcript line
-            they came from.
-          </p>
+          <EmptyState
+            icon={MessagesSquare}
+            title="Ask across your meetings"
+            description={'e.g. “What did we decide about pricing?” or “Summarize everything about Project X.” Answers cite the meeting + line they came from.'}
+            action={
+              keyMissing && onConnectKeys
+                ? { label: 'Connect API keys', onClick: onConnectKeys }
+                : undefined
+            }
+          />
         ) : (
           messages.map((turn, i) =>
             turn.role === 'user' ? (

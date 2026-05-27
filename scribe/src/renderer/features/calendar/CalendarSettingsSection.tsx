@@ -90,7 +90,7 @@ export function CalendarSettingsSection({
       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Calendar</h3>
       <p className="text-[11px] text-muted-foreground">
         Connect a calendar to see upcoming meetings and auto-start recording at their scheduled
-        time. Scribe reads only your busy times — never event titles — and never joins the call.
+        time. Nexus reads only your busy times — never event titles — and never joins the call.
       </p>
 
       <ProviderRow

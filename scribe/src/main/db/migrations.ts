@@ -293,6 +293,47 @@ Rules:
         REFERENCES calendar_events(id) ON DELETE SET NULL;
     `,
   },
+  {
+    version: 9,
+    name: 'folders-and-tags',
+    // Note organization (ROADMAP_V04_04). Additive. Folders nest (parent cascades to
+    // subfolders), but deleting a folder must NOT delete meetings — meetings.folder_id
+    // is ON DELETE SET NULL (CLAUDE.md §7, like templates/calendar). Tags are a flat,
+    // case-insensitive-unique namespace joined many-to-many via meeting_tags.
+    sql: `
+      CREATE TABLE folders (
+        id         INTEGER PRIMARY KEY,
+        name       TEXT    NOT NULL,
+        parent_id  INTEGER REFERENCES folders(id) ON DELETE CASCADE,
+        created_at INTEGER NOT NULL,
+        UNIQUE(parent_id, name)
+      );
+      CREATE INDEX idx_folders_parent ON folders(parent_id);
+      -- UNIQUE(parent_id, name) doesn't dedupe roots (SQLite treats NULL parent_id as
+      -- distinct), so enforce unique top-level names with a partial index.
+      CREATE UNIQUE INDEX idx_folders_root_name ON folders(name) WHERE parent_id IS NULL;
+
+      ALTER TABLE meetings ADD COLUMN folder_id INTEGER
+        REFERENCES folders(id) ON DELETE SET NULL;
+      CREATE INDEX idx_meetings_folder ON meetings(folder_id);
+
+      CREATE TABLE tags (
+        id         INTEGER PRIMARY KEY,
+        name       TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE meeting_tags (
+        meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+        tag_id     INTEGER NOT NULL REFERENCES tags(id)     ON DELETE CASCADE,
+        PRIMARY KEY (meeting_id, tag_id)
+      );
+      CREATE INDEX idx_meeting_tags_tag ON meeting_tags(tag_id);
+
+      -- "Updated" sort key. Legacy rows stay NULL and fall back to created_at in queries.
+      ALTER TABLE meetings ADD COLUMN updated_at INTEGER;
+    `,
+  },
 ];
 
 export function runMigrations(db: Database): void {

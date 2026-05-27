@@ -1,7 +1,9 @@
 import type { EnhancerSegment } from '../../enhancer/enhancer';
+import type { RetrievalScope } from '../../../shared/types';
 
-/** Which meetings a cross-meeting query covers (ROADMAP_07 Phase 2). */
-export type RetrievalScope = { mode: 'all' } | { mode: 'meetings'; meetingIds: number[] };
+// Single source of truth for the scope union lives in shared/types (ROADMAP_V04_04
+// added folder/tag modes); re-export so retrieval consumers keep importing it here.
+export type { RetrievalScope };
 
 /** A transcript segment tagged with its source meeting, for cross-meeting citations. */
 export type RetrievedSegment = EnhancerSegment & {

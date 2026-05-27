@@ -13,22 +13,26 @@ it as a bug to fix).
 Roles: `PRODUCT_SPEC.md` is the original v1 product intent (now *implemented* —
 historical reference). The post-v1 specs live under `roadmap/`:
 `roadmap/v02/FEATURES_LANGUAGE_PROMPT_TEMPLATES.md` (language, prompt control,
-templates — **shipped**) and `roadmap/v03/ROADMAP_*.md` (the building-block backlog;
-`ROADMAP_00_INDEX.md` is the map). Most of v03 is shipped — see that index and
-`README.md` for current status. Inline `FEATURES …` and `ROADMAP_NN …` references in
-this file point into those folders. This file is *how* the code should look and
-behave.
+templates — **shipped**), `roadmap/v03/ROADMAP_*.md` (the v3 building-block backlog),
+and `roadmap/v04/ROADMAP_*.md` (the UI/UX + rebrand phase — **shipped**). Each folder's
+`ROADMAP_00_INDEX.md` is its map. v02 and v04 are fully shipped; most of v03 is — see
+those indexes and `README.md` for current status. Inline `FEATURES …` and
+`ROADMAP_NN …` references in this file point into those folders. This file is *how*
+the code should look and behave.
 
 The app itself lives in the `scribe/` subdirectory (these docs sit at the repo
-root). All commands in §11 run from `scribe/`.
+root). All commands in §11 run from `scribe/`. **The product is now named Nexus**
+(renamed from Scribe in V04); the `scribe/` directory, the `com.scribe.app` app id,
+and the `scribe.sqlite` database keep the original name on purpose, so the rename
+never orphaned existing user data — do not "finish the rename" by changing them.
 
 ---
 
 ## 0. Orientation (read before writing code)
 
-- This is **Scribe**: a bot-free, device-audio meeting notepad for **Windows**
-  (Electron + React + TypeScript). It transcribes the full meeting by capturing
-  system audio + mic, never joins the call, and never stores audio.
+- This is **Nexus** (formerly Scribe): a bot-free, device-audio meeting notepad for
+  **Windows** (Electron + React + TypeScript). It transcribes the full meeting by
+  capturing system audio + mic, never joins the call, and never stores audio.
 - **v1 is built.** Before changing anything, read the relevant existing code and
   match its established patterns (structure, naming, IPC style, DB access). Do not
   introduce a second way of doing something that already has a way.
@@ -79,7 +83,11 @@ there's a real problem.
 - Electron (loopback audio needs **≥ v31**; currently pinned to **33**), via
   `electron-vite`.
 - React 18 + TypeScript (`strict: true`) + Vite.
-- Tailwind CSS for styling.
+- **Tailwind CSS v4** (CSS-first `@theme`, semantic CSS-variable design tokens) for
+  styling, with **light/dark/system** theming synced to Electron `nativeTheme`.
+- **shadcn/ui** (copy-in components in `renderer/components/ui/`) on **Radix** +
+  **lucide-react** icons + **cmdk** (command palette) + **react-resizable-panels**.
+  This is the one component vocabulary — don't hand-roll a second modal/dropdown/button.
 - TipTap (ProseMirror) for the notes editor.
 - `better-sqlite3` for local storage (main process only).
 - Web Audio API + AudioWorklet for capture/mix.
@@ -101,16 +109,21 @@ directory listing and follow the actual structure**; update this section to matc
 reality rather than moving files to match this section.
 
 ```
+scribe/build/      # brand assets: icon.ico, icon.png, make-icons.mjs (V04 rebrand)
 scribe/src/
 ├─ main/        # Electron main process (privileged):
-│               #   window (index.ts), ipc/, db/ (incl. migrations.ts), audio/,
-│               #   transcription/ (deepgram + whisper), enhancer/ (incl. prompt.ts,
-│               #   title.ts, pricing.ts), chat/ (+ retrieval/), calendar/
-│               #   (google + microsoft, oauth, pkce), secrets/, logger.ts
+│               #   window (index.ts), ipc/ (incl. organization), db/ (incl.
+│               #   migrations.ts, organization.ts), audio/, transcription/
+│               #   (deepgram + whisper), enhancer/ (incl. prompt.ts, title.ts,
+│               #   pricing.ts), chat/ (+ retrieval/), calendar/ (google + microsoft,
+│               #   oauth, pkce), secrets/, theme.ts, window-state.ts, logger.ts
 ├─ preload/     # contextBridge: exposes typed window.api only
-├─ renderer/    # React app (untrusted): app/, features/, audio/, lib/
-│  └─ features/ # meetings/, notes/, transcript/, settings/, templates/,
-│               # calendar/, chat/  (one folder per feature)
+├─ renderer/    # React app (untrusted): app/ (incl. TitleBar.tsx, index.css tokens),
+│  │            #   features/, components/ (ui/ = shadcn, EmptyState), assets/ (logo.svg),
+│  │            #   audio/, lib/
+│  └─ features/ # meetings/, notes/, transcript/, settings/, templates/, calendar/,
+│               # chat/, organization/ (folders+tags), commands/ (palette), layout/,
+│               # onboarding/  (one folder per feature)
 └─ shared/      # types.ts + ipc-contract.ts + pricing.ts (Zod). NO node/electron/react.
 ```
 
@@ -225,9 +238,10 @@ Structural rules (these hold regardless of exact folder names):
 pnpm install
 pnpm dev          # run Electron + Vite
 pnpm typecheck    # must pass before any PR
-pnpm lint         # must pass before any PR
+pnpm lint         # must pass before any PR (incl. jsx-a11y on the renderer)
 pnpm test
-pnpm build        # electron-builder NSIS
+pnpm build        # compile main/preload/renderer (electron-vite build) — no installer
+pnpm dist         # electron-builder NSIS installer (Windows)
 ```
 
 If the actual script names differ, use those and update this list. `typecheck` and
@@ -245,5 +259,13 @@ If the actual script names differ, use those and update this list. `typecheck` a
   auto-detect, prompt control + templates, reliability/usage-cost, speaker naming,
   export + backup, **offline Whisper**, **calendar auto-start** (Google + Microsoft),
   **post-meeting chat**, and **cross-meeting querying**.
+- **V04 — UI/UX + rebrand (all shipped; `roadmap/v04`):** Tailwind-v4 design tokens +
+  light/dark/system theming; shadcn/ui + lucide component system; frameless window
+  with a custom title bar (native menu removed); **folders + tags** (DB migration v9,
+  also cross-meeting-chat scopes); **command palette** + keyboard shortcuts over an
+  action registry; window-state persistence + responsive narrow-width layout;
+  onboarding flow + empty states; an accessibility pass (AA contrast both themes,
+  focus/keyboard, reduced-motion, ARIA); and the **Scribe → Nexus rebrand** (icon,
+  logo, installer identity). UI-only — no §1 behavior changed.
 - Still deferred (don't build unless asked): transcript/enhancement quality eval loop
-  (ROADMAP_03), accounts + cloud sync + sharing (ROADMAP_04 later phases), macOS.
+  (v03 ROADMAP_03), accounts + cloud sync + sharing (v03 ROADMAP_04 later phases), macOS.

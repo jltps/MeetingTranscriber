@@ -1,6 +1,7 @@
 // Export and backup DB layer (ROADMAP_04). Pure DB — no Electron/IPC imports.
 // Pattern mirrors db/speakers.ts and db/meetings.ts.
 import { getDb } from './index';
+import { listFolders, listTags, tagsForMeeting } from './organization';
 import type { BackupBundle, BackupMeeting } from '../../shared/ipc-contract';
 
 // ── Raw SQLite row types ───────────────────────────────────────────────────
@@ -13,6 +14,7 @@ type MeetingRow = {
   started_at: number | null;
   ended_at: number | null;
   template_id: number | null;
+  folder_id: number | null;
   deepgram_audio_ms: number;
   claude_input_tokens: number;
   claude_output_tokens: number;
@@ -49,7 +51,7 @@ type TemplateRow = {
 const MEETING_SELECT = `
   SELECT
     m.id, m.title, m.status, m.created_at, m.started_at, m.ended_at,
-    m.template_id, m.deepgram_audio_ms, m.claude_input_tokens, m.claude_output_tokens,
+    m.template_id, m.folder_id, m.deepgram_audio_ms, m.claude_input_tokens, m.claude_output_tokens,
     t.name  AS template_name,
     n.raw_user_md, n.enhanced_json, n.enhanced_at, n.enhanced_lang
   FROM meetings m
@@ -78,6 +80,8 @@ function rowToMeeting(row: MeetingRow, meetingId: number): BackupMeeting {
     startedAt: row.started_at,
     endedAt: row.ended_at,
     templateId: row.template_id,
+    folderId: row.folder_id,
+    tags: tagsForMeeting(meetingId),
     rawUserMd: row.raw_user_md ?? '',
     enhancedJson: row.enhanced_json,
     enhancedAt: row.enhanced_at,
@@ -150,11 +154,13 @@ export function getAllExportData(): BackupBundle {
   }));
 
   return {
-    version: 1,
+    version: 2,
     app: 'scribe',
     exportedAt: new Date().toISOString(),
     meetings,
     templates,
+    folders: listFolders(),
+    tags: listTags(),
   };
 }
 
@@ -173,9 +179,26 @@ export function restoreFromBackup(bundle: BackupBundle): { meetingCount: number 
   const db = getDb();
 
   const restore = db.transaction(() => {
-    // 1. Wipe meetings (CASCADE) + user templates.
+    // Defer FK checks to commit so insertion order (self-referencing folders,
+    // meetings → folders/templates, meeting_tags) doesn't matter (ROADMAP_V04_04).
+    db.pragma('defer_foreign_keys = ON');
+
+    // 1. Wipe meetings (CASCADE removes notes/segments/speaker_names/meeting_tags),
+    //    user templates, folders, and tags.
     db.prepare('DELETE FROM meetings').run();
     db.prepare('DELETE FROM templates WHERE is_builtin = 0').run();
+    db.prepare('DELETE FROM folders').run();
+    db.prepare('DELETE FROM tags').run();
+
+    // 1b. Restore folders + tags (preserve ids). v1 bundles have empty arrays.
+    const insertFolder = db.prepare(
+      `INSERT INTO folders (id, name, parent_id, created_at) VALUES (?, ?, ?, ?)`,
+    );
+    for (const f of bundle.folders) insertFolder.run(f.id, f.name, f.parentId, f.createdAt);
+    const insertTag = db.prepare(`INSERT INTO tags (id, name, created_at) VALUES (?, ?, ?)`);
+    for (const tag of bundle.tags) insertTag.run(tag.id, tag.name, tag.createdAt);
+    const validFolderIds = new Set(bundle.folders.map((f) => f.id));
+    const tagIdByName = new Map(bundle.tags.map((t) => [t.name.toLowerCase(), t.id]));
 
     // 2. Restore user templates so meetings can reference them.
     const insertTemplate = db.prepare(
@@ -195,9 +218,12 @@ export function restoreFromBackup(bundle: BackupBundle): { meetingCount: number 
     // 3. Restore meetings + their children.
     const insertMeeting = db.prepare(
       `INSERT INTO meetings
-         (id, title, status, created_at, started_at, ended_at, template_id,
+         (id, title, status, created_at, started_at, ended_at, template_id, folder_id,
           deepgram_audio_ms, claude_input_tokens, claude_output_tokens)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    const insertMeetingTag = db.prepare(
+      `INSERT OR IGNORE INTO meeting_tags (meeting_id, tag_id) VALUES (?, ?)`,
     );
     const insertNotes = db.prepare(
       `INSERT INTO notes (meeting_id, raw_user_md, enhanced_json, enhanced_at, enhanced_lang)
@@ -215,8 +241,9 @@ export function restoreFromBackup(bundle: BackupBundle): { meetingCount: number 
     for (const m of bundle.meetings) {
       const templateId =
         m.templateId !== null && validTemplateIds.has(m.templateId) ? m.templateId : null;
+      const folderId = m.folderId !== null && validFolderIds.has(m.folderId) ? m.folderId : null;
       insertMeeting.run(
-        m.id, m.title, m.status, m.createdAt, m.startedAt, m.endedAt, templateId,
+        m.id, m.title, m.status, m.createdAt, m.startedAt, m.endedAt, templateId, folderId,
         m.usage.deepgramAudioMs, m.usage.claudeInputTokens, m.usage.claudeOutputTokens,
       );
       insertNotes.run(m.id, m.rawUserMd, m.enhancedJson, m.enhancedAt, m.enhancedLang);
@@ -225,6 +252,10 @@ export function restoreFromBackup(bundle: BackupBundle): { meetingCount: number 
       }
       for (const sn of m.speakerNames) {
         insertSpeaker.run(m.id, sn.rawLabel, sn.displayName);
+      }
+      for (const tagName of m.tags) {
+        const tagId = tagIdByName.get(tagName.toLowerCase());
+        if (tagId !== undefined) insertMeetingTag.run(m.id, tagId);
       }
     }
   });
