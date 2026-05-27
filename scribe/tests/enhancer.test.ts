@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { EnhancedNotesSchema } from '../src/shared/ipc-contract';
+import { repairBlocks } from '../src/main/enhancer/anthropic';
 import {
   docToEnhancedNotes,
   enhancedNotesToDoc,
@@ -29,6 +30,37 @@ describe('EnhancedNotesSchema', () => {
         blocks: [{ type: 'paragraph', text: 'x', origin: 'system', sourceSegmentIds: [] }],
       }),
     ).toThrow();
+  });
+});
+
+describe('repairBlocks (type/origin recovery before degrading)', () => {
+  it('un-swaps a clean type/origin swap and re-validates', () => {
+    const repaired = repairBlocks({
+      blocks: [{ type: 'bullet', text: 'ok', origin: 'ai', sourceSegmentIds: [1] }, { type: 'user', text: 'mine', origin: 'paragraph', sourceSegmentIds: [] }],
+    });
+    const parsed = EnhancedNotesSchema.parse(repaired);
+    expect(parsed.blocks[1]).toEqual({ type: 'paragraph', text: 'mine', origin: 'user', sourceSegmentIds: [] });
+  });
+
+  it('coerces a stray origin-in-type (the observed failure) without losing text/ids', () => {
+    // The exact logged case: type:"user" while origin is already a valid origin.
+    const repaired = repairBlocks({
+      blocks: [{ type: 'user', text: 'a point', origin: 'ai', sourceSegmentIds: [5, 6] }],
+    });
+    const parsed = EnhancedNotesSchema.parse(repaired);
+    expect(parsed.blocks[0]).toEqual({ type: 'paragraph', text: 'a point', origin: 'ai', sourceSegmentIds: [5, 6] });
+  });
+
+  it('leaves a valid payload unchanged', () => {
+    const value = { blocks: [{ type: 'heading', text: 'H', origin: 'ai', sourceSegmentIds: [2] }] };
+    expect(EnhancedNotesSchema.parse(repairBlocks(value))).toEqual(value);
+  });
+
+  it('still fails for genuinely malformed blocks (bad text/ids) → degraded path', () => {
+    const repaired = repairBlocks({
+      blocks: [{ type: 'paragraph', text: 123, origin: 'ai', sourceSegmentIds: 'nope' }],
+    });
+    expect(EnhancedNotesSchema.safeParse(repaired).success).toBe(false);
   });
 });
 

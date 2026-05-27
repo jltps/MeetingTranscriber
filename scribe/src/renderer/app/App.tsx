@@ -762,23 +762,28 @@ export function App() {
                 autoSaveId="scribe:split"
                 className="flex-1 overflow-hidden"
               >
-                <ResizablePanel defaultSize={58} minSize={30} className="overflow-y-auto border-r border-border p-6">
-                  {view === 'enhanced' && enhanced ? (
-                    <EnhancedNotesEditor
-                      key={`enhanced-${detail.id}`}
-                      meetingId={detail.id}
-                      notes={enhanced}
-                      onSave={(id, notes) => void window.api.meetings.saveEnhanced(id, notes)}
-                      onJump={(ids) => setHighlight({ ids, nonce: Date.now() })}
-                    />
-                  ) : (
-                    <NotesEditor
-                      key={detail.id}
-                      meetingId={detail.id}
-                      initialMarkdown={detail.rawUserMd}
-                      onSave={(id, markdown) => void window.api.meetings.saveNotes(id, markdown)}
-                    />
-                  )}
+                <ResizablePanel defaultSize={58} minSize={30} className="border-r border-border">
+                  {/* The scroll container must live INSIDE the panel: react-resizable-panels
+                      sets overflow:hidden as an inline style on the panel itself, which would
+                      override an overflow-y-auto class here and clip long notes with no scrollbar. */}
+                  <div className="h-full overflow-y-auto p-6">
+                    {view === 'enhanced' && enhanced ? (
+                      <EnhancedNotesEditor
+                        key={`enhanced-${detail.id}`}
+                        meetingId={detail.id}
+                        notes={enhanced}
+                        onSave={(id, notes) => void window.api.meetings.saveEnhanced(id, notes)}
+                        onJump={(ids) => setHighlight({ ids, nonce: Date.now() })}
+                      />
+                    ) : (
+                      <NotesEditor
+                        key={detail.id}
+                        meetingId={detail.id}
+                        initialMarkdown={detail.rawUserMd}
+                        onSave={(id, markdown) => void window.api.meetings.saveNotes(id, markdown)}
+                      />
+                    )}
+                  </div>
                 </ResizablePanel>
                 <ResizableHandle withHandle />
                 <ResizablePanel defaultSize={42} minSize={25} className="flex flex-col overflow-hidden p-6">

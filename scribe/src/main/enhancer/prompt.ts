@@ -2,11 +2,11 @@ import type { EnhancedNotes } from '../../shared/types';
 import type { EnhancerSegment } from './enhancer';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Enhancer prompt — VERSION 3 (2026-05-26).
+// Enhancer prompt — VERSION 4 (2026-05-27).
 // Bump PROMPT_VERSION and the date whenever the wording below changes, so prompt
 // changes are traceable (CLAUDE.md §8).
 // ─────────────────────────────────────────────────────────────────────────────
-export const PROMPT_VERSION = 3;
+export const PROMPT_VERSION = 4;
 
 // ── Structural sections ───────────────────────────────────────────────────────
 // Prompt assembly (VERSION 3):
@@ -38,7 +38,8 @@ const CONTRACT_SECTION = `MANDATORY CONTRACT (overrides all instructions above):
 - You MUST call emit_enhanced_notes. Never respond in plain text.
 - Every "ai" block MUST include sourceSegmentIds referencing the [id=N] transcript markers.
 - The only valid block types are: "heading", "paragraph", "bullet", "action_item".
-- The only valid origin values are: "user" and "ai".`;
+- The only valid origin values are: "user" and "ai".
+- "type" and "origin" are SEPARATE fields. "type" is the block kind (heading/paragraph/bullet/action_item); "origin" is who authored it (user/ai). Never put an origin value in "type" or vice versa.`;
 
 // ── Public API ────────────────────────────────────────────────────────────────
 

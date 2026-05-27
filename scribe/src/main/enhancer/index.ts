@@ -1,6 +1,7 @@
 import { AnthropicEnhancer } from './anthropic';
 import { getAnthropicKey } from '../secrets/api-keys';
 import { getGlobalInstructions } from '../db/settings';
+import { logger } from '../logger';
 import type { EnhanceInput, EnhancerUsage } from './enhancer';
 import type { EnhancedNotes } from '../../shared/types';
 
@@ -29,7 +30,13 @@ export async function runEnhancement(input: EnhanceInput): Promise<RunEnhancemen
   try {
     const result = await enhancer.enhance(fullInput);
     return { notes: result.notes, degraded: false, usage: result.usage };
-  } catch {
+  } catch (err) {
+    // Record *why* structured enhancement failed before degrading — otherwise the
+    // UI's "degraded" banner is the only signal and the cause stays invisible.
+    logger.warn(
+      'enhancement: structured output failed, using plain-text fallback',
+      err instanceof Error ? err : String(err),
+    );
     const result = await enhancer.enhanceFallback(fullInput);
     return { notes: result.notes, degraded: true, usage: result.usage };
   }

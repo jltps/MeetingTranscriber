@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { EnhancedNotesSchema } from '../../shared/ipc-contract';
+import { logger } from '../logger';
 import type { EnhanceInput, EnhanceResult, Enhancer, EnhancerSegment, EnhancerUsage } from './enhancer';
 import {
   FALLBACK_SYSTEM_PROMPT,
@@ -12,7 +13,11 @@ import {
 
 // Current Anthropic Sonnet (PRODUCT_SPEC.md §5, CLAUDE.md §8).
 const MODEL = 'claude-sonnet-4-6';
-const MAX_TOKENS = 8192;
+// The structured tool output is verbose (every block repeats type/origin/
+// sourceSegmentIds), so a real meeting's notes can blow past a small ceiling — when
+// that happens the tool JSON is truncated, Zod rejects it, and we fall back to the
+// degraded plain-text path. 16k leaves ample headroom for normal meetings.
+const MAX_TOKENS = 16000;
 // Transcripts above this many characters are summarized chunk-by-chunk first,
 // then merged, rather than truncated (CLAUDE.md §8). Sonnet's context is large,
 // so most meetings take the single-call path.
@@ -50,6 +55,36 @@ function textOf(content: Anthropic.ContentBlock[]): string {
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')
     .map((b) => b.text)
     .join('\n');
+}
+
+const BLOCK_TYPES = ['heading', 'paragraph', 'bullet', 'action_item'];
+const ORIGINS = ['user', 'ai'];
+const isType = (v: unknown): boolean => typeof v === 'string' && BLOCK_TYPES.includes(v);
+const isOrigin = (v: unknown): boolean => typeof v === 'string' && ORIGINS.includes(v);
+
+// The model occasionally confuses the `type` and `origin` fields — most often a
+// clean swap (it emits `type:"user"` with the real type sitting in `origin`).
+// Rather than discard the entire structured result over one block, repair the
+// recoverable cases (preserving each block's text + sourceSegmentIds) and let the
+// schema re-validate afterwards (§1.6). Genuinely malformed output — bad `text`
+// or `sourceSegmentIds` — still fails and falls through to the plain-text path.
+export function repairBlocks(input: unknown): unknown {
+  if (typeof input !== 'object' || input === null) return input;
+  const blocks = (input as { blocks?: unknown }).blocks;
+  if (!Array.isArray(blocks)) return input;
+  return {
+    ...(input as object),
+    blocks: blocks.map((b) => {
+      if (typeof b !== 'object' || b === null) return b;
+      const block = { ...(b as Record<string, unknown>) };
+      let type = block.type;
+      let origin = block.origin;
+      if (isOrigin(type) && isType(origin)) [type, origin] = [origin, type]; // clean swap
+      block.type = isType(type) ? type : 'paragraph';
+      block.origin = isOrigin(origin) ? origin : 'ai';
+      return block;
+    }),
+  };
 }
 
 // Minimal auth check for Settings → "Test connection". A 1-token request both
@@ -112,7 +147,21 @@ export class AnthropicEnhancer implements Enhancer {
         );
         const parsed = EnhancedNotesSchema.safeParse(toolUse?.input);
         if (parsed.success) return { notes: parsed.data, usage: totalUsage };
-        lastError = parsed.error;
+        // Recover the model's occasional type/origin field mix-ups before giving up.
+        const repaired = EnhancedNotesSchema.safeParse(repairBlocks(toolUse?.input));
+        if (repaired.success) {
+          logger.warn('enhance: recovered malformed type/origin via repair', `attempt=${attempt + 1}`);
+          return { notes: repaired.data, usage: totalUsage };
+        }
+        // Distinguish the remaining causes so the failure isn't a mystery: a truncated
+        // response (hit max_tokens) yields incomplete tool JSON, vs. the model not
+        // calling the tool at all, vs. a genuine schema mismatch.
+        lastError =
+          response.stop_reason === 'max_tokens'
+            ? new Error(`Structured output hit max_tokens (${MAX_TOKENS}); tool JSON was truncated.`)
+            : !toolUse
+              ? new Error(`Model did not call ${ENHANCE_TOOL.name} (stop_reason=${response.stop_reason}).`)
+              : parsed.error;
       } catch (err) {
         lastError = err;
       }
