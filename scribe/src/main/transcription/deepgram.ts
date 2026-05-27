@@ -17,12 +17,10 @@ const BACKOFF_MS = [1000, 2000, 4000, 8000, 16000];
 export type DeepgramConfig = {
   apiKey: string;
   /**
-   * Structured language setting (FEATURES §A).
-   * 'auto' → nova-3 language=multi (multilingual, keeps multichannel).
-   * 'fixed' → pass the BCP-47 code directly.
-   * NOTE: Deepgram detect_language=true is incompatible with multichannel=true
-   * (returns HTTP 400). We use language=multi instead, which lets nova-3 handle
-   * multiple languages while preserving the multichannel Me/Them split.
+   * Structured language setting (FEATURES §A). Resolved into query params by
+   * buildDeepgramQuery(): 'auto' → `language=multi`; 'fixed' → the BCP-47 code.
+   * NOTE: nova-3 streaming has no `detect_language` (it returns HTTP 400), so auto
+   * mode uses `multi` — nova-3's multilingual/code-switching mode.
    */
   languageSetting?: LanguageSetting;
   /** Called once when the first detected_language is returned by Deepgram. */
@@ -33,6 +31,41 @@ export type DeepgramConfig = {
    */
   onStatus?: (status: TranscriptionStatus) => void;
 };
+
+// Build the Deepgram streaming query string. Pure + exported so the param rules can
+// be unit-tested without opening a socket (they are easy to get subtly wrong — see
+// V05, where detect_language silently broke nova-3 streaming with HTTP 400).
+//
+// nova-3 streaming language rules (developers.deepgram.com/docs):
+//   - `detect_language` is NOT supported on streaming — using it returns HTTP 400.
+//   - auto → `language=multi` (nova-3's multilingual / code-switching mode).
+//   - fixed → the BCP-47 code directly (nova-3 accepts en + pt-PT/pt-BR/es/fr/de/… + multi).
+export function buildDeepgramQuery(
+  opts: { sampleRate: number; channels: number },
+  languageSetting?: LanguageSetting,
+): URLSearchParams {
+  const params = new URLSearchParams({
+    model: 'nova-3',
+    // diarize splits multiple speakers *within* a channel. Two remote people share
+    // one audio stream, so only diarization (not channel-splitting) can separate
+    // them. Required in both the mono (V05) and legacy multichannel paths.
+    diarize: 'true',
+    // smart_format adds number/date/entity formatting on top of punctuation.
+    smart_format: 'true',
+    punctuate: 'true',
+    interim_results: 'true',
+    encoding: 'linear16',
+    sample_rate: String(opts.sampleRate),
+    channels: String(opts.channels),
+  });
+  // V05 ROADMAP_02: the renderer sends one mono channel to halve cost. multichannel
+  // is only for the legacy ≥2-channel path (kept working for safety).
+  if (opts.channels > 1) params.set('multichannel', 'true');
+
+  const setting = languageSetting ?? { mode: 'fixed', bcp47: 'en' };
+  params.set('language', setting.mode === 'auto' ? 'multi' : setting.bcp47);
+  return params;
+}
 
 // Lightweight key check used by Settings → "Test connection". Hits a cheap REST
 // endpoint; throws on any non-2xx so the caller can surface the failure.
@@ -127,42 +160,7 @@ export class DeepgramSession implements TranscriptionSession {
 
   /** Open (or re-open) a WebSocket connection with the given audio parameters. */
   private openSocket(opts: { sampleRate: number; channels: number }): Promise<void> {
-    const params = new URLSearchParams({
-      model: 'nova-3',
-      // diarize splits multiple speakers *within* a channel. Two remote people
-      // share one audio stream, so only diarization (not channel-splitting) can
-      // separate them. Required in both the mono (V05) and legacy multichannel paths.
-      diarize: 'true',
-      // smart_format includes punctuation plus number/date/entity formatting for a
-      // more readable transcript (superset of punctuate; both are harmless together).
-      smart_format: 'true',
-      punctuate: 'true',
-      interim_results: 'true',
-      encoding: 'linear16',
-      sample_rate: String(opts.sampleRate),
-      channels: String(opts.channels),
-    });
-    // V05 ROADMAP_02: the renderer now sends one mono channel to halve cost. Only
-    // enable multichannel for the legacy ≥2-channel path (kept working for safety).
-    const multichannel = opts.channels > 1;
-    if (multichannel) params.set('multichannel', 'true');
-
-    const setting = this.config.languageSetting ?? { mode: 'fixed', bcp47: 'en' };
-    if (setting.mode === 'auto') {
-      // detect_language is incompatible with multichannel (HTTP 400), so the legacy
-      // path falls back to nova-3 `multi` (code-switching). The mono path can use
-      // proper single-language detection, which avoids `multi`'s cross-language
-      // hallucination and routes to the more accurate dedicated model.
-      if (multichannel) params.set('language', 'multi');
-      else params.set('detect_language', 'true');
-    } else {
-      params.set('language', setting.bcp47);
-    }
-    // Only reset langDetectedFired for the initial open, not reconnects, so we
-    // don't re-fire the event mid-session.
-    if (!this.langDetectedFired) {
-      // intentionally left: flag starts false
-    }
+    const params = buildDeepgramQuery(opts, this.config.languageSetting);
 
     return new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(`${DEEPGRAM_URL}?${params.toString()}`, {
