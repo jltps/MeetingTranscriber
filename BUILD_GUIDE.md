@@ -2,7 +2,16 @@
 
 How to go from an empty folder to a packaged Windows build of Scribe, using
 Claude Code as the implementer. This guide is the *process*; `PRODUCT_SPEC.md` is
-*what* to build and `CLAUDE.md` is *how* the code should look.
+*what* v1 was and `CLAUDE.md` is *how* the code should look.
+
+> **Where the project is now.** v1 (milestones M0–M6) is **shipped**, and most of
+> the post-v1 backlog is too (language/templates, reliability, speaker naming,
+> export/backup, local Whisper, calendar, cross-meeting chat). Phases 1–3 below are
+> the historical *bootstrap* record — useful for understanding the build discipline
+> and re-reading a milestone before touching it. For extending the shipped app, jump
+> to [Phase 5 — Beyond v1](#phase-5--beyond-v1-extending-the-shipped-app). The docs
+> live at the repo root; the app lives in the **`scribe/`** subdirectory, so every
+> `pnpm …` command below runs from `scribe/`.
 
 ---
 
@@ -103,6 +112,12 @@ git add -A
 git commit -m "chore: project docs + M1 audio reference"
 ```
 
+> **Note on the layout that actually shipped.** The repo settled on docs +
+> `roadmap/` + `reference/` at the **repo root** and the Electron app in a
+> **`scribe/`** subdirectory (so `pnpm` commands run from `scribe/`). If you're
+> reading this against the live tree, that's the structure to match — not a
+> single flat folder.
+
 ## Phase 2 — Start Claude Code and orient it
 
 ```powershell
@@ -201,6 +216,41 @@ full happy path (§4) end to end. Commit and tag.
 - **Keep prompts milestone-scoped.** Always end build prompts with "stop after
   M<n>." Scope creep across milestones is the main way quality degrades.
 
+## Phase 5 — Beyond v1 (extending the shipped app)
+
+v1 is built. New work comes from the post-v1 backlog, not from `PRODUCT_SPEC.md`:
+
+- **`roadmap/v02/FEATURES_LANGUAGE_PROMPT_TEMPLATES.md`** — language + auto-detect,
+  enhancement prompt control, templates. *(Shipped.)*
+- **`roadmap/v03/ROADMAP_*.md`** — independent building blocks (reliability, speaker
+  naming, quality, data/export/sync, local Whisper, calendar, cross-meeting). Read
+  `ROADMAP_00_INDEX.md` first for the dependency order and status. Most are shipped;
+  the quality eval loop (03) and the sync/sharing phases (04) are not.
+
+The same discipline that built v1 still applies — only the anchor document changes:
+
+1. **One block per branch** (`feat/<block>`), matching `CLAUDE.md` §10. Keep PRs
+   reviewable; don't bundle unrelated blocks.
+2. **Read the existing code first.** v1's interfaces (`TranscriptionSession`,
+   `Enhancer`) and the shared IPC contract are why these blocks are cheap — extend
+   them, don't fork a second way of doing things (`CLAUDE.md` §0, §4).
+3. **Propose the fit before writing.** Have Claude Code sketch how the block lands in
+   the current structure (which files, which IPC channels, which migration) and
+   review that before it writes code. Use plan mode (Shift+Tab) for the big ones.
+4. **Migrations only — never recreate tables.** The DB now holds real meetings. New
+   schema ships as additive, ordered migrations in `scribe/src/main/db/migrations.ts`
+   (`CLAUDE.md` §7). Test migrations against a populated DB.
+5. **Hold the §1 invariants every time.** No audio to disk, keys never in the
+   renderer/logs, no bot/meeting-platform SDK, notes stay sacred. Calendar access is
+   read-only **free/busy** only — it learns *when* you're busy, never event details.
+6. **Gate on `pnpm typecheck` + `pnpm lint`** (run from `scribe/`) before every
+   commit, same as v1.
+7. **`/clear` between blocks.** `CLAUDE.md` reloads automatically, so the invariants
+   and conventions persist.
+
+Calendar blocks need a one-time OAuth client; point Claude Code (and yourself) at
+`scribe/docs/CALENDAR_SETUP.md`.
+
 ## Quick reference
 
 | Step | Command |
@@ -213,7 +263,8 @@ full happy path (§4) end to end. Commit and tag.
 | Paste screenshot | Alt+V |
 | Run app (dev) | `pnpm dev` |
 | Type/lint gates | `pnpm typecheck` · `pnpm lint` |
-| Package (M6) | `pnpm build` |
+| Compile (no installer) | `pnpm build` |
+| Package NSIS installer | `pnpm dist` |
 
 ## If something breaks
 

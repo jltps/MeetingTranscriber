@@ -10,10 +10,17 @@ and reconcile the docs to it, never the reverse. The one exception is §1: those
 invariants are non-negotiable even if current code violates them (if it does, flag
 it as a bug to fix).
 
-Roles: `PRODUCT_SPEC.md` is the original v1 product intent (now largely
-*implemented* — historical reference). `FEATURES_LANGUAGE_PROMPT_TEMPLATES.md` is
-the active backlog of features being added. This file is *how* the code should
-look and behave.
+Roles: `PRODUCT_SPEC.md` is the original v1 product intent (now *implemented* —
+historical reference). The post-v1 specs live under `roadmap/`:
+`roadmap/v02/FEATURES_LANGUAGE_PROMPT_TEMPLATES.md` (language, prompt control,
+templates — **shipped**) and `roadmap/v03/ROADMAP_*.md` (the building-block backlog;
+`ROADMAP_00_INDEX.md` is the map). Most of v03 is shipped — see that index and
+`README.md` for current status. Inline `FEATURES …` and `ROADMAP_NN …` references in
+this file point into those folders. This file is *how* the code should look and
+behave.
+
+The app itself lives in the `scribe/` subdirectory (these docs sit at the repo
+root). All commands in §11 run from `scribe/`.
 
 ---
 
@@ -25,9 +32,10 @@ look and behave.
 - **v1 is built.** Before changing anything, read the relevant existing code and
   match its established patterns (structure, naming, IPC style, DB access). Do not
   introduce a second way of doing something that already has a way.
-- For **new features**, work from `FEATURES_LANGUAGE_PROMPT_TEMPLATES.md`. Propose
-  how a feature fits the existing code *before* writing it; don't assume the
-  greenfield structure in §3 below is exactly what got built — verify.
+- For **new features**, work from the relevant `roadmap/v03/ROADMAP_*.md` block (or
+  `roadmap/v02` for language/template work). Propose how a feature fits the existing
+  code *before* writing it; don't assume the structure in §3 below is exactly what
+  got built — verify.
 
 ## 1. The non-negotiable rules
 
@@ -68,15 +76,18 @@ actually in use** and match them — if the build chose something different (e.g
 different state or styling approach), follow the code, and only raise a swap if
 there's a real problem.
 
-- Electron (loopback audio needs **≥ v31**), pinned.
+- Electron (loopback audio needs **≥ v31**; currently pinned to **33**), via
+  `electron-vite`.
 - React 18 + TypeScript (`strict: true`) + Vite.
 - Tailwind CSS for styling.
 - TipTap (ProseMirror) for the notes editor.
 - `better-sqlite3` for local storage (main process only).
 - Web Audio API + AudioWorklet for capture/mix.
-- Deepgram streaming (WebSocket) for transcription, behind the
+- Deepgram streaming (WebSocket) for cloud transcription **and** local Whisper
+  (`@xenova/transformers`) for offline transcription — both behind the one
   `TranscriptionSession` interface.
-- Anthropic Claude API for enhancement, behind the `Enhancer` interface.
+- Anthropic Claude API for enhancement, titles, and chat, behind the `Enhancer`
+  interface. Current model: `claude-sonnet-4-6` (see §8).
 - Zod for runtime validation of all IPC payloads and all LLM JSON output.
 - `electron-builder` (NSIS) for packaging.
 
@@ -90,13 +101,17 @@ directory listing and follow the actual structure**; update this section to matc
 reality rather than moving files to match this section.
 
 ```
-src/
-├─ main/        # Electron main process (privileged): window, ipc/, db/, audio/,
-│               # transcription/, enhancer/ (incl. prompt.ts), secrets/
+scribe/src/
+├─ main/        # Electron main process (privileged):
+│               #   window (index.ts), ipc/, db/ (incl. migrations.ts), audio/,
+│               #   transcription/ (deepgram + whisper), enhancer/ (incl. prompt.ts,
+│               #   title.ts, pricing.ts), chat/ (+ retrieval/), calendar/
+│               #   (google + microsoft, oauth, pkce), secrets/, logger.ts
 ├─ preload/     # contextBridge: exposes typed window.api only
 ├─ renderer/    # React app (untrusted): app/, features/, audio/, lib/
-│  └─ features/ # meetings/, notes/, transcript/, settings/  (one folder per feature)
-└─ shared/      # types + ipc-contract.ts (Zod). NO node/electron/react imports.
+│  └─ features/ # meetings/, notes/, transcript/, settings/, templates/,
+│               # calendar/, chat/  (one folder per feature)
+└─ shared/      # types.ts + ipc-contract.ts + pricing.ts (Zod). NO node/electron/react.
 ```
 
 Structural rules (these hold regardless of exact folder names):
@@ -168,8 +183,10 @@ Structural rules (these hold regardless of exact folder names):
 
 ## 8. LLM / enhancement rules
 
-- Model: current Anthropic Sonnet. The enhancement prompt lives in one versioned
-  file (e.g. `main/enhancer/prompt.ts`); find the existing one and edit it there.
+- Model: current Anthropic Sonnet — `claude-sonnet-4-6` (defined once per caller in
+  `main/enhancer/anthropic.ts`, `main/enhancer/title.ts`, `main/chat/anthropic-chat.ts`).
+  The enhancement prompt lives in one versioned file (`main/enhancer/prompt.ts`);
+  find the existing one and edit it there.
 - Output is **strict JSON** matching the `EnhancedNotes` shape, validated with Zod.
   On invalid JSON: retry once, then fall back to a plain-markdown enhancement and
   mark it degraded in the UI.
@@ -224,5 +241,9 @@ If the actual script names differ, use those and update this list. `typecheck` a
 - For new work, cross-check `FEATURES_LANGUAGE_PROMPT_TEMPLATES.md`; for original
   v1 intent, cross-check `PRODUCT_SPEC.md` — but remember the shipped code is ground
   truth where they conflict.
-- Deferred for later (don't build unless asked): calendar auto-start, offline
-  Whisper, post-meeting chat, cross-meeting querying, accounts/sync, macOS.
+- Already shipped beyond v1 (don't rebuild — extend the existing code): language +
+  auto-detect, prompt control + templates, reliability/usage-cost, speaker naming,
+  export + backup, **offline Whisper**, **calendar auto-start** (Google + Microsoft),
+  **post-meeting chat**, and **cross-meeting querying**.
+- Still deferred (don't build unless asked): transcript/enhancement quality eval loop
+  (ROADMAP_03), accounts + cloud sync + sharing (ROADMAP_04 later phases), macOS.

@@ -6,9 +6,19 @@
 > an AI-enhanced summary — without ever joining the call as a participant and
 > without storing any audio.
 
-This document is the single source of truth for building v1. It is written to be
+This document was the single source of truth for building v1. It is written to be
 fed to Claude Code. Build in the milestone order given in §11. Do not skip the
-non-goals in §3 — they exist to keep v1 shippable.
+non-goals in §3 — they existed to keep v1 shippable.
+
+> **Status (historical document).** v1 (§11, milestones M0–M6) is **shipped**. The
+> app is at v0.3.0 and has since absorbed most of the §3 non-goals and §13 roadmap:
+> multi-language + auto-detect, enhancement prompt control + templates, reliability
+> hardening + usage/cost, speaker naming, export/backup, local Whisper, calendar
+> (Google + Microsoft, free/busy only), and cross-meeting chat are all built. This
+> file is kept as the **original v1 intent**; for *how* the code should behave today
+> see `CLAUDE.md`, for shipped-feature specs see `roadmap/v02` and `roadmap/v03`, and
+> for the live overview see `README.md`. Where this spec and the code disagree, **the
+> code wins** (CLAUDE.md). §3 and §13 are annotated below with what has since shipped.
 
 ---
 
@@ -40,16 +50,24 @@ transcription without any meeting agent/bot.**
 
 ## 3. Non-goals for v1 (explicitly out of scope)
 
-These are deliberately deferred. Do not build them in v1. They are listed in §12
-as the v2 roadmap so the architecture can leave room for them.
+These were deliberately deferred out of v1. They were listed in §13 as the roadmap
+so the architecture could leave room for them. **Many have since shipped** —
+annotations mark which:
 
-- ❌ Calendar integration / auto-start at scheduled meeting time.
-- ❌ Note templates (Interview, Stand-up, etc.).
-- ❌ Cross-meeting / folder-level querying ("what came up across my last 5 calls").
-- ❌ Post-meeting conversational AI chat about a meeting.
-- ❌ User accounts, authentication, cloud sync, sharing, collaboration.
-- ❌ Audio recording / playback (we discard audio by design — see §7).
-- ❌ Local/offline transcription (cloud transcription only in v1; see §6.2).
+- ✅ Calendar integration / auto-start at scheduled meeting time. *(Shipped:
+  ROADMAP_06 — Google + Microsoft, free/busy only.)*
+- ✅ Note templates (Interview, Stand-up, etc.). *(Shipped: `roadmap/v02` — named,
+  editable enhancement templates.)*
+- ✅ Cross-meeting / folder-level querying ("what came up across my last 5 calls").
+  *(Shipped: ROADMAP_07 Phase 2.)*
+- ✅ Post-meeting conversational AI chat about a meeting. *(Shipped: ROADMAP_07
+  Phase 1.)*
+- ❌ User accounts, authentication, cloud sync, sharing, collaboration. *(Still
+  deferred — export/backup shipped, but sync/sharing did not.)*
+- ❌ Audio recording / playback (we discard audio by design — see §7). *(Permanent
+  non-goal — a §1 invariant in CLAUDE.md.)*
+- ✅ Local/offline transcription. *(Shipped: ROADMAP_05 — local Whisper via
+  `@xenova/transformers`, behind the §6.2 interface.)*
 - ❌ Installer/auto-update polish (a runnable packaged dev build is enough; see §11 M6).
 - ❌ macOS support (architecture should not hard-block it, but do not build it).
 
@@ -371,11 +389,20 @@ No `audio` table. There is intentionally nowhere to store audio.
 
 Each milestone must be independently runnable and demoable.
 
-## 13. v2 roadmap (do not build now; leave room in the architecture)
+## 13. Post-v1 roadmap (status)
 
-Calendar auto-start; note templates; local/offline Whisper transcription (drop in
-behind the §6.2 interface); post-meeting AI chat about a meeting; cross-meeting
-folder querying; accounts + cloud sync + sharing; macOS support.
+The architecture left room for these; most are now built. Specs live in
+`roadmap/v02` and `roadmap/v03` (`ROADMAP_00_INDEX.md` is the map).
+
+- ✅ Calendar auto-start (Google + Microsoft, free/busy only) — ROADMAP_06.
+- ✅ Note templates — `roadmap/v02`.
+- ✅ Local/offline Whisper transcription (behind the §6.2 interface) — ROADMAP_05.
+- ✅ Post-meeting AI chat about a meeting — ROADMAP_07 Phase 1.
+- ✅ Cross-meeting / folder querying — ROADMAP_07 Phase 2.
+- ✅ Reliability/perf/cost, speaker naming, export + backup — ROADMAP_01/02/04.
+- ⏳ Transcript & enhancement quality eval loop — ROADMAP_03 (not yet built).
+- ⏳ Accounts + cloud sync + sharing — ROADMAP_04 later phases (not yet built).
+- ❌ macOS support (still deferred; architecture should not hard-block it).
 
 ## 14. Acceptance criteria for v1 "done"
 
