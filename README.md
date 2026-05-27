@@ -17,9 +17,9 @@ The app lives in [`scribe/`](scribe/). This file is the project overview; see th
 
 ## Status
 
-Shipping at **v0.4.0**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
-largely built, and **V04 — the UI/UX + rebrand phase — has shipped** (the product was
-renamed **Scribe → Nexus**):
+Shipping at **v0.5.0**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
+largely built, **V04 — the UI/UX + rebrand phase — has shipped** (the product was
+renamed **Scribe → Nexus**), and **V05 — transcription quality & cost — has shipped**:
 
 **v1 — core (shipped)**
 - Mic + Windows loopback system audio captured as a 2-channel 16 kHz PCM stream
@@ -67,6 +67,17 @@ renamed **Scribe → Nexus**):
 - **Rebrand to Nexus**: app icon, in-app logo, and installer identity. The rename is
   cosmetic — the `com.scribe.app` id and `scribe.sqlite` DB are unchanged so existing
   installs keep their meetings, keys, and layout.
+
+**v5 — transcription quality & cost (shipped)**
+- **Speaker diarization** (`diarize=true` + smart formatting): multiple remote
+  speakers are now separated instead of merging into one.
+- **Single mono channel** capture: Deepgram bills per channel, so downmixing mic +
+  system into one stream ~halves the per-minute cost. Speakers come from diarization;
+  **"Me" is recovered** from the per-frame mic-vs-system energy levels (a heuristic,
+  tuned against live calls). Per-meeting billed-channel cost accounting keeps the
+  usage readout correct across the change.
+- Decision on record: **stay on nova-3, not Deepgram Flux** (a voice-agent model that
+  lacks diarization, word timing, and meeting transcription, at higher cost).
 
 Not yet built: transcript/enhancement quality eval loop (v03 ROADMAP_03) and the
 sync/sharing phases of the data block (v03 ROADMAP_04).
@@ -138,7 +149,8 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 ├─ roadmap/
 │  ├─ v02/FEATURES_LANGUAGE_PROMPT_TEMPLATES.md   # language/prompts/templates
 │  ├─ v03/ROADMAP_*.md                            # post-v1 backlog blocks
-│  └─ v04/ROADMAP_*.md                            # UI/UX + rebrand phase (Nexus)
+│  ├─ v04/ROADMAP_*.md                            # UI/UX + rebrand phase (Nexus)
+│  └─ v05/ROADMAP_*.md                            # transcription quality & cost
 └─ scribe/              # the application
    ├─ build/            # brand assets: icon.ico, icon.png, make-icons.mjs
    └─ src/
@@ -160,6 +172,7 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 | `roadmap/v02/…` | Language, enhancement-prompt control, and templates (shipped). |
 | `roadmap/v03/…` | Reliability, speaker naming, quality, data, Whisper, calendar, cross-meeting (see `ROADMAP_00_INDEX.md`). |
 | `roadmap/v04/…` | UI/UX + rebrand: design tokens/theming, shadcn/ui, app shell, folders/tags, command palette, layout, onboarding, accessibility, Nexus rebrand. |
+| `roadmap/v05/…` | Transcription quality & cost: speaker diarization, single-channel mono capture + mic-energy "Me", per-meeting cost accounting. |
 | `scribe/docs/CALENDAR_SETUP.md` | One-time Google / Microsoft OAuth client setup. |
 
 **Ground truth is the code, not the docs.** Where any doc disagrees with the
