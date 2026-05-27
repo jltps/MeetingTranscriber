@@ -206,38 +206,49 @@ type TranscriptSegment = {
 };
 ```
 
-### 6.3 Multichannel strategy (do this — it's what makes speaker labels good)
+### 6.3 Channel + diarization strategy (single mono channel — V05)
 
-Send a **2-channel** stream to Deepgram, not a single mixed stream:
+> **Updated in V05 (`roadmap/v05/ROADMAP_02`).** v1 sent a **2-channel** stream
+> (mic = channel 0 → "Me", system = channel 1 → diarized) so "me vs them" was free
+> from the physical channel. But Deepgram **bills per channel**, so two channels
+> doubled the cost — and channel-splitting never separated two people sharing the
+> system channel anyway (only diarization does). V05 switched to a **single mono
+> channel** and recovers "Me" from the mic-energy signal. The legacy 2-channel path
+> still exists in code (used when `channels > 1`), but the current default is mono.
 
-- **Channel 0 = microphone** → always attributed to **"Me"** (the local user).
-- **Channel 1 = system audio** → enable Deepgram **diarization** on this channel
-  to separate remote speakers ("Speaker 1", "Speaker 2", …).
+Send a **single mono** stream to Deepgram (mic + system downmixed):
 
-Enable Deepgram options: `multichannel=true`, `diarize=true`, `punctuate=true`,
-`interim_results=true`, `model=nova-3` (or current best), `encoding=linear16`,
-`sample_rate=16000`. This gives reliable "me vs them" separation for free, since
-we physically know which channel is the mic.
+- **Diarization** (`diarize=true`) separates every speaker on the one stream into
+  "Speaker 1", "Speaker 2", … — including the local user.
+- **"Me" attribution** is recovered in the main process: the worklet reports a
+  per-frame **mic RMS** and **system RMS** level, and each transcript segment whose
+  window was mic-dominated is relabelled **"Me"** (see
+  `main/transcription/me-attribution.ts`). This is a heuristic tuned on live calls,
+  not a physical guarantee — the trade for halving the per-minute cost.
+
+Enable Deepgram options: `diarize=true`, `smart_format=true`, `punctuate=true`,
+`interim_results=true`, `model=nova-3`, `encoding=linear16`, `sample_rate=16000`,
+`channels=1`. For auto language, use `detect_language=true` (now possible without
+`multichannel`); for a fixed language pass its BCP-47 code (more accurate than the
+multilingual `multi` model for a single-language meeting).
 
 The renderer:
 1. Creates one `AudioContext` **forced to 16 kHz** (`new AudioContext({ sampleRate:
    16000 })`). The browser resamples both inputs, so **no manual resampler is
    needed**. Rare drivers refuse the rate — detect `ctx.sampleRate !== 16000` and
-   surface it rather than emitting bad PCM; M2 can add a worklet-side fallback
-   resampler behind the same interface.
+   surface it rather than emitting bad PCM.
 2. Wraps mic stream and system stream in `MediaStreamAudioSourceNode`s.
-3. Feeds them into a **2-input `AudioWorkletProcessor`** (mic → input 0 → channel 0,
-   system → input 1 → channel 1). This replaces the `ChannelMergerNode` of earlier
-   drafts: it keeps the mic and system signals cleanly separated with fewer moving
-   parts.
-4. The worklet **interleaves** the two inputs into 16-bit PCM (`[mic, sys, mic, sys,
-   …]`, the layout Deepgram multichannel `linear16` expects) and emits ~100 ms
-   frames. No resampling happens here — the 16 kHz context already did it.
+3. Feeds them into a **2-input `AudioWorkletProcessor`** (mic → input 0, system →
+   input 1), keeping the two signals separate only long enough to measure each one's
+   level.
+4. The worklet **downmixes** the two inputs into a single mono 16-bit PCM channel
+   (clamped `mic + system`) and emits ~100 ms frames, alongside the per-frame mic and
+   system RMS levels used for the VU meters and "Me" attribution. No resampling
+   happens here — the 16 kHz context already did it. The RMS levels are scalars,
+   never audio bytes (§6.4, §7).
 5. Frames are sent to the transcription session. **Key decision:** the Deepgram
-   WebSocket should be opened from the **main process** (renderer posts PCM frames
-   over IPC) so the API key never reaches the renderer. Acceptable alternative for
-   v1: open it from the renderer with a short-lived key — but main-process relay is
-   preferred for key safety.
+   WebSocket is opened from the **main process** (renderer posts PCM frames + the two
+   levels over IPC) so the API key never reaches the renderer.
 
 ### 6.4 Hard rule: no audio persistence
 
