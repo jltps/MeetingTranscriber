@@ -17,7 +17,8 @@ const api: ScribeApi = {
   getStatus: () => ipcRenderer.invoke(IPC.appGetStatus),
   startTranscription: (opts) => ipcRenderer.invoke(IPC.transcriptionStart, opts),
   stopTranscription: () => ipcRenderer.invoke(IPC.transcriptionStop),
-  pushAudioFrame: (pcm) => ipcRenderer.send(IPC.transcriptionPushFrame, pcm),
+  pushAudioFrame: (pcm, micLevel, sysLevel) =>
+    ipcRenderer.send(IPC.transcriptionPushFrame, pcm, micLevel, sysLevel),
   onTranscriptSegment: (cb) => {
     const listener = (_event: IpcRendererEvent, payload: unknown): void => {
       cb(TranscriptSegmentSchema.parse(payload));

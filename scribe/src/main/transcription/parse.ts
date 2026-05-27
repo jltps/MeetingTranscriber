@@ -1,9 +1,15 @@
 import type { TranscriptSegment } from '../../shared/types';
 
 // Pure mapping from a Deepgram streaming "Results" message to TranscriptSegments.
-// Kept side-effect free so it can be unit-tested without a socket. Channel 0 is
-// the mic → always "Me"; channel 1 is system audio → split by diarization speaker
-// (PRODUCT_SPEC.md §6.3).
+// Kept side-effect free so it can be unit-tested without a socket.
+//
+// Two modes:
+//  - Legacy multichannel (2-channel): channel 0 is the mic → always "Me";
+//    channel 1 is system audio → split by diarization speaker (PRODUCT_SPEC.md §6.3).
+//  - Single-channel (V05 ROADMAP_02): one mono stream carries everyone, split by
+//    diarization speaker into "Speaker N". The local user is NOT identified here —
+//    main reassigns the mic-dominant speaker to "Me" using the mic-energy signal.
+//    Segments are emitted on channel 1 ("other") as a placeholder until then.
 
 type DeepgramWord = {
   word: string;
@@ -24,7 +30,10 @@ type DeepgramResult = {
   channel?: { alternatives?: DeepgramAlternative[] };
 };
 
-export function parseDeepgramMessage(message: unknown): TranscriptSegment[] {
+export function parseDeepgramMessage(
+  message: unknown,
+  opts?: { singleChannel?: boolean },
+): TranscriptSegment[] {
   const result = message as DeepgramResult;
   if (result.type !== 'Results' || !result.channel) return [];
 
@@ -32,13 +41,15 @@ export function parseDeepgramMessage(message: unknown): TranscriptSegment[] {
   const transcript = alternative?.transcript?.trim();
   if (!alternative || !transcript) return [];
 
+  const singleChannel = opts?.singleChannel === true;
   const channel: 0 | 1 = (result.channel_index?.[0] ?? 0) === 0 ? 0 : 1;
   const isFinal = result.is_final === true;
   const baseStartMs = (result.start ?? 0) * 1000;
   const baseEndMs = ((result.start ?? 0) + (result.duration ?? 0)) * 1000;
 
-  // Mic channel: everything is the local user.
-  if (channel === 0) {
+  // Legacy multichannel mic channel: everything is the local user. In single-channel
+  // mode there is no dedicated mic channel — all audio is diarized below.
+  if (!singleChannel && channel === 0) {
     return [
       {
         text: transcript,
@@ -51,13 +62,14 @@ export function parseDeepgramMessage(message: unknown): TranscriptSegment[] {
     ];
   }
 
-  // System channel, finalized: split into per-speaker runs for clean attribution.
+  // Finalized: split into per-speaker runs for clean attribution. Emitted on the
+  // "other" channel (1); main may reassign the mic-dominant speaker to "Me".
   const words = alternative.words ?? [];
   if (isFinal && words.length > 0) {
     return splitBySpeaker(words);
   }
 
-  // System channel, interim (or no word-level data): one in-progress line.
+  // Interim (or no word-level data): one in-progress line.
   const firstSpeaker = words[0]?.speaker;
   const speakerLabel = typeof firstSpeaker === 'number' ? `Speaker ${firstSpeaker + 1}` : 'Speaker';
   return [

@@ -34,6 +34,18 @@ describe('estimateCost', () => {
       (outputTokens / 1_000_000) * PRICING.claudeSonnetOutputPer1MTokens;
     expect(estimateCost(deepgramMs, inputTokens, outputTokens)).toBeCloseTo(expected, 6);
   });
+
+  it('halves the Deepgram cost for single-channel (mono) capture (V05 ROADMAP_02)', () => {
+    const ms = 60_000; // 1 min
+    const mono = estimateCost(ms, 0, 0, 1);
+    const stereo = estimateCost(ms, 0, 0, 2);
+    expect(mono).toBeCloseTo(PRICING.deepgramNovaPerMinutePerChannel, 6);
+    expect(mono).toBeCloseTo(stereo / 2, 6);
+  });
+
+  it('defaults to 2-channel billing when channels is omitted (legacy meetings)', () => {
+    expect(estimateCost(60_000, 0, 0)).toBeCloseTo(estimateCost(60_000, 0, 0, 2), 6);
+  });
 });
 
 describe('formatCost', () => {
@@ -79,5 +91,14 @@ describe('PCM audio duration arithmetic', () => {
     const byteLength = Math.round((sampleRate * channels * 2) / 10);
     const durationMs = (byteLength / 2 / channels / sampleRate) * 1000;
     expect(durationMs).toBeCloseTo(100, 0);
+  });
+
+  it('computes wall-clock duration for a 1-channel (mono) buffer at 16kHz (V05)', () => {
+    const sampleRate = 16_000;
+    const channels = 1;
+    // 1 second of mono audio = sampleRate * 1 * 2 bytes
+    const byteLength = sampleRate * channels * 2;
+    const durationMs = (byteLength / 2 / channels / sampleRate) * 1000;
+    expect(durationMs).toBe(1000); // duration is wall-clock regardless of channel count
   });
 });

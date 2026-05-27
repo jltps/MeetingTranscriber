@@ -24,16 +24,17 @@ export const PRICING = {
 /**
  * Estimate the total USD cost for a meeting.
  * `deepgramAudioMs` is the total captured audio duration in milliseconds.
- * Deepgram is billed per-channel (×2 for multichannel capture).
+ * Deepgram is billed per channel, so cost scales with `deepgramChannels`. Defaults
+ * to 2 (the pre-V05 stereo capture); V05+ mono meetings pass 1 (V05 ROADMAP_02).
  */
 export function estimateCost(
   deepgramAudioMs: number,
   claudeInputTokens: number,
   claudeOutputTokens: number,
+  deepgramChannels = 2,
 ): number {
   const deepgramMinutes = deepgramAudioMs / 1000 / 60;
-  // 2-channel: Deepgram charges per channel, so 2× the audio-minutes.
-  const deepgramCost = deepgramMinutes * 2 * PRICING.deepgramNovaPerMinutePerChannel;
+  const deepgramCost = deepgramMinutes * deepgramChannels * PRICING.deepgramNovaPerMinutePerChannel;
 
   const claudeCost =
     (claudeInputTokens / 1_000_000) * PRICING.claudeSonnetInputPer1MTokens +

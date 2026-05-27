@@ -512,7 +512,10 @@ export function SettingsModal({
                     </p>
                   );
                 }
-                const deepgramCost = estimateCost(t.deepgramAudioMs, 0, 0);
+                // Deepgram cost comes from main (channel-weighted across meetings —
+                // can't be derived from summed ms alone, V05 ROADMAP_02). Claude cost
+                // is channel-independent so it's fine to compute here.
+                const deepgramCost = t.deepgramCostUsd;
                 const claudeCost = estimateCost(0, t.claudeInputTokens, t.claudeOutputTokens);
                 return (
                   <div className="space-y-2">

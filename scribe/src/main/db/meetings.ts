@@ -8,7 +8,7 @@ import type {
   TranscriptSegment,
 } from '../../shared/types';
 import type { UsageTotals } from '../../shared/ipc-contract';
-import { estimateCost } from '../enhancer/pricing';
+import { estimateCost, PRICING } from '../enhancer/pricing';
 import type { EnhancerSegment } from '../enhancer/enhancer';
 import { tagsByMeeting, tagsForMeeting } from './organization';
 
@@ -27,6 +27,7 @@ type MeetingRow = {
   folder_id: number | null;
   updated_at: number | null;
   deepgram_audio_ms: number;
+  deepgram_channels: number;
   claude_input_tokens: number;
   claude_output_tokens: number;
 };
@@ -59,13 +60,14 @@ function toSummary(row: MeetingRow): MeetingSummary {
 function rowToUsage(row: MeetingRow): MeetingUsage {
   return {
     deepgramAudioMs: row.deepgram_audio_ms ?? 0,
+    deepgramChannels: row.deepgram_channels ?? 2,
     claudeInputTokens: row.claude_input_tokens ?? 0,
     claudeOutputTokens: row.claude_output_tokens ?? 0,
   };
 }
 
 const SUMMARY_COLUMNS =
-  'id, title, status, created_at, started_at, ended_at, template_id, folder_id, updated_at, deepgram_audio_ms, claude_input_tokens, claude_output_tokens';
+  'id, title, status, created_at, started_at, ended_at, template_id, folder_id, updated_at, deepgram_audio_ms, deepgram_channels, claude_input_tokens, claude_output_tokens';
 
 function getSummary(id: number): MeetingSummary {
   const row = getDb()
@@ -133,10 +135,15 @@ export function getMeeting(id: number): MeetingDetail | null {
  * enhancement (Claude side). Called with partial updates — columns not in the
  * update are left untouched via column-specific UPDATEs.
  */
-export function saveDeepgramUsage(id: number, deepgramAudioMs: number): void {
+export function saveDeepgramUsage(id: number, deepgramAudioMs: number, channels: number): void {
   getDb()
-    .prepare(`UPDATE meetings SET deepgram_audio_ms = deepgram_audio_ms + ? WHERE id = ?`)
-    .run(Math.round(deepgramAudioMs), id);
+    .prepare(
+      `UPDATE meetings
+       SET deepgram_audio_ms = deepgram_audio_ms + ?,
+           deepgram_channels = ?
+       WHERE id = ?`,
+    )
+    .run(Math.round(deepgramAudioMs), channels, id);
 }
 
 export function saveClaudeUsage(
@@ -161,21 +168,30 @@ export function getUsageTotals(): UsageTotals {
   const row = getDb()
     .prepare(
       `SELECT
-         COALESCE(SUM(deepgram_audio_ms),    0) AS deepgramAudioMs,
-         COALESCE(SUM(claude_input_tokens),  0) AS claudeInputTokens,
-         COALESCE(SUM(claude_output_tokens), 0) AS claudeOutputTokens
+         COALESCE(SUM(deepgram_audio_ms),                      0) AS deepgramAudioMs,
+         COALESCE(SUM(deepgram_audio_ms * deepgram_channels),  0) AS deepgramChannelMs,
+         COALESCE(SUM(claude_input_tokens),                    0) AS claudeInputTokens,
+         COALESCE(SUM(claude_output_tokens),                   0) AS claudeOutputTokens
        FROM meetings`,
     )
-    .get() as { deepgramAudioMs: number; claudeInputTokens: number; claudeOutputTokens: number };
+    .get() as {
+    deepgramAudioMs: number;
+    deepgramChannelMs: number;
+    claudeInputTokens: number;
+    claudeOutputTokens: number;
+  };
+  // Deepgram bills per channel, and meetings can have different channel counts
+  // (legacy 2-channel vs V05 mono), so cost is summed over billed channel-minutes
+  // rather than a single multiplier on the wall-clock total.
+  const deepgramCostUsd =
+    (row.deepgramChannelMs / 1000 / 60) * PRICING.deepgramNovaPerMinutePerChannel;
+  const claudeCostUsd = estimateCost(0, row.claudeInputTokens, row.claudeOutputTokens);
   return {
     deepgramAudioMs: row.deepgramAudioMs,
     claudeInputTokens: row.claudeInputTokens,
     claudeOutputTokens: row.claudeOutputTokens,
-    estimatedCostUsd: estimateCost(
-      row.deepgramAudioMs,
-      row.claudeInputTokens,
-      row.claudeOutputTokens,
-    ),
+    deepgramCostUsd,
+    estimatedCostUsd: deepgramCostUsd + claudeCostUsd,
   };
 }
 

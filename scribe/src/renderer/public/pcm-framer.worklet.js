@@ -2,13 +2,17 @@
 // gymnastics). The AudioContext is created at 16 kHz upstream, so there is NO
 // resampling to do here — the browser already resampled both inputs. This
 // processor only:
-//   - reads input 0 (microphone  -> channel 0 "Me")
-//   - reads input 1 (system audio -> channel 1 "Others")
-//   - interleaves them into 16-bit PCM   [mic0, sys0, mic1, sys1, ...]
-//     (exactly the layout Deepgram multichannel linear16 expects in M2)
+//   - reads input 0 (microphone)  and input 1 (system audio)
+//   - DOWNMIXES them into a single mono 16-bit PCM channel  [s0, s1, s2, ...]
+//     (V05 ROADMAP_02: Deepgram bills per channel, so one mono channel halves the
+//     cost; speaker separation comes from diarization, and "Me" is recovered in the
+//     main process from the per-frame mic/system RMS levels also posted below)
 //   - frames to ~100 ms and posts each frame + per-channel RMS to the renderer
 //
-// Nothing is buffered beyond one in-flight frame. No audio is stored.
+// The mic and system RMS levels are still computed separately and posted every
+// frame — they drive the VU meters AND the main-process "Me" attribution. They are
+// scalars, never audio bytes. Nothing is buffered beyond one in-flight frame; no
+// audio is stored (§1.1).
 
 const TARGET_RATE = 16000;
 const FRAME_MS = 100;
@@ -42,14 +46,17 @@ class PcmFramer extends AudioWorkletProcessor {
   }
 
   _emit() {
-    const out = new Int16Array(FRAME_SAMPLES * 2); // interleaved stereo
+    const out = new Int16Array(FRAME_SAMPLES); // single mono channel
     let micSum = 0;
     let sysSum = 0;
     for (let i = 0; i < FRAME_SAMPLES; i++) {
-      const m = Math.max(-1, Math.min(1, this._mic[i]));
-      const s = Math.max(-1, Math.min(1, this._sys[i]));
-      out[i * 2] = m < 0 ? m * 0x8000 : m * 0x7fff;
-      out[i * 2 + 1] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      const m = this._mic[i];
+      const s = this._sys[i];
+      // Downmix: sum mic + system, clamped to [-1, 1]. Simultaneous full-scale
+      // speech on both is rare, so clipping is negligible; summing (vs averaging)
+      // preserves SNR, which matters more to the recognizer than occasional clip.
+      const mix = Math.max(-1, Math.min(1, m + s));
+      out[i] = mix < 0 ? mix * 0x8000 : mix * 0x7fff;
       micSum += m * m;
       sysSum += s * s;
     }

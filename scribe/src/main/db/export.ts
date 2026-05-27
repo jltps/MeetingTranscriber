@@ -16,6 +16,7 @@ type MeetingRow = {
   template_id: number | null;
   folder_id: number | null;
   deepgram_audio_ms: number;
+  deepgram_channels: number;
   claude_input_tokens: number;
   claude_output_tokens: number;
   template_name: string | null;
@@ -51,7 +52,7 @@ type TemplateRow = {
 const MEETING_SELECT = `
   SELECT
     m.id, m.title, m.status, m.created_at, m.started_at, m.ended_at,
-    m.template_id, m.folder_id, m.deepgram_audio_ms, m.claude_input_tokens, m.claude_output_tokens,
+    m.template_id, m.folder_id, m.deepgram_audio_ms, m.deepgram_channels, m.claude_input_tokens, m.claude_output_tokens,
     t.name  AS template_name,
     n.raw_user_md, n.enhanced_json, n.enhanced_at, n.enhanced_lang
   FROM meetings m
@@ -89,6 +90,7 @@ function rowToMeeting(row: MeetingRow, meetingId: number): BackupMeeting {
     templateName: row.template_name,
     usage: {
       deepgramAudioMs: row.deepgram_audio_ms,
+      deepgramChannels: row.deepgram_channels,
       claudeInputTokens: row.claude_input_tokens,
       claudeOutputTokens: row.claude_output_tokens,
     },
@@ -219,8 +221,8 @@ export function restoreFromBackup(bundle: BackupBundle): { meetingCount: number 
     const insertMeeting = db.prepare(
       `INSERT INTO meetings
          (id, title, status, created_at, started_at, ended_at, template_id, folder_id,
-          deepgram_audio_ms, claude_input_tokens, claude_output_tokens)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          deepgram_audio_ms, deepgram_channels, claude_input_tokens, claude_output_tokens)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const insertMeetingTag = db.prepare(
       `INSERT OR IGNORE INTO meeting_tags (meeting_id, tag_id) VALUES (?, ?)`,
@@ -244,7 +246,7 @@ export function restoreFromBackup(bundle: BackupBundle): { meetingCount: number 
       const folderId = m.folderId !== null && validFolderIds.has(m.folderId) ? m.folderId : null;
       insertMeeting.run(
         m.id, m.title, m.status, m.createdAt, m.startedAt, m.endedAt, templateId, folderId,
-        m.usage.deepgramAudioMs, m.usage.claudeInputTokens, m.usage.claudeOutputTokens,
+        m.usage.deepgramAudioMs, m.usage.deepgramChannels, m.usage.claudeInputTokens, m.usage.claudeOutputTokens,
       );
       insertNotes.run(m.id, m.rawUserMd, m.enhancedJson, m.enhancedAt, m.enhancedLang);
       for (const seg of m.segments) {

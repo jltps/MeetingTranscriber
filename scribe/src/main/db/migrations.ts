@@ -334,6 +334,17 @@ Rules:
       ALTER TABLE meetings ADD COLUMN updated_at INTEGER;
     `,
   },
+  {
+    version: 10,
+    name: 'deepgram-billed-channels',
+    // Per-meeting billed Deepgram channel count for accurate cost (V05 ROADMAP_02).
+    // Deepgram bills per channel; the app used to capture 2 channels and now captures
+    // 1 (mono) to halve cost. Existing rows were 2-channel, so default 2 keeps their
+    // historical cost correct; new meetings record the channel count they used.
+    sql: `
+      ALTER TABLE meetings ADD COLUMN deepgram_channels INTEGER NOT NULL DEFAULT 2;
+    `,
+  },
 ];
 
 export function runMigrations(db: Database): void {
