@@ -1,5 +1,5 @@
-import { SetLanguageSchema, ThemeModeSchema } from '../../shared/ipc-contract';
-import type { ThemeMode } from '../../shared/ipc-contract';
+import { LlmProviderSchema, QualityModeSchema, SetLanguageSchema, ThemeModeSchema } from '../../shared/ipc-contract';
+import type { LlmProvider, QualityMode, ThemeMode } from '../../shared/ipc-contract';
 import type { LanguageSetting } from '../../shared/types';
 import type { WhisperModelName } from '../transcription/whisper-models';
 import { WHISPER_MODEL_NAMES } from '../transcription/whisper-models';
@@ -74,6 +74,47 @@ export function getThemeMode(): ThemeMode {
 
 export function setThemeMode(mode: ThemeMode): void {
   setSetting('theme_mode', ThemeModeSchema.parse(mode));
+}
+
+// ── Cost/quality model routing (V06 block 04) ──────────────────────────────
+
+/** Persisted cost/quality preference. Defaults to 'quality' (the stronger model). */
+export function getQualityMode(): QualityMode {
+  const parsed = QualityModeSchema.safeParse(getSetting('quality_mode'));
+  return parsed.success ? parsed.data : 'quality';
+}
+
+export function setQualityMode(mode: QualityMode): void {
+  setSetting('quality_mode', QualityModeSchema.parse(mode));
+}
+
+// ── LLM provider (V06 block 05) ─────────────────────────────────────────────
+
+/** Active LLM backend. Defaults to 'anthropic' (the provider the app is tuned for). */
+export function getLlmProvider(): LlmProvider {
+  const parsed = LlmProviderSchema.safeParse(getSetting('llm_provider'));
+  return parsed.success ? parsed.data : 'anthropic';
+}
+
+export function setLlmProvider(provider: LlmProvider): void {
+  setSetting('llm_provider', LlmProviderSchema.parse(provider));
+}
+
+/** Base URL + model id for the OpenAI-compatible provider (empty string when unset). */
+export function getOpenAiBaseUrl(): string {
+  return getSetting('openai_base_url') ?? '';
+}
+
+export function setOpenAiBaseUrl(url: string): void {
+  setSetting('openai_base_url', url);
+}
+
+export function getOpenAiModel(): string {
+  return getSetting('openai_model') ?? '';
+}
+
+export function setOpenAiModel(model: string): void {
+  setSetting('openai_model', model);
 }
 
 // ── Local Whisper settings (ROADMAP_05) ────────────────────────────────────

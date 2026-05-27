@@ -19,13 +19,36 @@ export const PRICING = {
   claudeSonnetInputPer1MTokens: 3.0,
   /** Claude Sonnet — per 1 million output tokens (USD). */
   claudeSonnetOutputPer1MTokens: 15.0,
+  /** Claude Haiku 4.5 — per 1 million input tokens (USD). Used for title/summarize/optimize and Economy enhance/chat (V06 block 04). */
+  claudeHaikuInputPer1MTokens: 1.0,
+  /** Claude Haiku 4.5 — per 1 million output tokens (USD). */
+  claudeHaikuOutputPer1MTokens: 5.0,
 } as const;
+
+/** Which Claude tier a set of tokens was billed at. */
+export type ClaudeTier = 'sonnet' | 'haiku';
+
+/** USD cost of Claude tokens at a given tier (V06 block 04). */
+export function claudeTokenCost(
+  inputTokens: number,
+  outputTokens: number,
+  tier: ClaudeTier,
+): number {
+  const input = tier === 'haiku' ? PRICING.claudeHaikuInputPer1MTokens : PRICING.claudeSonnetInputPer1MTokens;
+  const output = tier === 'haiku' ? PRICING.claudeHaikuOutputPer1MTokens : PRICING.claudeSonnetOutputPer1MTokens;
+  return (inputTokens / 1_000_000) * input + (outputTokens / 1_000_000) * output;
+}
 
 /**
  * Estimate the total USD cost for a meeting.
  * `deepgramAudioMs` is the total captured audio duration in milliseconds.
  * Deepgram is billed per channel, so cost scales with `deepgramChannels`. Defaults
  * to 2 (the pre-V05 stereo capture); V05+ mono meetings pass 1 (V05 ROADMAP_02).
+ *
+ * Claude tokens are priced at the Sonnet rate (the dominant enhancement cost). Since
+ * V06 block 04 runs long-transcript chunk-summarization on the cheaper Haiku model,
+ * this is a slight, conservative over-estimate for very long meetings — acceptable for
+ * the usage readout. (Title tokens aren't tracked here at all.)
  */
 export function estimateCost(
   deepgramAudioMs: number,

@@ -1,38 +1,20 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { ChatMessage, EnhancedNotes } from '../../shared/types';
+import type { ChatMessage } from '../../shared/types';
 import type { EnhancerSegment } from '../enhancer/enhancer';
 import { SUMMARY_SYSTEM_PROMPT, segmentsToText } from '../enhancer/prompt';
+import { chunkByLines } from '../enhancer/chunking';
 import { buildChatContext, buildChatSystemPrompt } from './prompt';
+import type { ChatAnswer, ChatEngine, ChatRunInput, ChatUsage } from './engine';
 
-// Current Anthropic Sonnet — same model as the enhancer (CLAUDE.md §8).
-const MODEL = 'claude-sonnet-4-6';
+// Models are resolved per quality mode by the caller (V06 block 04) and injected via
+// the constructor: `chat` for the streamed answer, `summarize` (cheap) for chunking.
+export type ChatModels = { chat: string; summarize: string };
 const MAX_TOKENS = 4096;
 // Mirror the enhancer's long-transcript handling: summarize chunk-by-chunk past
 // this size rather than truncate (CLAUDE.md §8). Summaries drop [id=N] markers, so
 // citations degrade for very long meetings — acceptable, and noted to the UI.
 const CHUNK_THRESHOLD_CHARS = 120_000;
 const CHUNK_SIZE_CHARS = 60_000;
-
-export type ChatUsage = { inputTokens: number; outputTokens: number };
-
-export type ChatAnswer = {
-  text: string;
-  usage: ChatUsage;
-  /** True when the transcript had to be summarized (segment ids lost → citations degrade). */
-  contextSummarized: boolean;
-};
-
-export type ChatRunInput = {
-  userNotes: string;
-  enhancedNotes: EnhancedNotes | null;
-  transcript: EnhancerSegment[];
-  /** rawLabel → displayName (ROADMAP_02), so the model sees real names. */
-  speakerNames?: Record<string, string>;
-  /** Full ephemeral conversation; the last entry is the new user turn. */
-  messages: ChatMessage[];
-  /** Called with each streamed text delta. */
-  onToken: (token: string) => void;
-};
 
 function textOf(content: Anthropic.ContentBlock[]): string {
   return content
@@ -44,10 +26,13 @@ function textOf(content: Anthropic.ContentBlock[]): string {
 // Streams a grounded answer over the Anthropic SDK. The big transcript context is
 // a cached system block so multi-turn follow-ups in the same session are cheap
 // (same ephemeral-cache pattern as the enhancer).
-export class AnthropicChat {
+export class AnthropicChat implements ChatEngine {
   private client: Anthropic;
 
-  constructor(apiKey: string) {
+  constructor(
+    apiKey: string,
+    private models: ChatModels,
+  ) {
     this.client = new Anthropic({ apiKey });
   }
 
@@ -61,7 +46,7 @@ export class AnthropicChat {
     onToken: (token: string) => void;
   }): Promise<{ text: string; usage: ChatUsage }> {
     const stream = this.client.messages.stream({
-      model: MODEL,
+      model: this.models.chat,
       max_tokens: MAX_TOKENS,
       system: [
         { type: 'text', text: opts.systemPrompt },
@@ -123,7 +108,7 @@ export class AnthropicChat {
     let outputTokens = 0;
     for (const chunk of chunks) {
       const response = await this.client.messages.create({
-        model: MODEL,
+        model: this.models.summarize,
         max_tokens: 1500,
         system: [
           { type: 'text', text: SUMMARY_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
@@ -136,18 +121,4 @@ export class AnthropicChat {
     }
     return { text: summaries.join('\n\n'), usage: { inputTokens, outputTokens }, summarized: true };
   }
-}
-
-function chunkByLines(text: string, size: number): string[] {
-  const chunks: string[] = [];
-  let current = '';
-  for (const line of text.split('\n')) {
-    if (current && current.length + line.length + 1 > size) {
-      chunks.push(current);
-      current = '';
-    }
-    current += (current ? '\n' : '') + line;
-  }
-  if (current) chunks.push(current);
-  return chunks;
 }

@@ -1,6 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { EnhancedNotesSchema } from '../../shared/ipc-contract';
 import { logger } from '../logger';
+import { HAIKU } from './models';
+import { chunkByLines } from './chunking';
+import {
+  ENHANCE_TOOL_DESCRIPTION,
+  ENHANCE_TOOL_NAME,
+  ENHANCE_TOOL_SCHEMA,
+} from './enhance-tool';
 import type { EnhanceInput, EnhanceResult, Enhancer, EnhancerSegment, EnhancerUsage } from './enhancer';
 import {
   FALLBACK_SYSTEM_PROMPT,
@@ -11,8 +18,10 @@ import {
   segmentsToText,
 } from './prompt';
 
-// Current Anthropic Sonnet (PRODUCT_SPEC.md §5, CLAUDE.md §8).
-const MODEL = 'claude-sonnet-4-6';
+// Models are resolved per quality mode by the caller (V06 block 04) and injected via
+// the constructor: `enhance` for the structured/fallback calls, `summarize` (cheap) for
+// long-transcript chunking.
+export type EnhancerModels = { enhance: string; summarize: string };
 // The structured tool output is verbose (every block repeats type/origin/
 // sourceSegmentIds), so a real meeting's notes can blow past a small ceiling — when
 // that happens the tool JSON is truncated, Zod rejects it, and we fall back to the
@@ -24,30 +33,13 @@ const MAX_TOKENS = 16000;
 const CHUNK_THRESHOLD_CHARS = 120_000;
 const CHUNK_SIZE_CHARS = 60_000;
 
-// Forced tool — guarantees the model returns the structured shape. The tool input
-// is still validated with Zod (defense in depth); never trust the model blindly.
+// Forced tool — guarantees the model returns the structured shape. The schema is shared
+// with the OpenAI-compatible provider (enhance-tool.ts) so the contract never drifts. The
+// tool input is still validated with Zod (defense in depth); never trust the model blindly.
 const ENHANCE_TOOL: Anthropic.Tool = {
-  name: 'emit_enhanced_notes',
-  description: 'Return the enhanced meeting notes as an ordered list of structured blocks.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      blocks: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', enum: ['heading', 'paragraph', 'bullet', 'action_item'] },
-            text: { type: 'string' },
-            origin: { type: 'string', enum: ['user', 'ai'] },
-            sourceSegmentIds: { type: 'array', items: { type: 'number' } },
-          },
-          required: ['type', 'text', 'origin', 'sourceSegmentIds'],
-        },
-      },
-    },
-    required: ['blocks'],
-  },
+  name: ENHANCE_TOOL_NAME,
+  description: ENHANCE_TOOL_DESCRIPTION,
+  input_schema: ENHANCE_TOOL_SCHEMA as unknown as Anthropic.Tool['input_schema'],
 };
 
 function textOf(content: Anthropic.ContentBlock[]): string {
@@ -92,7 +84,7 @@ export function repairBlocks(input: unknown): unknown {
 export async function testAnthropicKey(apiKey: string): Promise<void> {
   const client = new Anthropic({ apiKey });
   await client.messages.create({
-    model: MODEL,
+    model: HAIKU, // cheapest model is enough to validate the key + model access
     max_tokens: 1,
     messages: [{ role: 'user', content: 'ping' }],
   });
@@ -101,7 +93,10 @@ export async function testAnthropicKey(apiKey: string): Promise<void> {
 export class AnthropicEnhancer implements Enhancer {
   private client: Anthropic;
 
-  constructor(apiKey: string) {
+  constructor(
+    apiKey: string,
+    private models: EnhancerModels,
+  ) {
     this.client = new Anthropic({ apiKey });
   }
 
@@ -123,7 +118,7 @@ export class AnthropicEnhancer implements Enhancer {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const response = await this.client.messages.create({
-          model: MODEL,
+          model: this.models.enhance,
           max_tokens: MAX_TOKENS,
           system: [
             {
@@ -178,7 +173,7 @@ export class AnthropicEnhancer implements Enhancer {
       input.speakerNames,
     );
     const response = await this.client.messages.create({
-      model: MODEL,
+      model: this.models.enhance,
       max_tokens: MAX_TOKENS,
       system: [
         { type: 'text', text: FALLBACK_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
@@ -214,7 +209,7 @@ export class AnthropicEnhancer implements Enhancer {
     let outputTokens = 0;
     for (const chunk of chunks) {
       const response = await this.client.messages.create({
-        model: MODEL,
+        model: this.models.summarize,
         max_tokens: 1500,
         system: [
           { type: 'text', text: SUMMARY_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
@@ -227,18 +222,4 @@ export class AnthropicEnhancer implements Enhancer {
     }
     return { text: summaries.join('\n\n'), usage: { inputTokens, outputTokens } };
   }
-}
-
-function chunkByLines(text: string, size: number): string[] {
-  const chunks: string[] = [];
-  let current = '';
-  for (const line of text.split('\n')) {
-    if (current && current.length + line.length + 1 > size) {
-      chunks.push(current);
-      current = '';
-    }
-    current += (current ? '\n' : '') + line;
-  }
-  if (current) chunks.push(current);
-  return chunks;
 }

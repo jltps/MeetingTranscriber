@@ -32,6 +32,11 @@ export function EnhancedNotesEditor({
   onSaveRef.current = onSave;
   const onJumpRef = useRef(onJump);
   onJumpRef.current = onJump;
+  // Key points (V06 block 03) are read-only here; the editor only edits blocks. Keep the
+  // latest value so save() can re-attach it — otherwise serializing the doc back to
+  // EnhancedNotes would drop keyPoints on every edit.
+  const keyPointsRef = useRef(notes.keyPoints);
+  keyPointsRef.current = notes.keyPoints;
   const dirty = useRef(false);
 
   const editor = useEditor({
@@ -57,7 +62,12 @@ export function EnhancedNotesEditor({
   const save = (): void => {
     if (!editor || editor.isDestroyed || !dirty.current) return;
     dirty.current = false;
-    onSaveRef.current(meetingId, docToEnhancedNotes(editor.getJSON() as never));
+    const edited = docToEnhancedNotes(editor.getJSON() as never);
+    // Re-attach the (read-only) key points so editing the blocks doesn't drop them.
+    onSaveRef.current(
+      meetingId,
+      keyPointsRef.current ? { ...edited, keyPoints: keyPointsRef.current } : edited,
+    );
   };
   const debouncedSave = useDebouncedCallback(save, 700);
 

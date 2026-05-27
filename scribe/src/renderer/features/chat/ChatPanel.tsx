@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { MessageSquare, Send } from 'lucide-react';
 import type { ChatController, ChatTurn } from './use-chat';
-import { parseCitations } from './parse-citations';
+import { MarkdownMessage } from './MarkdownMessage';
 import { EmptyState } from '../../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
-// A grounded answer with its [id=N] markers rendered as chips that flash the cited
-// transcript line (reuses TranscriptPanel's existing highlight via onCiteClick).
+// A grounded, Markdown-formatted answer whose [id=N] markers render as chips that flash
+// the cited transcript line (reuses TranscriptPanel's existing highlight via onCiteClick).
 function AssistantText({
   turn,
   onCiteClick,
@@ -17,29 +17,26 @@ function AssistantText({
 }) {
   const cited = new Set(turn.citationIds ?? []);
   return (
-    <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-      {parseCitations(turn.content).map((node, i) =>
-        node.kind === 'text' ? (
-          <span key={i}>{node.text}</span>
-        ) : (
-          <button
-            key={i}
-            type="button"
-            // Only validated ids are clickable; a hallucinated id is shown inert.
-            onClick={cited.has(node.segmentId) ? () => onCiteClick(node.segmentId) : undefined}
-            disabled={!cited.has(node.segmentId)}
-            title={cited.has(node.segmentId) ? 'Jump to transcript' : undefined}
-            className={`mx-0.5 inline-flex items-center rounded px-1 text-[11px] font-medium tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-              cited.has(node.segmentId)
-                ? 'cursor-pointer bg-info/20 text-info hover:bg-info/30'
-                : 'bg-muted text-muted-foreground'
-            }`}
-          >
-            #{node.segmentId}
-          </button>
-        ),
+    <MarkdownMessage
+      content={turn.content}
+      renderCite={(segmentId, key) => (
+        <button
+          key={key}
+          type="button"
+          // Only validated ids are clickable; a hallucinated id is shown inert.
+          onClick={cited.has(segmentId) ? () => onCiteClick(segmentId) : undefined}
+          disabled={!cited.has(segmentId)}
+          title={cited.has(segmentId) ? 'Jump to transcript' : undefined}
+          className={`mx-0.5 inline-flex items-center rounded px-1 text-[11px] font-medium tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            cited.has(segmentId)
+              ? 'cursor-pointer bg-info/20 text-info hover:bg-info/30'
+              : 'bg-muted text-muted-foreground'
+          }`}
+        >
+          #{segmentId}
+        </button>
       )}
-    </div>
+    />
   );
 }
 
@@ -118,10 +115,10 @@ export function ChatPanel({
             {busy && (
               <div className="max-w-[95%]">
                 {streamingText ? (
-                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                    {streamingText}
+                  <>
+                    <MarkdownMessage content={streamingText} renderCite={(id, key) => <span key={key}>[id={id}]</span>} />
                     <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-muted-foreground align-middle" />
-                  </div>
+                  </>
                 ) : (
                   <span className="text-sm text-muted-foreground">Thinking…</span>
                 )}

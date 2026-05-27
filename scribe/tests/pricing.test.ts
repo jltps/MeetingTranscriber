@@ -1,5 +1,29 @@
 import { describe, it, expect } from 'vitest';
-import { estimateCost, formatCost, formatAudioDuration, PRICING } from '../src/shared/pricing';
+import {
+  claudeTokenCost,
+  estimateCost,
+  formatCost,
+  formatAudioDuration,
+  PRICING,
+} from '../src/shared/pricing';
+
+describe('claudeTokenCost (V06 block 04 tiered pricing)', () => {
+  it('prices Sonnet tokens at the Sonnet rate', () => {
+    expect(claudeTokenCost(1_000_000, 1_000_000, 'sonnet')).toBeCloseTo(
+      PRICING.claudeSonnetInputPer1MTokens + PRICING.claudeSonnetOutputPer1MTokens,
+      6,
+    );
+  });
+
+  it('prices Haiku tokens at the cheaper Haiku rate', () => {
+    expect(claudeTokenCost(1_000_000, 1_000_000, 'haiku')).toBeCloseTo(
+      PRICING.claudeHaikuInputPer1MTokens + PRICING.claudeHaikuOutputPer1MTokens,
+      6,
+    );
+    // Haiku must be cheaper than Sonnet for the same tokens.
+    expect(claudeTokenCost(1000, 1000, 'haiku')).toBeLessThan(claudeTokenCost(1000, 1000, 'sonnet'));
+  });
+});
 
 describe('estimateCost', () => {
   it('returns 0 for no usage', () => {

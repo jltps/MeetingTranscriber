@@ -94,13 +94,15 @@ there's a real problem.
 - Deepgram streaming (WebSocket) for cloud transcription **and** local Whisper
   (`@xenova/transformers`) for offline transcription — both behind the one
   `TranscriptionSession` interface.
-- Anthropic Claude API for enhancement, titles, and chat, behind the `Enhancer`
-  interface. Current model: `claude-sonnet-4-6` (see §8).
+- Anthropic Claude API for enhancement, titles, and chat (default; the app is tuned for
+  it), with a pluggable **OpenAI-compatible** provider via the `openai` SDK behind the
+  `main/llm/` factory. Model selection is centralized in `main/enhancer/models.ts` (see §8).
+- `react-markdown` + `remark-gfm` to render chat answers as formatted Markdown.
 - Zod for runtime validation of all IPC payloads and all LLM JSON output.
 - `electron-builder` (NSIS) for packaging.
 
 Use **pnpm**. Pin versions. Prefer the platform/standard library over adding a
-dependency; justify any new dependency in the PR description.
+dependency; justify any new dependency in the commit message.
 
 ## 3. Project structure (verify against the actual tree)
 
@@ -203,9 +205,16 @@ Structural rules (these hold regardless of exact folder names):
 
 ## 8. LLM / enhancement rules
 
-- Model: current Anthropic Sonnet — `claude-sonnet-4-6` (defined once per caller in
-  `main/enhancer/anthropic.ts`, `main/enhancer/title.ts`, `main/chat/anthropic-chat.ts`).
-  The enhancement prompt lives in one versioned file (`main/enhancer/prompt.ts`);
+- **Model selection is centralized** (V06 block 04) in `main/enhancer/models.ts`
+  `resolveModel(task, mode)`: enhance/chat → Sonnet `claude-sonnet-4-6` (or Haiku
+  `claude-haiku-4-5-20251001` under the Economy setting); title/summarize/optimize → Haiku.
+  Don't re-introduce hardcoded model ids in callers — route through the resolver.
+- **Provider is pluggable** (V06 block 05) behind the `main/llm/` factory
+  (`activeEnhancer`/`activeChat`/`completeText`): Anthropic (default, recommended) or a
+  generic **OpenAI-compatible** endpoint. UI/IPC never pick a provider — the factory does.
+  The strict-JSON contract is provider-independent (same `EnhancedNotesSchema` + fallback).
+- The enhancement prompt lives in one versioned file (`main/enhancer/prompt.ts`) — the
+  always-on scaffold + a single guidance slot (templates fill the slot only, V06 block 01);
   find the existing one and edit it there.
 - Output is **strict JSON** matching the `EnhancedNotes` shape, validated with Zod.
   On invalid JSON: retry once, then fall back to a plain-markdown enhancement and
@@ -232,10 +241,11 @@ Structural rules (these hold regardless of exact folder names):
 ## 10. Git & workflow
 
 - Conventional Commits (`feat:`, `fix:`, `refactor:`, `chore:`, `docs:`).
-- One feature per branch (`feat/language-detect`, `feat/enhancement-templates`, …).
-  Keep PRs reviewable; don't bundle unrelated features.
-- Each PR states: what it changes, how it was verified, any new dependency + why,
-  any schema migration added, and confirmation the §1 invariants still hold.
+- **Commit directly to `main` — do not create feature branches or PRs.** (This overrides
+  the earlier "one feature per branch" rule.) Keep each commit coherent and the working
+  tree green (`typecheck`/`lint`/`test`) before committing.
+- Each commit message states: what it changes, how it was verified, any new dependency +
+  why, any schema migration added, and confirmation the §1 invariants still hold.
 - Never commit secrets, `.env` with real keys, or any audio fixture. Ensure
   `.gitignore` covers `node_modules`, `dist`, `out`, `*.sqlite`, `.env*`.
 
@@ -282,5 +292,25 @@ If the actual script names differ, use those and update this list. `typecheck` a
   accounting (DB migration v10). Decision on record: **stay on nova-3, not Flux**
   (a voice-agent model lacking diarization/word-timing/meeting support, at higher
   cost). The mono "Me" heuristic is tuned by live multi-person validation (§6, §9).
+- **V06 — Templates & AI capabilities (shipped; `roadmap/V06`):** template `instructions`
+  are now a **guidance slot** (not a full prompt) — the LLM mechanics (tool use, origin
+  rules, `sourceSegmentIds`, block types, the anti-AI-tell style directive) live in
+  always-on app scaffolding in `main/enhancer/prompt.ts`, and the built-ins were reseeded
+  guidance-only from `roadmap/V06/MEETING_TEMPLATES.md` (additive migration **v11**, UPDATE
+  in place to preserve `meetings.template_id`). A larger/scrollable **template editor** with
+  a starter example, snippet buttons, and an **"Optimize with AI"** rewrite
+  (`main/enhancer/optimize-template.ts`). **Summary depths**: one `emit_enhanced_notes` call
+  returns `keyPoints` + extended `blocks`, toggled in the notes pane (`EnhancedPane`).
+  **AI cost & quality**: a central task→model resolver (`main/enhancer/models.ts`) routes
+  title/summarize/optimize to Haiku and enhance/chat to Sonnet (or Haiku under an
+  Economy/Quality setting), plus an anti-AI-tell post-process (`main/enhancer/post-process.ts`)
+  and shorter (3–5 word) titles. **Multi-provider**: a generic **OpenAI-compatible**
+  provider (`openai` SDK) behind a `main/llm/` factory + `ChatEngine` seam — Anthropic stays
+  default/recommended; every provider's output is validated by the same `EnhancedNotesSchema`
+  with the markdown fallback. **Chat** is Markdown-rendered (`react-markdown`) and
+  **scoped to the meeting/notes only** (declines off-topic), with a hide-transcript toggle.
+  UI polish: header cost chip removed (cost lives in Settings → Usage & Cost), larger
+  Settings/editor dialogs, API "Connected" indicators. Holds §1.2/§1.5/§1.6/§1.7.
+  See `roadmap/V06/ROADMAP_00_INDEX.md`.
 - Still deferred (don't build unless asked): transcript/enhancement quality eval loop
   (v03 ROADMAP_03), accounts + cloud sync + sharing (v03 ROADMAP_04 later phases), macOS.

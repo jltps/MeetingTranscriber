@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { TestProvider, TestResult } from '../../../shared/ipc-contract';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ConnectionStatus } from './ConnectionStatus';
 
 // A single API-key entry row (Deepgram / Anthropic). The only key-handling path
 // (§1.2): the typed value lives in local state, is sent to main via
@@ -49,9 +50,7 @@ export function KeyRow({ label, provider, isSet, onSaved }: KeyRowProps) {
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <label className="text-sm text-muted-foreground">{label}</label>
-        <span className={`text-[11px] ${isSet ? 'text-primary' : 'text-muted-foreground'}`}>
-          {isSet ? 'key saved' : 'not set'}
-        </span>
+        <ConnectionStatus connected={isSet} />
       </div>
       <div className="flex gap-2">
         <Input

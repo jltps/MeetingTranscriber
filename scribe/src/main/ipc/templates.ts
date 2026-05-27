@@ -3,6 +3,7 @@
 import { ipcMain } from 'electron';
 import {
   IPC,
+  OptimizeTemplateSchema,
   TemplateCreateSchema,
   TemplateIdSchema,
   TemplateUpdateSchema,
@@ -15,6 +16,7 @@ import {
   listTemplates,
   updateTemplate,
 } from '../db/templates';
+import { optimizeTemplateInstructions } from '../enhancer/optimize-template';
 
 export function registerTemplatesIpc(): void {
   ipcMain.handle(IPC.templatesList, () => listTemplates());
@@ -44,5 +46,12 @@ export function registerTemplatesIpc(): void {
   ipcMain.handle(IPC.templatesDuplicate, (_event, raw) => {
     const id = TemplateIdSchema.parse(raw);
     return duplicateTemplate(id);
+  });
+
+  // "Optimize with AI" — rewrite rough instructions into guidance (V06 block 02).
+  // Runs in main so the Anthropic key never reaches the renderer (§1.2).
+  ipcMain.handle(IPC.templatesOptimizeInstructions, async (_event, raw) => {
+    const input = OptimizeTemplateSchema.parse(raw);
+    return optimizeTemplateInstructions(input);
   });
 }

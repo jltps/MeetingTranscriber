@@ -5,6 +5,7 @@ import type { SettingsView, WhisperModelStatus } from '../../../shared/ipc-contr
 import { TemplateEditorModal } from '../templates/TemplateEditorModal';
 import { CalendarSettingsSection } from '../calendar/CalendarSettingsSection';
 import { KeyRow } from './KeyRow';
+import { OpenAiProviderRow } from './OpenAiProviderRow';
 import { useTheme } from '../theme/use-theme';
 import { estimateCost, formatAudioDuration, formatCost } from '../../../shared/pricing';
 import {
@@ -195,7 +196,7 @@ export function SettingsModal({
       )}
 
       <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-        <DialogContent className="flex max-h-[85vh] w-full max-w-xl flex-col gap-0 overflow-hidden p-0">
+        <DialogContent className="flex max-h-[85vh] w-full sm:max-w-3xl flex-col gap-0 overflow-hidden p-0">
           <DialogHeader className="border-b border-border px-5 py-3 text-left">
             <DialogTitle className="text-base">Settings</DialogTitle>
             <DialogDescription className="sr-only">
@@ -211,6 +212,37 @@ export function SettingsModal({
               <p className="text-[11px] text-muted-foreground">
                 Keys are encrypted with your OS secure storage and never leave this machine.
               </p>
+            </section>
+
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                AI provider
+              </h3>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                value={settings.llmProvider}
+                onValueChange={(v) => {
+                  if (v) void window.api.settings.setLlmProvider(v as 'anthropic' | 'openai-compatible').then(onChanged);
+                }}
+              >
+                <ToggleGroupItem value="anthropic">Anthropic (recommended)</ToggleGroupItem>
+                <ToggleGroupItem value="openai-compatible">OpenAI-compatible</ToggleGroupItem>
+              </ToggleGroup>
+              {settings.llmProvider === 'openai-compatible' ? (
+                <OpenAiProviderRow
+                  baseUrl={settings.openaiBaseUrl}
+                  model={settings.openaiModel}
+                  keySet={settings.openaiKeySet}
+                  onChanged={onChanged}
+                />
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  Enhancement, chat, titles, and prompt-optimization run on Anthropic Claude — the
+                  models the app is tuned for.
+                </p>
+              )}
             </section>
 
             <section className="space-y-3">
@@ -449,6 +481,30 @@ export function SettingsModal({
                   or remove source-linking (those are enforced by the system).
                 </p>
               </div>
+
+              {/* Cost/quality tiering applies to Anthropic only — the OpenAI-compatible
+                  provider uses its single configured model for every task (V06 block 05). */}
+              {settings.llmProvider === 'anthropic' && (
+                <div className="space-y-1.5">
+                  <label className="text-sm text-muted-foreground">Cost &amp; quality</label>
+                  <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    size="sm"
+                    value={settings.qualityMode}
+                    onValueChange={(v) => {
+                      if (v) void window.api.settings.setQualityMode(v as 'economy' | 'quality').then(onChanged);
+                    }}
+                  >
+                    <ToggleGroupItem value="quality">Quality</ToggleGroupItem>
+                    <ToggleGroupItem value="economy">Economy</ToggleGroupItem>
+                  </ToggleGroup>
+                  <p className="text-[11px] text-muted-foreground">
+                    Quality uses the stronger model for enhancement and chat. Economy uses a faster,
+                    cheaper model for them. Titles and summaries always use the cheaper model.
+                  </p>
+                </div>
+              )}
             </section>
 
             <section className="space-y-3">
@@ -513,10 +569,13 @@ export function SettingsModal({
                   );
                 }
                 // Deepgram cost comes from main (channel-weighted across meetings —
-                // can't be derived from summed ms alone, V05 ROADMAP_02). Claude cost
-                // is channel-independent so it's fine to compute here.
+                // can't be derived from summed ms alone, V05 ROADMAP_02). The LLM dollar
+                // figure is Anthropic-priced, so we only show it (and fold it into Total)
+                // when Anthropic is the active provider (V06 block 05) — no fake numbers.
+                const isAnthropic = settings.llmProvider === 'anthropic';
                 const deepgramCost = t.deepgramCostUsd;
                 const claudeCost = estimateCost(0, t.claudeInputTokens, t.claudeOutputTokens);
+                const totalCost = isAnthropic ? t.estimatedCostUsd : deepgramCost;
                 return (
                   <div className="space-y-2">
                     <div className="rounded-md border border-border divide-y divide-border text-xs">
@@ -534,22 +593,25 @@ export function SettingsModal({
                       {t.claudeInputTokens > 0 && (
                         <div className="flex items-center justify-between px-3 py-2">
                           <span className="text-muted-foreground">
-                            Claude enhancement
+                            {isAnthropic ? 'Claude enhancement' : 'AI enhancement'}
                             <span className="ml-1.5 text-muted-foreground">
                               {(t.claudeInputTokens + t.claudeOutputTokens).toLocaleString()} tokens
                             </span>
                           </span>
-                          <span className="tabular-nums text-muted-foreground">{formatCost(claudeCost)}</span>
+                          <span className="tabular-nums text-muted-foreground">
+                            {isAnthropic ? formatCost(claudeCost) : '—'}
+                          </span>
                         </div>
                       )}
                       <div className="flex items-center justify-between px-3 py-2 font-medium">
                         <span className="text-muted-foreground">Total</span>
-                        <span className="tabular-nums text-foreground">{formatCost(t.estimatedCostUsd)}</span>
+                        <span className="tabular-nums text-foreground">{formatCost(totalCost)}</span>
                       </div>
                     </div>
                     <p className="text-[11px] text-muted-foreground">
-                      Estimates based on standard list pricing. Actual charges depend on your Deepgram
-                      and Anthropic account terms.
+                      {isAnthropic
+                        ? 'Estimates based on standard list pricing. Actual charges depend on your Deepgram and Anthropic account terms.'
+                        : 'Transcription cost is estimated from Deepgram list pricing. A dollar estimate is not available for custom OpenAI-compatible providers — see your provider for token pricing.'}
                     </p>
                   </div>
                 );

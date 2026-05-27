@@ -31,6 +31,11 @@ export type EnhancedNotes = {
     origin: 'user' | 'ai';
     sourceSegmentIds: number[];
   }>;
+  /**
+   * AI-derived, skimmable summary of the meeting's highest-value takeaways (V06 block 03).
+   * Optional: absent on pre-V06 notes and on the plain-markdown fallback path.
+   */
+  keyPoints?: string[];
 };
 
 export type MeetingStatus = 'draft' | 'transcribing' | 'ended';

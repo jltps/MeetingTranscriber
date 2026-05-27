@@ -54,6 +54,7 @@ export const IPC = {
   templatesUpdate: 'templates:update',
   templatesDelete: 'templates:delete',
   templatesDuplicate: 'templates:duplicate',
+  templatesOptimizeInstructions: 'templates:optimizeInstructions', // rough text → guidance (V06 block 02)
 
   enhancerEnhance: 'enhancer:enhance',
 
@@ -67,6 +68,10 @@ export const IPC = {
   settingsSetMicDevice: 'settings:setMicDevice',
   settingsSetLanguage: 'settings:setLanguage',
   settingsSetGlobalInstructions: 'settings:setGlobalInstructions',
+  settingsSetQualityMode: 'settings:setQualityMode', // Economy vs Quality model routing (V06 block 04)
+  settingsSetLlmProvider: 'settings:setLlmProvider', // Anthropic vs OpenAI-compatible (V06 block 05)
+  settingsSetOpenAiConfig: 'settings:setOpenAiConfig', // base URL + model + key for the generic provider
+  settingsTestOpenAi: 'settings:testOpenAi', // test an OpenAI-compatible endpoint
   settingsTest: 'settings:test',
   settingsAcceptPrivacy: 'settings:acceptPrivacy',
   settingsCompleteOnboarding: 'settings:completeOnboarding',
@@ -163,6 +168,8 @@ export const EnhancedNotesSchema = z.object({
       sourceSegmentIds: z.array(z.number()),
     }),
   ),
+  // Optional skimmable summary (V06 block 03). Absent on pre-V06 / fallback notes.
+  keyPoints: z.array(z.string()).optional(),
 }) satisfies z.ZodType<EnhancedNotes>;
 
 export const SaveEnhancedSchema = z.object({ id: MeetingIdSchema, notes: EnhancedNotesSchema });
@@ -188,6 +195,34 @@ export type TranscriptionLanguage = z.infer<typeof TranscriptionLanguageSchema>;
 
 /** Global enhancement instructions entered by the user in Settings (FEATURES §B). */
 export const SetGlobalInstructionsSchema = z.string().max(4000);
+
+/**
+ * Cost/quality routing preference (V06 block 04). 'quality' keeps the stronger model
+ * (Sonnet) for enhancement + chat; 'economy' shifts those to the cheaper model (Haiku).
+ * Cheap tasks (title, summarize, optimize) always use the cheap model regardless.
+ */
+export const QualityModeSchema = z.enum(['economy', 'quality']);
+export type QualityMode = z.infer<typeof QualityModeSchema>;
+
+/**
+ * Which LLM backend serves enhancement, chat, titles, and prompt-optimization (V06
+ * block 05). 'anthropic' is the default and the one the app is tuned for;
+ * 'openai-compatible' is a user-configured generic endpoint (OpenAI, OpenRouter, Ollama…).
+ */
+export const LlmProviderSchema = z.enum(['anthropic', 'openai-compatible']);
+export type LlmProvider = z.infer<typeof LlmProviderSchema>;
+
+/**
+ * Config for the generic OpenAI-compatible provider. `key` is optional on write so the
+ * UI can update base URL / model without re-entering the key (omitted = leave unchanged).
+ * The key is stored via safeStorage in main and never returned to the renderer (§1.2).
+ */
+export const OpenAiConfigSchema = z.object({
+  baseUrl: z.string().url(),
+  model: z.string().min(1).max(200),
+  key: z.string().optional(),
+});
+export type OpenAiConfig = z.infer<typeof OpenAiConfigSchema>;
 
 export const TestProviderSchema = z.enum(['deepgram', 'anthropic']);
 export type TestProvider = z.infer<typeof TestProviderSchema>;
@@ -234,6 +269,16 @@ export type SettingsView = {
   language: LanguageSetting;
   /** Free-text instructions appended to every enhancement (FEATURES §B1). */
   globalInstructions: string;
+  /** Cost/quality model routing preference (V06 block 04). Defaults to 'quality'. */
+  qualityMode: QualityMode;
+  /** Active LLM backend (V06 block 05). Defaults to 'anthropic'. */
+  llmProvider: LlmProvider;
+  /** Base URL for the OpenAI-compatible provider (empty when unset). */
+  openaiBaseUrl: string;
+  /** Model id for the OpenAI-compatible provider (empty when unset). */
+  openaiModel: string;
+  /** Whether an OpenAI-compatible key is saved. Never the key itself (§1.2). */
+  openaiKeySet: boolean;
   privacyAccepted: boolean;
   /** Whether the first-run onboarding flow is complete (ROADMAP_V04_07). */
   onboardingDone: boolean;
@@ -264,6 +309,21 @@ export const TemplateCreateSchema = z.object({
 export const TemplateUpdateSchema = TemplateCreateSchema.partial();
 export type TemplateUpdate = z.infer<typeof TemplateUpdateSchema>;
 
+/**
+ * "Optimize with AI" request (V06 block 02): the user's rough, natural-language
+ * instructions (plus the optional template name for context) → a well-structured
+ * guidance block. The LLM call runs in main (§1.2); output is guidance-only and is
+ * still wrapped by the app scaffold/contract at enhance time (§1.6).
+ */
+export const OptimizeTemplateSchema = z.object({
+  instructions: z.string().min(1).max(4000),
+  name: z.string().max(100).optional(),
+});
+export type OptimizeTemplateInput = z.infer<typeof OptimizeTemplateSchema>;
+
+export const OptimizeTemplateResultSchema = z.object({ instructions: z.string() });
+export type OptimizeTemplateResult = z.infer<typeof OptimizeTemplateResultSchema>;
+
 export const SetMeetingTemplateSchema = z.object({
   meetingId: MeetingIdSchema,
   templateId: TemplateIdSchema.nullable(),
@@ -277,6 +337,8 @@ export interface TemplatesApi {
   update(id: number, data: TemplateUpdate): Promise<Template>;
   remove(id: number): Promise<void>;
   duplicate(id: number): Promise<Template>;
+  /** Rewrite rough instructions into structured guidance (V06 block 02). */
+  optimizeInstructions(input: OptimizeTemplateInput): Promise<OptimizeTemplateResult>;
 }
 
 // ─── Speaker naming (ROADMAP_02) ────────────────────────────────────────────
@@ -335,6 +397,10 @@ export interface SettingsApi {
   setMicDevice(deviceId: string | null): Promise<void>;
   setLanguage(language: LanguageSetting): Promise<void>;
   setGlobalInstructions(instructions: string): Promise<void>;
+  setQualityMode(mode: QualityMode): Promise<void>;
+  setLlmProvider(provider: LlmProvider): Promise<void>;
+  setOpenAiConfig(config: OpenAiConfig): Promise<void>;
+  testOpenAi(config: OpenAiConfig): Promise<TestResult>;
   setTranscriptionProvider(provider: 'deepgram' | 'whisper'): Promise<void>;
   setWhisperModel(model: string): Promise<void>;
   test(provider: TestProvider, key?: string): Promise<TestResult>;

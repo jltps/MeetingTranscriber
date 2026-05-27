@@ -211,8 +211,8 @@ full happy path (§4) end to end. Commit and tag.
   short summary). `CLAUDE.md` reloads automatically, so your rules persist.
 - **Hold it to its own checks.** `CLAUDE.md` says `pnpm typecheck` and `pnpm lint`
   must pass before a milestone is "done." Enforce that before every commit.
-- **Branch per milestone** for clean history (`git checkout -b m2-transcription`),
-  matching CLAUDE.md §10. One milestone per PR.
+- **Commit directly to `main`** (CLAUDE.md §10) — no feature branches. Keep each commit
+  coherent with a clear Conventional-Commit message; run `typecheck`/`lint` first.
 - **Paste screenshots** with **Alt+V** (Ctrl+V only pastes text), or drag the
   image into the window — useful for debugging the audio meters or UI.
 - **Guard the invariants (CLAUDE.md §1).** If Claude Code ever proposes saving
@@ -235,11 +235,17 @@ v1 is built. New work comes from the post-v1 backlog, not from `PRODUCT_SPEC.md`
   shadcn/ui component system, frameless app shell, folders/tags, command palette,
   layout/window-state, onboarding, accessibility, and the Nexus rebrand). *All shipped.*
   UI-only — no block changed audio/transcription/enhancer/calendar or any §1 behavior.
+- **`roadmap/v05/ROADMAP_*.md`** — transcription quality & cost (speaker diarization,
+  single-channel mono capture + mic-energy "Me", per-meeting cost accounting). *Shipped.*
+- **`roadmap/V06/ROADMAP_*.md`** — templates & AI capabilities (guidance-slot template
+  model + reseed, template-editor authoring aids, summary depths, AI cost/quality model
+  routing, multi-provider OpenAI-compatible support, UI polish). *All shipped.* Read
+  `ROADMAP_00_INDEX.md` first.
 
 The same discipline that built v1 still applies — only the anchor document changes:
 
-1. **One block per branch** (`feat/<block>`), matching `CLAUDE.md` §10. Keep PRs
-   reviewable; don't bundle unrelated blocks.
+1. **Commit directly to `main`** (`CLAUDE.md` §10) — no feature branches. Keep each commit
+   coherent; run the checks before committing.
 2. **Read the existing code first.** v1's interfaces (`TranscriptionSession`,
    `Enhancer`) and the shared IPC contract are why these blocks are cheap — extend
    them, don't fork a second way of doing things (`CLAUDE.md` §0, §4).

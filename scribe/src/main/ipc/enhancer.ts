@@ -38,8 +38,9 @@ export function registerEnhancerIpc(): void {
       outputLanguage = detected ?? undefined;
     }
 
-    // Template instructions replace the ROLE_SECTION entirely when non-empty.
-    // Global instructions are always an advisory addendum after the role.
+    // Template instructions fill the guidance slot, appended after the app-owned
+    // scaffold; when empty/absent, buildSystemPrompt falls back to its default guidance
+    // (V06 block 01). Global instructions are always an advisory addendum after that.
     // Both are passed separately so buildSystemPrompt can position them correctly.
     // Resolve speaker names so the LLM sees real names (ROADMAP_02).
     const speakerNamesArr = getSpeakerNames(id);

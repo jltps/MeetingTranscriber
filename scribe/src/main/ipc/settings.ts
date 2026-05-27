@@ -2,6 +2,9 @@ import { ipcMain } from 'electron';
 import { z } from 'zod';
 import {
   IPC,
+  LlmProviderSchema,
+  OpenAiConfigSchema,
+  QualityModeSchema,
   SetGlobalInstructionsSchema,
   SetKeysSchema,
   SetLanguageSchema,
@@ -14,11 +17,19 @@ import {
   deleteSetting,
   getGlobalInstructions,
   getLanguage,
+  getLlmProvider,
+  getOpenAiBaseUrl,
+  getOpenAiModel,
+  getQualityMode,
   getSetting,
   getOnboardingDone,
   getTranscriptionProvider,
   getWhisperModel,
+  setLlmProvider,
   setOnboardingDone,
+  setOpenAiBaseUrl,
+  setOpenAiModel,
+  setQualityMode,
   setTranscriptionProvider,
   setWhisperModel,
   setSetting,
@@ -28,9 +39,12 @@ import { getUsageTotals } from '../db/meetings';
 import {
   getAnthropicKey,
   getDeepgramKey,
+  getOpenAiKey,
   setAnthropicKey,
   setDeepgramKey,
+  setOpenAiKey,
 } from '../secrets/api-keys';
+import { testOpenAiConnection } from '../llm/openai-compatible';
 import { isGoogleConnected, isMicrosoftConnected } from '../secrets/calendar-tokens';
 import { resetCalendar } from '../calendar';
 import { themeView } from '../theme';
@@ -47,6 +61,11 @@ export function registerSettingsIpc(): void {
     micDeviceId: getSetting('mic_device_id'),
     language: getLanguage(),
     globalInstructions: getGlobalInstructions(),
+    qualityMode: getQualityMode(),
+    llmProvider: getLlmProvider(),
+    openaiBaseUrl: getOpenAiBaseUrl(),
+    openaiModel: getOpenAiModel(),
+    openaiKeySet: getOpenAiKey() !== null,
     privacyAccepted: getSetting('privacy_accepted') === '1',
     onboardingDone: getOnboardingDone(),
     usageTotals: getUsageTotals(),
@@ -76,6 +95,35 @@ export function registerSettingsIpc(): void {
 
   ipcMain.handle(IPC.settingsSetGlobalInstructions, (_event, raw) => {
     setSetting('global_instructions', SetGlobalInstructionsSchema.parse(raw));
+  });
+
+  ipcMain.handle(IPC.settingsSetQualityMode, (_event, raw) => {
+    setQualityMode(QualityModeSchema.parse(raw));
+  });
+
+  ipcMain.handle(IPC.settingsSetLlmProvider, (_event, raw) => {
+    setLlmProvider(LlmProviderSchema.parse(raw));
+  });
+
+  ipcMain.handle(IPC.settingsSetOpenAiConfig, (_event, raw) => {
+    const cfg = OpenAiConfigSchema.parse(raw);
+    setOpenAiBaseUrl(cfg.baseUrl);
+    setOpenAiModel(cfg.model);
+    // Only overwrite the stored key when a new one was typed (omitted = leave unchanged).
+    if (cfg.key !== undefined && cfg.key.trim()) setOpenAiKey(cfg.key);
+  });
+
+  ipcMain.handle(IPC.settingsTestOpenAi, async (_event, raw): Promise<TestResult> => {
+    const cfg = OpenAiConfigSchema.parse(raw);
+    // Prefer the typed key; fall back to the stored one so "Test" works after a save.
+    const key = cfg.key?.trim() || getOpenAiKey();
+    if (!key) return { ok: false, message: 'No OpenAI-compatible key to test.' };
+    try {
+      await testOpenAiConnection({ baseUrl: cfg.baseUrl, model: cfg.model, apiKey: key });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : String(err) };
+    }
   });
 
   ipcMain.handle(IPC.settingsSetTranscriptionProvider, (_event, raw) => {

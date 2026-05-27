@@ -1,5 +1,5 @@
-import { AnthropicEnhancer } from './anthropic';
-import { getAnthropicKey } from '../secrets/api-keys';
+import { activeEnhancer } from '../llm/provider';
+import { stripAiTells } from './post-process';
 import { getGlobalInstructions } from '../db/settings';
 import { logger } from '../logger';
 import type { EnhanceInput, EnhancerUsage } from './enhancer';
@@ -16,11 +16,9 @@ export type RunEnhancementResult = {
 // strict-JSON failure (after the in-method retry) it falls back to a plain
 // Markdown enhancement and marks the result degraded for the UI.
 export async function runEnhancement(input: EnhanceInput): Promise<RunEnhancementResult> {
-  const apiKey = getAnthropicKey();
-  if (!apiKey) {
-    throw new Error('Anthropic API key not set. Set ANTHROPIC_API_KEY (env or .env) before enhancing.');
-  }
-  const enhancer = new AnthropicEnhancer(apiKey);
+  // The factory picks Anthropic or the OpenAI-compatible provider and throws a clear
+  // error if the active provider isn't configured (key/base URL/model) — V06 block 05.
+  const enhancer = activeEnhancer();
   // Merge global instructions unless the caller already provided (template) instructions.
   const fullInput: EnhanceInput = {
     ...input,
@@ -29,7 +27,8 @@ export async function runEnhancement(input: EnhanceInput): Promise<RunEnhancemen
   };
   try {
     const result = await enhancer.enhance(fullInput);
-    return { notes: result.notes, degraded: false, usage: result.usage };
+    // Strip AI tells (em-dashes etc.) from ai-origin text only (V06 block 04, §1.5).
+    return { notes: stripAiTells(result.notes), degraded: false, usage: result.usage };
   } catch (err) {
     // Record *why* structured enhancement failed before degrading — otherwise the
     // UI's "degraded" banner is the only signal and the cause stays invisible.
@@ -38,6 +37,6 @@ export async function runEnhancement(input: EnhanceInput): Promise<RunEnhancemen
       err instanceof Error ? err : String(err),
     );
     const result = await enhancer.enhanceFallback(fullInput);
-    return { notes: result.notes, degraded: true, usage: result.usage };
+    return { notes: stripAiTells(result.notes), degraded: true, usage: result.usage };
   }
 }

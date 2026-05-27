@@ -19,13 +19,19 @@ non-goals in §3 — they existed to keep v1 shippable.
 > light/dark/system theming, shadcn/ui + lucide components, a frameless custom title
 > bar replacing the native menu, folders + tags, a command palette, window-state
 > persistence + responsive layout, an onboarding flow, and an accessibility pass) and
-> was **renamed Scribe → Nexus**. The rename is cosmetic only: the `scribe/` directory,
-> the `com.scribe.app` app id, and the `scribe.sqlite` database are unchanged so
-> existing installs keep their data. This file keeps the original **"Scribe"** name as
-> historical v1 intent; for *how* the code should behave today see `CLAUDE.md`, for
-> shipped-feature specs see `roadmap/v02`–`roadmap/v04`, and for the live overview see
-> `README.md`. Where this spec and the code disagree, **the code wins** (CLAUDE.md).
-> §3 and §13 are annotated below with what has since shipped.
+> was **renamed Scribe → Nexus**. It has since also shipped **V05 — transcription quality
+> & cost** (speaker diarization, single-channel mono capture with a mic-energy "Me"
+> heuristic, per-meeting cost accounting) and **V06 — templates & AI capabilities**
+> (guidance-slot templates with always-on app scaffolding, a richer template editor with
+> "Optimize with AI", key-points/extended summary depths, centralized task→model routing
+> with an Economy/Quality setting, a pluggable **OpenAI-compatible** provider alongside the
+> default Anthropic, Markdown-rendered + scope-limited chat, and UI polish). The rename is
+> cosmetic only: the `scribe/` directory, the `com.scribe.app` app id, and the
+> `scribe.sqlite` database are unchanged so existing installs keep their data. This file
+> keeps the original **"Scribe"** name as historical v1 intent; for *how* the code should
+> behave today see `CLAUDE.md`, for shipped-feature specs see `roadmap/v02`–`roadmap/V06`,
+> and for the live overview see `README.md`. Where this spec and the code disagree, **the
+> code wins** (CLAUDE.md). §3 and §13 are annotated below with what has since shipped.
 
 ---
 

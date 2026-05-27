@@ -18,8 +18,9 @@ export type EnhanceInput = {
   /** BCP-47 language code. When present, the LLM is instructed to respond in this language. */
   detectedLanguage?: string;
   /**
-   * Template instructions — replace the fixed ROLE_SECTION entirely when non-empty.
-   * What the user sees and edits in TemplateEditorModal is exactly this text.
+   * Template instructions — a guidance slot appended after the app-owned scaffold
+   * (V06 block 01); empty/absent falls back to the default guidance. What the user sees
+   * and edits in TemplateEditorModal is this guidance text only — never the mechanics.
    */
   templateInstructions?: string;
   /** Global instructions from Settings — appended as an advisory addendum. */

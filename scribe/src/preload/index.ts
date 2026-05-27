@@ -63,6 +63,7 @@ const api: ScribeApi = {
     update: (id, data) => ipcRenderer.invoke(IPC.templatesUpdate, { id, ...data }),
     remove: (id) => ipcRenderer.invoke(IPC.templatesDelete, id),
     duplicate: (id) => ipcRenderer.invoke(IPC.templatesDuplicate, id),
+    optimizeInstructions: (input) => ipcRenderer.invoke(IPC.templatesOptimizeInstructions, input),
   },
   speakers: {
     get: (meetingId) => ipcRenderer.invoke(IPC.speakersGet, meetingId),
@@ -86,6 +87,10 @@ const api: ScribeApi = {
     setLanguage: (language) => ipcRenderer.invoke(IPC.settingsSetLanguage, language),
     setGlobalInstructions: (instructions) =>
       ipcRenderer.invoke(IPC.settingsSetGlobalInstructions, instructions),
+    setQualityMode: (mode) => ipcRenderer.invoke(IPC.settingsSetQualityMode, mode),
+    setLlmProvider: (provider) => ipcRenderer.invoke(IPC.settingsSetLlmProvider, provider),
+    setOpenAiConfig: (config) => ipcRenderer.invoke(IPC.settingsSetOpenAiConfig, config),
+    testOpenAi: (config) => ipcRenderer.invoke(IPC.settingsTestOpenAi, config),
     setTranscriptionProvider: (provider) =>
       ipcRenderer.invoke(IPC.settingsSetTranscriptionProvider, provider),
     setWhisperModel: (model) =>

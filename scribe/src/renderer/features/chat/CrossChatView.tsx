@@ -5,7 +5,7 @@ import type { Folder, MeetingSummary, RetrievalScope, Tag } from '../../../share
 import { estimateCost, formatCost } from '../../../shared/pricing';
 import { useDebouncedCallback } from '../../lib/debounce';
 import type { CrossChatController, CrossChatTurn } from './use-cross-chat';
-import { parseCitations } from './parse-citations';
+import { MarkdownMessage } from './MarkdownMessage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -35,13 +35,13 @@ function AssistantText({
 }) {
   const byId = new Map((turn.citations ?? []).map((c) => [c.segmentId, c]));
   return (
-    <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-      {parseCitations(turn.content).map((node, i) => {
-        if (node.kind === 'text') return <span key={i}>{node.text}</span>;
-        const cite = byId.get(node.segmentId);
+    <MarkdownMessage
+      content={turn.content}
+      renderCite={(segmentId, key) => {
+        const cite = byId.get(segmentId);
         return cite ? (
           <button
-            key={i}
+            key={key}
             type="button"
             onClick={() => onCiteClick(cite.meetingId, cite.segmentId)}
             title={`Jump to "${cite.meetingTitle}"`}
@@ -52,14 +52,14 @@ function AssistantText({
         ) : (
           // Hallucinated id (not in the retrieved set) — shown inert.
           <span
-            key={i}
+            key={key}
             className="mx-0.5 inline-flex items-center rounded bg-muted px-1 text-[11px] text-muted-foreground"
           >
-            #{node.segmentId}
+            #{segmentId}
           </span>
         );
-      })}
-    </div>
+      }}
+    />
   );
 }
 
@@ -284,10 +284,10 @@ export function CrossChatView({
         {busy && (
           <div className="max-w-[95%]">
             {streamingText ? (
-              <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                {streamingText}
+              <>
+                <MarkdownMessage content={streamingText} renderCite={(id, key) => <span key={key}>[id={id}]</span>} />
                 <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-muted-foreground align-middle" />
-              </div>
+              </>
             ) : (
               <span className="text-sm text-muted-foreground">Searching meetings…</span>
             )}

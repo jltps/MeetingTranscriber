@@ -18,8 +18,8 @@ The app lives in [`scribe/`](scribe/). This file is the project overview; see th
 ## Status
 
 Shipping at **v0.5.0**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
-largely built, **V04 — the UI/UX + rebrand phase — has shipped** (the product was
-renamed **Scribe → Nexus**), and **V05 — transcription quality & cost — has shipped**:
+largely built, the product was renamed **Scribe → Nexus** (V04), **V05 — transcription
+quality & cost — has shipped**, and **V06 — templates & AI capabilities — has shipped**:
 
 **v1 — core (shipped)**
 - Mic + Windows loopback system audio captured as a 2-channel 16 kHz PCM stream
@@ -79,6 +79,24 @@ renamed **Scribe → Nexus**), and **V05 — transcription quality & cost — ha
 - Decision on record: **stay on nova-3, not Deepgram Flux** (a voice-agent model that
   lacks diarization, word timing, and meeting transcription, at higher cost).
 
+**v6 — templates & AI capabilities (shipped)**
+- **Template instruction model**: `instructions` is now a guidance slot (not a full
+  prompt); the LLM mechanics live in always-on app scaffolding; built-ins reseeded
+  guidance-only from `roadmap/V06/MEETING_TEMPLATES.md` (migration v11).
+- **Template editor**: larger scrollable editor, a starter example, canned snippet
+  buttons, and an "Optimize with AI" prompt rewrite.
+- **Summary depths**: one enhancement call returns key-points **and** extended notes,
+  toggled inside the notes pane.
+- **AI cost & quality**: centralized task→model routing (Haiku for titles/summarization,
+  Sonnet for enhance/chat), an Economy/Quality toggle, an anti-AI-tell style pass, and
+  shorter 3–5 word titles.
+- **Multi-provider**: a generic OpenAI-compatible provider (OpenAI/OpenRouter/Ollama…)
+  behind the `Enhancer`/chat seam, with Anthropic kept as the default/recommended provider.
+- **Chat**: Markdown-formatted answers, scoped to the meeting/notes (declines off-topic),
+  with a hide-transcript toggle.
+- **UI polish**: per-meeting cost chip removed from the header (cost lives in Settings →
+  Usage & Cost), larger Settings/editor dialogs, and API "Connected" indicators.
+
 Not yet built: transcript/enhancement quality eval loop (v03 ROADMAP_03) and the
 sync/sharing phases of the data block (v03 ROADMAP_04).
 
@@ -93,8 +111,11 @@ sync/sharing phases of the data block (v03 ROADMAP_04).
 - Web Audio API + **AudioWorklet** for capture/mix/resample to 16 kHz.
 - **Deepgram** streaming (cloud) or local **Whisper** for transcription, both
   behind one `TranscriptionSession` interface.
-- **Anthropic Claude** (`claude-sonnet-4-6`) for enhancement, titles, and chat,
-  behind the `Enhancer` interface — always called from the main process.
+- **Anthropic Claude** (Sonnet/Haiku, routed per task in `main/enhancer/models.ts`) for
+  enhancement, titles, and chat — default and recommended — with a pluggable
+  **OpenAI-compatible** provider (`openai` SDK) behind the `main/llm/` factory. Always
+  called from the main process.
+- **react-markdown** + **remark-gfm** to render chat answers as formatted Markdown.
 - **Zod** for runtime validation of every IPC payload and all LLM JSON output.
 
 ## Privacy invariants (non-negotiable)
@@ -173,6 +194,7 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 | `roadmap/v03/…` | Reliability, speaker naming, quality, data, Whisper, calendar, cross-meeting (see `ROADMAP_00_INDEX.md`). |
 | `roadmap/v04/…` | UI/UX + rebrand: design tokens/theming, shadcn/ui, app shell, folders/tags, command palette, layout, onboarding, accessibility, Nexus rebrand. |
 | `roadmap/v05/…` | Transcription quality & cost: speaker diarization, single-channel mono capture + mic-energy "Me", per-meeting cost accounting. |
+| `roadmap/V06/…` | Templates & AI (shipped): guidance-slot template model + reseed, template editor UX, summary depths, AI cost/quality routing, multi-provider, UI polish (see `ROADMAP_00_INDEX.md`). |
 | `scribe/docs/CALENDAR_SETUP.md` | One-time Google / Microsoft OAuth client setup. |
 
 **Ground truth is the code, not the docs.** Where any doc disagrees with the

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { EnhancedNotesSchema } from '../src/shared/ipc-contract';
 import { repairBlocks } from '../src/main/enhancer/anthropic';
+import { buildSystemPrompt } from '../src/main/enhancer/prompt';
+import { stripAiTells, stripDashes } from '../src/main/enhancer/post-process';
 import {
   docToEnhancedNotes,
   enhancedNotesToDoc,
@@ -31,6 +33,109 @@ describe('EnhancedNotesSchema', () => {
       }),
     ).toThrow();
   });
+
+  it('accepts optional keyPoints, and notes without them (V06 block 03 back-compat)', () => {
+    const withKp = {
+      blocks: [{ type: 'paragraph', text: 'x', origin: 'ai', sourceSegmentIds: [1] }],
+      keyPoints: ['Decided to ship Friday', 'Owner: Ana'],
+    };
+    expect(EnhancedNotesSchema.parse(withKp)).toEqual(withKp);
+    // Pre-V06 notes (no keyPoints) still validate.
+    const noKp = { blocks: [{ type: 'heading', text: 'H', origin: 'ai', sourceSegmentIds: [] }] };
+    expect(EnhancedNotesSchema.parse(noKp)).toEqual(noKp);
+  });
+
+  it('rejects a non-string-array keyPoints', () => {
+    expect(() =>
+      EnhancedNotesSchema.parse({ blocks: [], keyPoints: [1, 2, 3] }),
+    ).toThrow();
+  });
+});
+
+describe('buildSystemPrompt (V06 block 01 — scaffold + guidance slot)', () => {
+  const SCAFFOLD_MARKER = 'emit_enhanced_notes';
+  const SOURCE_MARKER = 'sourceSegmentIds';
+  const CONTRACT_MARKER = 'MANDATORY CONTRACT';
+
+  it('always emits the app-owned mechanics scaffold (with and without a template)', () => {
+    const withTemplate = buildSystemPrompt({ templateInstructions: 'Focus on risks only.' });
+    const without = buildSystemPrompt();
+    for (const prompt of [withTemplate, without]) {
+      expect(prompt).toContain(SCAFFOLD_MARKER);
+      expect(prompt).toContain(SOURCE_MARKER);
+    }
+  });
+
+  it('appends template guidance after the scaffold rather than replacing it', () => {
+    const guidance = 'Focus strictly on budget figures and procurement steps.';
+    const prompt = buildSystemPrompt({ templateInstructions: guidance });
+    expect(prompt).toContain(SCAFFOLD_MARKER); // scaffold survives
+    expect(prompt).toContain(guidance); // guidance is present
+    // Scaffold comes before the guidance slot.
+    expect(prompt.indexOf(SCAFFOLD_MARKER)).toBeLessThan(prompt.indexOf(guidance));
+  });
+
+  it('falls back to the default general guidance when no template is given', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('general business meeting');
+  });
+
+  it('keeps CONTRACT_SECTION as the last part of the prompt', () => {
+    const prompt = buildSystemPrompt({
+      templateInstructions: 'x',
+      globalInstructions: 'y',
+      detectedLanguage: 'pt-PT',
+    });
+    const contractIdx = prompt.indexOf(CONTRACT_MARKER);
+    expect(contractIdx).toBeGreaterThan(-1);
+    // Nothing of substance after the contract: it is the final section.
+    expect(prompt.trimEnd().endsWith(prompt.slice(contractIdx).trimEnd())).toBe(true);
+  });
+
+  it('emits the language directive only when a language is provided', () => {
+    expect(buildSystemPrompt({ detectedLanguage: 'pt-PT' })).toContain('pt-PT');
+    expect(buildSystemPrompt()).not.toContain('Output language:');
+  });
+
+  it('includes the anti-AI-tell style directive before the contract (V06 block 04)', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('Do NOT use em-dashes');
+    expect(prompt.indexOf('Do NOT use em-dashes')).toBeLessThan(prompt.indexOf('MANDATORY CONTRACT'));
+  });
+});
+
+describe('stripAiTells (V06 block 04 — clean ai output only)', () => {
+  it('rewrites em/en dashes in ai blocks to commas', () => {
+    expect(stripDashes('We shipped it — finally.')).toBe('We shipped it, finally.');
+    expect(stripDashes('alpha–beta')).toBe('alpha, beta');
+  });
+
+  it('leaves numeric ranges intact', () => {
+    expect(stripDashes('hire 3–5 people in Q2')).toBe('hire 3–5 people in Q2');
+  });
+
+  it('cleans ai-origin block text and leaves user blocks byte-for-byte', () => {
+    const notes: EnhancedNotes = {
+      blocks: [
+        { type: 'paragraph', text: 'Plan — revised', origin: 'ai', sourceSegmentIds: [1] },
+        { type: 'paragraph', text: 'My note — keep this', origin: 'user', sourceSegmentIds: [] },
+      ],
+    };
+    const out = stripAiTells(notes);
+    expect(out.blocks[0].text).toBe('Plan, revised');
+    expect(out.blocks[1].text).toBe('My note — keep this'); // user untouched (§1.5)
+  });
+
+  it('cleans dashes inside keyPoints and tolerates their absence (V06 block 03)', () => {
+    const withKp: EnhancedNotes = {
+      blocks: [],
+      keyPoints: ['Ship Friday — confirmed', 'No blockers'],
+    };
+    expect(stripAiTells(withKp).keyPoints).toEqual(['Ship Friday, confirmed', 'No blockers']);
+    // No keyPoints field → output has none either.
+    const noKp: EnhancedNotes = { blocks: [] };
+    expect(stripAiTells(noKp).keyPoints).toBeUndefined();
+  });
 });
 
 describe('repairBlocks (type/origin recovery before degrading)', () => {
@@ -54,6 +159,16 @@ describe('repairBlocks (type/origin recovery before degrading)', () => {
   it('leaves a valid payload unchanged', () => {
     const value = { blocks: [{ type: 'heading', text: 'H', origin: 'ai', sourceSegmentIds: [2] }] };
     expect(EnhancedNotesSchema.parse(repairBlocks(value))).toEqual(value);
+  });
+
+  it('preserves a sibling keyPoints while fixing a block (V06 block 03)', () => {
+    const repaired = repairBlocks({
+      blocks: [{ type: 'user', text: 'mine', origin: 'paragraph', sourceSegmentIds: [] }],
+      keyPoints: ['top takeaway'],
+    });
+    const parsed = EnhancedNotesSchema.parse(repaired);
+    expect(parsed.keyPoints).toEqual(['top takeaway']);
+    expect(parsed.blocks[0]).toEqual({ type: 'paragraph', text: 'mine', origin: 'user', sourceSegmentIds: [] });
   });
 
   it('still fails for genuinely malformed blocks (bad text/ids) → degraded path', () => {

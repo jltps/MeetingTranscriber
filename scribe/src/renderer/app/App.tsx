@@ -7,7 +7,7 @@ import { TranscriptPanel, type TranscriptHighlight } from '../features/transcrip
 import { useMeetings } from '../features/meetings/use-meetings';
 import { MeetingSidebar } from '../features/meetings/MeetingSidebar';
 import { NotesEditor } from '../features/notes/NotesEditor';
-import { EnhancedNotesEditor } from '../features/notes/EnhancedNotesEditor';
+import { EnhancedPane } from '../features/notes/EnhancedPane';
 import { useSettings } from '../features/settings/use-settings';
 import { SettingsModal } from '../features/settings/SettingsModal';
 import { OnboardingFlow } from '../features/onboarding/OnboardingFlow';
@@ -33,8 +33,7 @@ import { buildActions } from '../features/commands/actions';
 import { useShortcuts } from '../features/commands/use-shortcuts';
 import { CaptureProbe } from './CaptureProbe';
 import { TitleBar } from './TitleBar';
-import { estimateCost, formatAudioDuration, formatCost } from '../../shared/pricing';
-import { Download, Mic, NotebookPen, Sparkles, Square } from 'lucide-react';
+import { Download, Mic, NotebookPen, PanelRightClose, PanelRightOpen, Sparkles, Square } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -91,6 +90,9 @@ export function App() {
   const [enhanced, setEnhanced] = useState<EnhancedNotes | null>(null);
   const [degraded, setDegraded] = useState(false);
   const [view, setView] = useState<'original' | 'enhanced'>('original');
+  // Whether the transcript/chat side panel is shown (wide layout). Hiding it gives the
+  // notes the full width. Local + default visible.
+  const [transcriptVisible, setTranscriptVisible] = useState(true);
   const [enhancing, setEnhancing] = useState(false);
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -228,6 +230,28 @@ export function App() {
     } finally {
       setEnhancing(false);
     }
+  };
+
+  // The notes pane (enhanced or raw), reused by the wide split, the wide full-width
+  // (transcript hidden), and the narrow layout so the three never diverge.
+  const renderNotes = () => {
+    if (!detail) return null;
+    return view === 'enhanced' && enhanced ? (
+      <EnhancedPane
+        key={`enhanced-${detail.id}`}
+        meetingId={detail.id}
+        notes={enhanced}
+        onSaveEnhanced={(id, notes) => void window.api.meetings.saveEnhanced(id, notes)}
+        onJump={(ids) => setHighlight({ ids, nonce: Date.now() })}
+      />
+    ) : (
+      <NotesEditor
+        key={detail.id}
+        meetingId={detail.id}
+        initialMarkdown={detail.rawUserMd}
+        onSave={(id, markdown) => void window.api.meetings.saveNotes(id, markdown)}
+      />
+    );
   };
 
   // Create a note, optionally with a template and filed into a folder (ROADMAP_V04_04).
@@ -688,18 +712,8 @@ export function App() {
                 )}
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 ml-auto">
-                {/* Per-meeting cost chip — shown once transcription or enhancement has been used */}
-                {!running && detail && (detail.usage.deepgramAudioMs > 0 || detail.usage.claudeInputTokens > 0) && (
-                  <span
-                    title={`Deepgram: ${formatAudioDuration(detail.usage.deepgramAudioMs)} · Claude: ${(detail.usage.claudeInputTokens + detail.usage.claudeOutputTokens).toLocaleString()} tokens`}
-                    className="rounded bg-muted px-2 py-0.5 text-[10px] tabular-nums text-muted-foreground"
-                  >
-                    ~{formatCost(estimateCost(detail.usage.deepgramAudioMs, detail.usage.claudeInputTokens, detail.usage.claudeOutputTokens, detail.usage.deepgramChannels))}
-                    {detail.usage.deepgramAudioMs > 0 && (
-                      <> · {formatAudioDuration(detail.usage.deepgramAudioMs)}</>
-                    )}
-                  </span>
-                )}
+                {/* Cost moved out of the header (V06 block 06) — it lives in Settings → Usage & Cost.
+                    The Extended / Key points depth toggle moved into the notes pane (EnhancedPane). */}
                 {hasEnhanced && (
                   <ToggleGroup
                     type="single"
@@ -711,6 +725,17 @@ export function App() {
                     <ToggleGroupItem value="original">Original</ToggleGroupItem>
                     <ToggleGroupItem value="enhanced">Enhanced</ToggleGroupItem>
                   </ToggleGroup>
+                )}
+                {layoutMode === 'wide' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setTranscriptVisible((v) => !v)}
+                    title={transcriptVisible ? 'Hide transcript panel' : 'Show transcript panel'}
+                  >
+                    {transcriptVisible ? <PanelRightClose /> : <PanelRightOpen />}
+                    {transcriptVisible ? 'Hide transcript' : 'Show transcript'}
+                  </Button>
                 )}
                 {!running && (
                   <>
@@ -761,6 +786,7 @@ export function App() {
             )}
 
             {layoutMode === 'wide' ? (
+              transcriptVisible ? (
               <ResizablePanelGroup
                 direction="horizontal"
                 autoSaveId="scribe:split"
@@ -770,24 +796,7 @@ export function App() {
                   {/* The scroll container must live INSIDE the panel: react-resizable-panels
                       sets overflow:hidden as an inline style on the panel itself, which would
                       override an overflow-y-auto class here and clip long notes with no scrollbar. */}
-                  <div className="h-full overflow-y-auto p-6">
-                    {view === 'enhanced' && enhanced ? (
-                      <EnhancedNotesEditor
-                        key={`enhanced-${detail.id}`}
-                        meetingId={detail.id}
-                        notes={enhanced}
-                        onSave={(id, notes) => void window.api.meetings.saveEnhanced(id, notes)}
-                        onJump={(ids) => setHighlight({ ids, nonce: Date.now() })}
-                      />
-                    ) : (
-                      <NotesEditor
-                        key={detail.id}
-                        meetingId={detail.id}
-                        initialMarkdown={detail.rawUserMd}
-                        onSave={(id, markdown) => void window.api.meetings.saveNotes(id, markdown)}
-                      />
-                    )}
-                  </div>
+                  <div className="h-full overflow-y-auto p-6">{renderNotes()}</div>
                 </ResizablePanel>
                 <ResizableHandle withHandle />
                 <ResizablePanel defaultSize={42} minSize={25} className="flex flex-col overflow-hidden p-6">
@@ -831,6 +840,12 @@ export function App() {
                   </details>
                 </ResizablePanel>
               </ResizablePanelGroup>
+              ) : (
+                // Transcript hidden — notes take the full width.
+                <div className="flex-1 overflow-hidden">
+                  <div className="h-full overflow-y-auto p-6">{renderNotes()}</div>
+                </div>
+              )
             ) : (
               <div className="flex flex-1 flex-col overflow-hidden p-4">
                 <ToggleGroup
@@ -847,22 +862,7 @@ export function App() {
                 </ToggleGroup>
                 <div className="min-h-0 flex-1 overflow-y-auto">
                   {mainTab === 'notes' ? (
-                    view === 'enhanced' && enhanced ? (
-                      <EnhancedNotesEditor
-                        key={`enhanced-${detail.id}`}
-                        meetingId={detail.id}
-                        notes={enhanced}
-                        onSave={(id, notes) => void window.api.meetings.saveEnhanced(id, notes)}
-                        onJump={(ids) => setHighlight({ ids, nonce: Date.now() })}
-                      />
-                    ) : (
-                      <NotesEditor
-                        key={detail.id}
-                        meetingId={detail.id}
-                        initialMarkdown={detail.rawUserMd}
-                        onSave={(id, markdown) => void window.api.meetings.saveNotes(id, markdown)}
-                      />
-                    )
+                    renderNotes()
                   ) : mainTab === 'chat' ? (
                     <ChatPanel
                       controller={chat}

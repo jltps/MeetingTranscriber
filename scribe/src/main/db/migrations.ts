@@ -345,6 +345,101 @@ Rules:
       ALTER TABLE meetings ADD COLUMN deepgram_channels INTEGER NOT NULL DEFAULT 2;
     `,
   },
+  {
+    version: 11,
+    name: 'templates-guidance-only-reseed',
+    // V06 block 01. The v4/v5 seeds stored the FULL system prompt (tool use,
+    // sourceSegmentIds, block-type mechanics) in `instructions`, leaking app scaffolding
+    // into the template editor. Those mechanics now live in buildSystemPrompt's always-on
+    // SCAFFOLD_SECTION; `instructions` is a guidance-only slot
+    // (roadmap/V06/MEETING_TEMPLATES.md). Reseed the built-ins with that clean text.
+    // UPDATE in place (not DELETE+INSERT) so meetings.template_id references survive — a
+    // DELETE would null them via ON DELETE SET NULL on real user meetings (§7). Matches on
+    // (is_builtin, name); a built-in the user deleted or renamed is intentionally left
+    // untouched. Single quotes in the text are doubled per SQL string rules. Idempotent.
+    sql: `
+      UPDATE templates SET
+        instructions = 'You are enhancing notes for a general business meeting. Expand the user''s rough notes into a clear, skimmable summary grounded strictly in the transcript and their notes. Produce these sections, omitting any with no support (mark "Not discussed"):
+- Summary: 2-4 sentences on the meeting''s purpose and the headline outcome.
+- Key discussion points: the main topics, each with the substance of what was said and any context needed to understand it later.
+- Decisions: every decision actually made, stated unambiguously. If something was debated but not decided, put it under Open questions instead.
+- Action items: concrete next steps as action_item blocks, each with an owner and a due date when stated or clearly implied. Only include real commitments, not vague intentions.
+- Open questions / follow-ups: unresolved items, things to confirm, or topics deferred to a later meeting.
+Use the participants'' real names where known. Keep it concise and factual; do not editorialize or add advice that wasn''t discussed.',
+        updated_at = unixepoch('now')*1000
+      WHERE is_builtin = 1 AND name = 'General';
+
+      UPDATE templates SET
+        instructions = 'You are enhancing notes for a manager/direct-report 1:1. The goal is a private, trust-building development conversation, not a status report. Organize the summary around the person''s experience and growth, grounded strictly in the transcript and notes. Produce these sections, marking any unsupported one "Not discussed":
+- Check-in: how the person is doing (workload, morale, energy) if mentioned.
+- Priorities & progress: what they''re focused on and progress since last time, including wins worth recognizing.
+- Blockers & support needed: obstacles raised and what help was requested or offered.
+- Feedback exchanged: feedback in BOTH directions (manager to report and report to manager), kept specific to behaviors and outcomes, not personal traits.
+- Development & career: any discussion of growth goals, skills, career path, or learning.
+- Action items: commitments from BOTH people, as action_item blocks with owner and due date when stated. Attribute clearly who owns each (manager vs report).
+- For next time: topics to revisit or carry forward.
+Keep the tone supportive and confidential. Capture sensitive or personal context factually and discreetly; never speculate about performance or motivations beyond what was said.',
+        updated_at = unixepoch('now')*1000
+      WHERE is_builtin = 1 AND name = '1:1';
+
+      UPDATE templates SET
+        instructions = 'You are enhancing notes for an internal team/project sync. The purpose is alignment: progress, blockers, decisions, and clear ownership. Ground everything strictly in the transcript and notes. Produce these sections, marking any unsupported one "Not discussed":
+- Summary: 1-3 sentences on overall status and anything notable this cycle.
+- Progress updates: what''s done and what''s in progress, grouped by workstream, project, or person as the conversation allows.
+- Blockers & risks: obstacles, dependencies, and risks raised. Each blocker that needs resolution should also appear as an action item with an owner.
+- Decisions: decisions made during the sync, stated clearly.
+- Action items: next steps as action_item blocks in who-owns-it / what / by-when form, with owner and due date whenever stated or implied. Be selective: only items that genuinely move work forward, not every passing comment.
+- Dependencies & handoffs: cross-person or cross-team handoffs and who is waiting on whom.
+Use real names. Keep updates tight; do not pad. Flag anything explicitly called urgent or at-risk.',
+        updated_at = unixepoch('now')*1000
+      WHERE is_builtin = 1 AND name = 'Internal sync';
+
+      UPDATE templates SET
+        instructions = 'You are enhancing notes for an external sales meeting (not a formal discovery call or demo). Capture what advances the deal, grounded strictly in the transcript and notes. Produce these sections, marking any unsupported one "Not discussed":
+- Summary: 2-4 sentences on who met, the meeting''s purpose, and the headline outcome for the deal.
+- Attendees & roles: people present and their role/title where known, especially decision-makers, champions, or new stakeholders.
+- Customer priorities & needs: the business problems, goals, and priorities the customer expressed, in their own words where possible.
+- Discussion & topics covered: products, proposals, pricing, scope, or timeline discussed.
+- Objections & concerns: any pushback, risk, or hesitation raised, and how it was addressed.
+- Commitments & agreements: what each side agreed to or committed to.
+- Next steps: action_item blocks with owner (ours vs customer) and a date for each. Capture any mutually-agreed timeline or "critical event" / deadline that creates urgency.
+Be precise with numbers, dates, names, and commitments; never invent them. Keep a neutral, factual tone.',
+        updated_at = unixepoch('now')*1000
+      WHERE is_builtin = 1 AND name = 'Sales meeting';
+
+      UPDATE templates SET
+        instructions = 'You are enhancing notes for a product sales demo. The frame is: which customer problems were shown to be solved, how the audience reacted, and what happens next, not a list of features. Ground everything strictly in the transcript and notes. Produce these sections, marking any unsupported one "Not discussed":
+- Summary: 2-4 sentences on what was demoed, to whom, and the overall reception.
+- Attendees & roles: who attended and their roles, flagging decision-makers, technical evaluators, and any new stakeholders vs prior calls.
+- Use cases / pains addressed: the customer problems or goals the demo targeted, ideally in the customer''s own words.
+- What was shown & how it mapped to their needs: capabilities demonstrated, each connected to the specific pain or outcome it addressed. Note features that landed especially well.
+- Reactions & engagement: positive signals, moments of interest, and any lukewarm or negative reactions.
+- Questions & objections: questions asked and concerns/objections raised (functional and technical), with how each was answered and any left open.
+- Gaps & follow-ups: requested capabilities not shown, items to follow up on, or things to confirm (e.g. a technical validation, security review).
+- Next steps: action_item blocks with owner and date: the agreed next action, who needs to be looped in next (e.g. economic buyer, other evaluators), and any timeline/critical event mentioned.
+Be accurate about what was actually demonstrated and how people responded; do not overstate enthusiasm or invent commitments.',
+        updated_at = unixepoch('now')*1000
+      WHERE is_builtin = 1 AND name = 'Sales demo';
+
+      UPDATE templates SET
+        instructions = 'You are enhancing notes for a sales discovery call. The job of the notes is qualification: surface the prospect''s situation, pain, and the information needed to judge and advance the opportunity. Ground everything strictly in the transcript and notes; discovery notes that invent detail are worse than useless. Produce these sections, marking any genuinely uncovered-but-unanswered area "Not yet known" and any untouched area "Not discussed":
+- Summary: 2-4 sentences on who we spoke with, their context, and the headline takeaway on fit and opportunity.
+- Attendees & roles: people present, titles, and apparent influence (user, champion, decision-maker, economic buyer) where discernible.
+- Situation: the prospect''s current state (environment, tools, team, relevant context).
+- Pain & challenges: the problems and their root causes, in the prospect''s own words where possible.
+- Impact: the quantified or qualitative cost of those problems (time, money, risk, missed goals); what it''s costing them to not solve this.
+- Desired outcome / success criteria: what a good solution looks like to them and how they''d measure success.
+- Decision process & criteria: how they buy (who''s involved, the steps, evaluation criteria, and any procurement/paper process or approvals mentioned).
+- Economic buyer & champion: who controls budget, and who internally is advocating for change.
+- Competition & alternatives: other vendors, internal builds, or doing nothing.
+- Timeline / critical event: any deadline or compelling event creating urgency.
+- Risks & open questions: gaps, red flags, and what still needs to be learned.
+- Next steps: action_item blocks with owner and date, including who else needs to be brought into the next conversation.
+Distinguish clearly between what the prospect actually said and what remains unknown. Do not fabricate budget, authority, timelines, or names. A precise "we don''t know X yet" is a valid and valuable output.',
+        updated_at = unixepoch('now')*1000
+      WHERE is_builtin = 1 AND name = 'Sales discovery';
+    `,
+  },
 ];
 
 export function runMigrations(db: Database): void {

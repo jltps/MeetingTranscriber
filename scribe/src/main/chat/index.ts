@@ -1,7 +1,7 @@
-import { getAnthropicKey } from '../secrets/api-keys';
+import { activeChat } from '../llm/provider';
 import type { ChatMessage, CrossChatCitation, EnhancedNotes } from '../../shared/types';
 import type { EnhancerSegment } from '../enhancer/enhancer';
-import { AnthropicChat, type ChatUsage } from './anthropic-chat';
+import type { ChatUsage } from './engine';
 import { validateCitations } from './citations';
 import { buildCrossMeetingContext, buildCrossMeetingSystemPrompt } from './prompt';
 import { FtsRetriever } from './retrieval/fts-retriever';
@@ -33,11 +33,8 @@ export type RunChatInput = {
 // meeting's real segments so the answer only ever links to lines that exist.
 // The IPC handler persists usage (mirrors the enhancer's split).
 export async function runChat(input: RunChatInput): Promise<RunChatResult> {
-  const apiKey = getAnthropicKey();
-  if (!apiKey) {
-    throw new Error('Anthropic API key not set. Set ANTHROPIC_API_KEY (env or .env) before chatting.');
-  }
-  const chat = new AnthropicChat(apiKey);
+  // The factory selects the provider and throws if it isn't configured (§1.2, block 05).
+  const chat = activeChat();
   const answer = await chat.answer(input);
   const citationIds = validateCitations(
     answer.text,
@@ -73,16 +70,11 @@ export type RunCrossChatInput = {
 // retrieval limit). Cited [id=N] markers are validated against the retrieved set —
 // segment ids are global, so each maps back to its source meeting for navigation.
 export async function runCrossChat(input: RunCrossChatInput): Promise<RunCrossChatResult> {
-  const apiKey = getAnthropicKey();
-  if (!apiKey) {
-    throw new Error('Anthropic API key not set. Set ANTHROPIC_API_KEY (env or .env) before chatting.');
-  }
-
   // The latest user turn is the retrieval query.
   const query = [...input.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
   const retrieved = new FtsRetriever().retrieve(query, input.scope, CROSS_SEGMENT_LIMIT);
 
-  const chat = new AnthropicChat(apiKey);
+  const chat = activeChat();
   const { text, usage } = await chat.streamAnswer({
     systemPrompt: buildCrossMeetingSystemPrompt(),
     context: buildCrossMeetingContext(retrieved),

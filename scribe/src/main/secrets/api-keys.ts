@@ -11,6 +11,7 @@ import { decryptSecret, encryptSecret } from './safe-store';
 
 const DEEPGRAM_SETTING = 'deepgram_key_enc';
 const ANTHROPIC_SETTING = 'anthropic_key_enc';
+const OPENAI_COMPAT_SETTING = 'openai_compat_key_enc';
 
 let envLoaded = false;
 
@@ -60,4 +61,12 @@ export function setDeepgramKey(key: string | null): void {
 
 export function setAnthropicKey(key: string | null): void {
   storeKey(ANTHROPIC_SETTING, key);
+}
+
+export function getOpenAiKey(): string | null {
+  return readKey(OPENAI_COMPAT_SETTING, 'OPENAI_API_KEY');
+}
+
+export function setOpenAiKey(key: string | null): void {
+  storeKey(OPENAI_COMPAT_SETTING, key);
 }
