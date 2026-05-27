@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron';
 import type { CalendarProvider } from './provider';
 import type { CalendarProviderId } from '../../shared/types';
 import { GoogleCalendarProvider } from './google-provider';
+import { MicrosoftCalendarProvider } from './microsoft-provider';
 import { IPC } from '../../shared/ipc-contract';
 import {
   clearProviderEvents,
@@ -20,12 +21,12 @@ const SYNC_WINDOW_DAYS = 14;
 const POLL_MS = 5 * 60 * 1000;
 const PRUNE_GRACE_MS = 60 * 60 * 1000; // keep events that ended within the last hour
 
-// Single instance per implemented provider. Phase 1 ships Google only; Microsoft
-// slots in here in Phase 2 (a second entry, no other change — the rest is
-// provider-agnostic).
+// Single instance per implemented provider. Both Google and Microsoft are
+// provider-agnostic from here down (sync, agenda, arm/link, scheduler all union
+// over connected providers).
 const providers: Partial<Record<CalendarProviderId, CalendarProvider>> = {
   google: new GoogleCalendarProvider(),
-  // microsoft: new MicrosoftCalendarProvider(),  // Phase 2
+  microsoft: new MicrosoftCalendarProvider(),
 };
 
 export function getProvider(id: CalendarProviderId): CalendarProvider {

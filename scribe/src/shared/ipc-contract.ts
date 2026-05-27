@@ -8,6 +8,8 @@ import type {
   AgendaEvent,
   CalendarEvent,
   CalendarProviderId,
+  ChatMessage,
+  CrossChatCitation,
   EnhancedNotes,
   LanguageSetting,
   MeetingDetail,
@@ -87,6 +89,13 @@ export const IPC = {
   calendarArmEvent:    'calendar:armEvent',     // { providerId, externalId, armed } → AgendaEvent
   calendarLinkMeeting: 'calendar:linkMeeting',  // { providerId, externalId, meetingId } → void
   calendarAgenda:      'calendar:agenda',       // push: AgendaEvent[]
+
+  // Cross-meeting intelligence — per-meeting chat (ROADMAP_07 Phase 1)
+  chatAsk:   'chat:ask',   // { meetingId, messages } → ChatResult (streams while pending)
+  chatToken: 'chat:token', // push: { requestId, token } — streamed answer deltas
+
+  // Cross-meeting querying (ROADMAP_07 Phase 2)
+  crossChatAsk: 'chat:askAcross', // { scope, messages } → CrossChatResult (streams via chat:token)
 } as const;
 
 export const AppStatusSchema = z.object({
@@ -193,6 +202,8 @@ export type SettingsView = {
   whisperModel: string;
   /** Whether a Google Calendar account is connected (ROADMAP_06). Never the token. */
   googleCalendarConnected: boolean;
+  /** Whether a Microsoft/Outlook calendar is connected (ROADMAP_06). Never the token. */
+  microsoftCalendarConnected: boolean;
 };
 export type TestResult = { ok: boolean; message?: string };
 
@@ -450,6 +461,77 @@ export interface CalendarApi {
   onAgenda(cb: (events: AgendaEvent[]) => void): () => void;
 }
 
+// ─── Cross-meeting intelligence (ROADMAP_07 Phase 1: per-meeting chat) ───────
+
+export const ChatMessageSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string().min(1).max(8000),
+}) satisfies z.ZodType<ChatMessage>;
+
+/**
+ * Ask a question about one meeting. `messages` is the full ephemeral
+ * conversation so far (last entry is the new user turn); the main process is
+ * stateless between asks (CLAUDE.md §07 Phase 1 — no chat persistence).
+ */
+export const ChatAskSchema = z.object({
+  meetingId: MeetingIdSchema,
+  messages: z.array(ChatMessageSchema).min(1),
+});
+export type ChatAskInput = z.infer<typeof ChatAskSchema>;
+
+/** Push payload for a streamed answer delta (validated in preload, like AgendaListSchema). */
+export const ChatTokenSchema = z.object({
+  requestId: z.string(),
+  token: z.string(),
+});
+export type ChatToken = z.infer<typeof ChatTokenSchema>;
+
+/**
+ * Final result of an ask, returned when the stream completes.
+ * `citationIds` are transcript segment ids the answer cited, already validated
+ * against the meeting's real segments (hallucinated ids dropped). `degraded` is
+ * true when the answer could not be grounded (e.g. summarized long transcript).
+ */
+export type ChatResult = {
+  text: string;
+  citationIds: number[];
+  degraded: boolean;
+};
+
+// ─── Cross-meeting querying (ROADMAP_07 Phase 2) ─────────────────────────────
+
+/** Which meetings a cross-meeting query covers; no selection ('all') vs an explicit set. */
+export const RetrievalScopeSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('all') }),
+  z.object({ mode: z.literal('meetings'), meetingIds: z.array(MeetingIdSchema).min(1) }),
+]);
+
+export const CrossChatAskSchema = z.object({
+  scope: RetrievalScopeSchema,
+  messages: z.array(ChatMessageSchema).min(1),
+});
+export type CrossChatAskInput = z.infer<typeof CrossChatAskSchema>;
+
+/**
+ * Final result of a cross-meeting ask. `citations` carry the source meeting (ids
+ * are validated against the retrieved segments). `usage` is returned for the UI's
+ * per-query cost readout — a cross-meeting query spans many meetings, so it is NOT
+ * attributed to any single meeting's usage row (unlike per-meeting chat).
+ */
+export type CrossChatResult = {
+  text: string;
+  citations: CrossChatCitation[];
+  degraded: boolean;
+  usage: { inputTokens: number; outputTokens: number };
+};
+
+/** Per-meeting chat + cross-meeting querying. Answers stream via onToken. */
+export interface ChatApi {
+  ask(input: ChatAskInput): Promise<ChatResult>;
+  askAcross(input: CrossChatAskInput): Promise<CrossChatResult>;
+  onToken(cb: (e: ChatToken) => void): () => void;
+}
+
 /** The typed surface exposed to the renderer as window.api. */
 export interface ScribeApi {
   getStatus(): Promise<AppStatus>;
@@ -468,4 +550,5 @@ export interface ScribeApi {
   export: ExportApi;
   whisper: WhisperApi;
   calendar: CalendarApi;
+  chat: ChatApi;
 }

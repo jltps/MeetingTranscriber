@@ -65,3 +65,53 @@ export function getGoogleClientSecret(): string {
 export function isGoogleConfigured(): boolean {
   return getGoogleClientId().length > 0 && getGoogleClientSecret().length > 0;
 }
+
+// ─── Microsoft / Entra (ROADMAP_06 Phase 2) ─────────────────────────────────
+//
+// Unlike Google, an Entra "Mobile & desktop" (public) client uses PKCE with NO
+// client secret — so only a client ID is needed. Register the app once (Azure
+// Portal → App registrations; see docs/CALENDAR_SETUP.md) and paste its
+// Application (client) ID into BUNDLED_MICROSOFT_CLIENT_ID (public — safe to ship)
+// or override with MICROSOFT_OAUTH_CLIENT_ID in .env.
+const BUNDLED_MICROSOFT_CLIENT_ID = '';
+
+export const MICROSOFT_OAUTH = {
+  // {tenant} is substituted at call time. 'common' = work/school + personal MS
+  // accounts; 'organizations' = work-only; a tenant GUID = a single directory.
+  authEndpoint: 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize',
+  tokenEndpoint: 'https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token',
+  // Graph free/busy lookup (POST). Reveals *when* the user is busy, not event
+  // details — parity with the Google freebusy choice. Work/school accounts only.
+  getScheduleEndpoint: 'https://graph.microsoft.com/v1.0/me/calendar/getSchedule',
+  // Personal Microsoft accounts don't support getSchedule, so we fall back to
+  // calendarView with a tight $select (start/end/isAllDay/showAs) — we still never
+  // request titles/attendees, so no event content reaches the app.
+  calendarViewEndpoint: 'https://graph.microsoft.com/v1.0/me/calendarView',
+  // We request BOTH Graph read scopes, FULLY-QUALIFIED (https://graph.microsoft.com/…)
+  // so the access token is unambiguously minted for Microsoft Graph:
+  //   • Calendars.Read.Shared — required by getSchedule (work/school path).
+  //   • Calendars.Read        — supported by BOTH account types and what
+  //     calendarView (personal path) needs. Personal accounts don't honor the
+  //     .Shared scope, so without plain .Read the token is ineffective (Graph 401).
+  // offline_access → a refresh token; openid/profile → an id_token carrying
+  // preferred_username (the mailbox address getSchedule needs).
+  scope:
+    'openid profile offline_access ' +
+    'https://graph.microsoft.com/Calendars.Read ' +
+    'https://graph.microsoft.com/Calendars.Read.Shared',
+} as const;
+
+export function getMicrosoftClientId(): string {
+  ensureEnvLoaded();
+  return process.env.MICROSOFT_OAUTH_CLIENT_ID?.trim() || BUNDLED_MICROSOFT_CLIENT_ID;
+}
+
+export function getMicrosoftTenant(): string {
+  ensureEnvLoaded();
+  return process.env.MICROSOFT_OAUTH_TENANT?.trim() || 'common';
+}
+
+// Public Entra client needs no secret, so a client ID alone is sufficient.
+export function isMicrosoftConfigured(): boolean {
+  return getMicrosoftClientId().length > 0;
+}

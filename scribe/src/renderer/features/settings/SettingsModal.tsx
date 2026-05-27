@@ -447,6 +447,7 @@ export function SettingsModal({
 
             <CalendarSettingsSection
               googleConnected={settings.googleCalendarConnected}
+              microsoftConnected={settings.microsoftCalendarConnected}
               onChanged={onChanged}
             />
 

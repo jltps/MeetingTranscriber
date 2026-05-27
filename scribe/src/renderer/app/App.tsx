@@ -12,6 +12,10 @@ import { useSettings } from '../features/settings/use-settings';
 import { SettingsModal } from '../features/settings/SettingsModal';
 import { PrivacyNotice } from '../features/settings/PrivacyNotice';
 import { TemplatePickerModal } from '../features/templates/TemplatePickerModal';
+import { ChatPanel } from '../features/chat/ChatPanel';
+import { useChat } from '../features/chat/use-chat';
+import { CrossChatView } from '../features/chat/CrossChatView';
+import { useCrossChat } from '../features/chat/use-cross-chat';
 import { useCalendar } from '../features/calendar/use-calendar';
 import { useAutoStartScheduler } from '../features/calendar/use-auto-start-scheduler';
 import { AgendaPanel } from '../features/calendar/AgendaPanel';
@@ -40,6 +44,18 @@ export function App() {
   const calendar = useCalendar();
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const chat = useChat(selectedId);
+  /** Right-column view: live transcript or per-meeting chat (ROADMAP_07 Phase 1). */
+  const [rightTab, setRightTab] = useState<'transcript' | 'chat'>('transcript');
+
+  // Cross-meeting querying (ROADMAP_07 Phase 2): a full-pane view, plus a deferred
+  // highlight so a citation can open another meeting and flash the line once loaded.
+  const crossChat = useCrossChat();
+  const [showCrossChat, setShowCrossChat] = useState(false);
+  const [pendingHighlight, setPendingHighlight] = useState<{
+    meetingId: number;
+    segmentId: number;
+  } | null>(null);
   const [detail, setDetail] = useState<MeetingDetail | null>(null);
   const [loadedSegments, setLoadedSegments] = useState<PersistedSegment[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -329,6 +345,32 @@ export function App() {
   const finals = showingActive ? transcription.finals : loadedSegments;
   const interims = showingActive ? transcription.interims : [];
   const hasEnhanced = enhanced !== null;
+  // Chat is grounded in a finished transcript — available for an ended meeting, not
+  // while recording (ROADMAP_07 Phase 1).
+  const chatAvailable = !running && loadedSegments.length > 0;
+
+  /** A chat citation jump: flash the cited transcript line and switch back to it. */
+  const onCiteFromChat = useCallback((segmentId: number): void => {
+    setHighlight({ ids: [segmentId], nonce: Date.now() });
+    setRightTab('transcript');
+  }, []);
+
+  /** Cross-meeting citation jump: open the source meeting, then flash once it loads. */
+  const onCiteFromCrossChat = useCallback((meetingId: number, segmentId: number): void => {
+    setPendingHighlight({ meetingId, segmentId });
+    setShowCrossChat(false);
+    setSelectedId(meetingId);
+  }, []);
+
+  // Apply a pending cross-meeting highlight once the target meeting's transcript
+  // has loaded (the segment must be present for TranscriptPanel to scroll to it).
+  useEffect(() => {
+    if (!pendingHighlight || pendingHighlight.meetingId !== selectedId) return;
+    if (!loadedSegments.some((s) => s.id === pendingHighlight.segmentId)) return;
+    setHighlight({ ids: [pendingHighlight.segmentId], nonce: Date.now() });
+    setRightTab('transcript');
+    setPendingHighlight(null);
+  }, [pendingHighlight, selectedId, loadedSegments]);
 
   const wiped = async (): Promise<void> => {
     setShowSettings(false);
@@ -384,11 +426,15 @@ export function App() {
         selectedId={selectedId}
         searching={meetings.results !== null}
         disabled={running}
-        onSelect={setSelectedId}
+        onSelect={(id) => {
+          setShowCrossChat(false);
+          setSelectedId(id);
+        }}
         onNew={() => void onNewNote()}
         onSearch={(q) => void meetings.search(q)}
         onDelete={(id) => void onDelete(id)}
         onOpenSettings={() => setShowSettings(true)}
+        onOpenCrossChat={() => setShowCrossChat(true)}
         agendaSlot={
           <AgendaPanel
             events={calendar.agenda}
@@ -399,7 +445,14 @@ export function App() {
       />
 
       <main className="flex flex-1 flex-col overflow-hidden">
-        {detail === null ? (
+        {showCrossChat ? (
+          <CrossChatView
+            controller={crossChat}
+            meetings={meetings.meetings ?? []}
+            onCiteClick={onCiteFromCrossChat}
+            onClose={() => setShowCrossChat(false)}
+          />
+        ) : detail === null ? (
           <div className="flex flex-1 items-center justify-center text-sm text-neutral-600">
             Select a meeting or create a new note.
           </div>
@@ -558,16 +611,40 @@ export function App() {
                 )}
               </section>
               <section className="flex w-[42%] shrink-0 flex-col overflow-hidden p-6">
+                <div className="mb-3 flex overflow-hidden rounded-md border border-neutral-700 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setRightTab('transcript')}
+                    className={`px-3 py-1 ${rightTab === 'transcript' ? 'bg-neutral-700 text-neutral-100' : 'text-neutral-400'}`}
+                  >
+                    Transcript
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRightTab('chat')}
+                    className={`px-3 py-1 ${rightTab === 'chat' ? 'bg-neutral-700 text-neutral-100' : 'text-neutral-400'}`}
+                  >
+                    Chat
+                  </button>
+                </div>
                 <div className="min-h-0 flex-1">
-                  <TranscriptPanel
-                    finals={finals}
-                    interims={interims}
-                    highlight={highlight}
-                    speakerNames={speakerNames}
-                    onRenameSpeaker={onRenameSpeaker}
-                    onReassignSegment={onReassignSegment}
-                    distinctRawLabels={distinctRawLabels}
-                  />
+                  {rightTab === 'chat' ? (
+                    <ChatPanel
+                      controller={chat}
+                      onCiteClick={onCiteFromChat}
+                      available={chatAvailable}
+                    />
+                  ) : (
+                    <TranscriptPanel
+                      finals={finals}
+                      interims={interims}
+                      highlight={highlight}
+                      speakerNames={speakerNames}
+                      onRenameSpeaker={onRenameSpeaker}
+                      onReassignSegment={onReassignSegment}
+                      distinctRawLabels={distinctRawLabels}
+                    />
+                  )}
                 </div>
                 <details className="mt-4 text-xs text-neutral-500">
                   <summary className="cursor-pointer select-none">Capture diagnostics</summary>

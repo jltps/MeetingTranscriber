@@ -29,7 +29,7 @@ import {
   setAnthropicKey,
   setDeepgramKey,
 } from '../secrets/api-keys';
-import { isGoogleConnected } from '../secrets/calendar-tokens';
+import { isGoogleConnected, isMicrosoftConnected } from '../secrets/calendar-tokens';
 import { testDeepgramKey } from '../transcription/deepgram';
 import { testAnthropicKey } from '../enhancer/anthropic';
 import { logger } from '../logger';
@@ -48,6 +48,7 @@ export function registerSettingsIpc(): void {
     transcriptionProvider: getTranscriptionProvider(),
     whisperModel: getWhisperModel(),
     googleCalendarConnected: isGoogleConnected(),
+    microsoftCalendarConnected: isMicrosoftConnected(),
   }));
 
   ipcMain.handle(IPC.settingsSetKeys, (_event, raw) => {

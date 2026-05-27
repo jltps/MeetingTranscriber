@@ -100,6 +100,35 @@ export type SpeakerName = {
   displayName: string;
 };
 
+// ─── Cross-meeting intelligence (ROADMAP_07) ────────────────────────────────
+
+/** One turn of a per-meeting chat conversation (history is ephemeral, §07 Phase 1). */
+export type ChatMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
+/**
+ * A grounding citation in a chat answer. Phase 1 cites within one meeting, so
+ * only a transcript segment id is needed.
+ */
+export type ChatCitation = {
+  segmentId: number;
+};
+
+/** Which meetings a cross-meeting query covers (ROADMAP_07 Phase 2). */
+export type RetrievalScope = { mode: 'all' } | { mode: 'meetings'; meetingIds: number[] };
+
+/**
+ * A cross-meeting citation. Segment ids are global, so each pins down both the
+ * line and its source meeting — used to navigate to that meeting and flash the line.
+ */
+export type CrossChatCitation = {
+  segmentId: number;
+  meetingId: number;
+  meetingTitle: string;
+};
+
 // ─── Calendar integration (ROADMAP_06) ──────────────────────────────────────
 
 /** Which calendar backend an event came from. */

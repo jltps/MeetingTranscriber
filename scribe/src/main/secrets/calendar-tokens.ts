@@ -59,3 +59,60 @@ export function clearGoogleTokens(): void {
   deleteSetting(GOOGLE_REFRESH);
   deleteSetting(GOOGLE_EXPIRY);
 }
+
+// ─── Microsoft / Entra (ROADMAP_06 Phase 2) ─────────────────────────────────
+// Same storage rules as Google. Microsoft additionally needs the signed-in user's
+// mailbox address (for the Graph getSchedule body) — that is NOT a secret, just
+// app metadata, so it's stored as a plain setting. Microsoft also ROTATES the
+// refresh token on every refresh and returns a new one each time; storeMicrosoft-
+// Tokens overwrites it whenever present, which keeps the connection alive.
+const MICROSOFT_ACCESS = 'microsoft_cal_access_token_enc';
+const MICROSOFT_REFRESH = 'microsoft_cal_refresh_token_enc';
+const MICROSOFT_EXPIRY = 'microsoft_cal_token_expiry';
+const MICROSOFT_EMAIL = 'microsoft_cal_user_email';
+
+export function storeMicrosoftTokens(args: {
+  accessToken: string;
+  expiryMs: number;
+  refreshToken?: string;
+}): void {
+  setSetting(MICROSOFT_ACCESS, encryptSecret(args.accessToken));
+  setSetting(MICROSOFT_EXPIRY, String(args.expiryMs));
+  if (args.refreshToken && args.refreshToken.trim()) {
+    setSetting(MICROSOFT_REFRESH, encryptSecret(args.refreshToken.trim()));
+  }
+}
+
+export function getMicrosoftAccessToken(): string | null {
+  return readSecret(MICROSOFT_ACCESS);
+}
+
+export function getMicrosoftRefreshToken(): string | null {
+  return readSecret(MICROSOFT_REFRESH);
+}
+
+export function getMicrosoftTokenExpiry(): number {
+  const raw = getSetting(MICROSOFT_EXPIRY);
+  const n = raw ? Number(raw) : 0;
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** The signed-in mailbox address (e.g. user@contoso.com). Not a secret. */
+export function setMicrosoftUserEmail(email: string): void {
+  setSetting(MICROSOFT_EMAIL, email);
+}
+
+export function getMicrosoftUserEmail(): string | null {
+  return getSetting(MICROSOFT_EMAIL);
+}
+
+export function isMicrosoftConnected(): boolean {
+  return getMicrosoftRefreshToken() !== null;
+}
+
+export function clearMicrosoftTokens(): void {
+  deleteSetting(MICROSOFT_ACCESS);
+  deleteSetting(MICROSOFT_REFRESH);
+  deleteSetting(MICROSOFT_EXPIRY);
+  deleteSetting(MICROSOFT_EMAIL);
+}

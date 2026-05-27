@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcRendererEvent } from 'electron';
 import {
   AgendaListSchema,
+  ChatTokenSchema,
   IPC,
   TranscriptSegmentSchema,
   TranscriptionLanguageSchema,
@@ -120,6 +121,17 @@ const api: ScribeApi = {
       };
       ipcRenderer.on(IPC.calendarAgenda, listener);
       return () => ipcRenderer.removeListener(IPC.calendarAgenda, listener);
+    },
+  },
+  chat: {
+    ask: (input) => ipcRenderer.invoke(IPC.chatAsk, input),
+    askAcross: (input) => ipcRenderer.invoke(IPC.crossChatAsk, input),
+    onToken: (cb) => {
+      const listener = (_event: IpcRendererEvent, payload: unknown): void => {
+        cb(ChatTokenSchema.parse(payload));
+      };
+      ipcRenderer.on(IPC.chatToken, listener);
+      return () => ipcRenderer.removeListener(IPC.chatToken, listener);
     },
   },
 };

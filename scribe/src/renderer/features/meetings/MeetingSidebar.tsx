@@ -29,6 +29,8 @@ type MeetingSidebarProps = {
   onSearch: (query: string) => void;
   onDelete: (id: number) => void;
   onOpenSettings: () => void;
+  /** Open the cross-meeting chat view (ROADMAP_07 Phase 2). */
+  onOpenCrossChat: () => void;
   /** Optional content rendered above the meeting list (e.g. the calendar agenda). */
   agendaSlot?: ReactNode;
 };
@@ -44,6 +46,7 @@ export function MeetingSidebar({
   onSearch,
   onDelete,
   onOpenSettings,
+  onOpenCrossChat,
   agendaSlot,
 }: MeetingSidebarProps) {
   const [text, setText] = useState('');
@@ -83,6 +86,13 @@ export function MeetingSidebar({
           }}
           className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-1.5 text-xs text-neutral-200 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
         />
+        <button
+          type="button"
+          onClick={onOpenCrossChat}
+          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-neutral-800 px-2.5 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800"
+        >
+          💬 Ask across meetings
+        </button>
       </div>
 
       {agendaSlot}
