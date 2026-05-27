@@ -7,7 +7,13 @@
  * This module imports nothing from electron, node:*, or React (CLAUDE.md §3).
  */
 export const PRICING = {
-  /** Deepgram Nova-3 streaming — per channel per minute (USD). */
+  /**
+   * Deepgram Nova-3 streaming — per channel per minute (USD). As of May 2026 list
+   * pricing this is ≈ the multilingual rate ($0.0058); a fixed monolingual language
+   * is cheaper (~$0.0048). Deepgram bills *per channel*, and the app currently captures
+   * 2 channels, so the effective per-minute cost is ~2× this value — see the `* 2` in
+   * estimateCost(). V05 ROADMAP_02 drops to a single channel to halve it.
+   */
   deepgramNovaPerMinutePerChannel: 0.0059,
   /** Claude Sonnet — per 1 million input tokens (USD). */
   claudeSonnetInputPer1MTokens: 3.0,

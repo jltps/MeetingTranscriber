@@ -130,6 +130,14 @@ export class DeepgramSession implements TranscriptionSession {
     const params = new URLSearchParams({
       model: 'nova-3',
       multichannel: 'true',
+      // diarize splits multiple speakers *within* a channel. multichannel only
+      // separates channels (mic vs system) — two remote people share the system
+      // channel, so without diarize they collapse to one speaker. Combining the two
+      // is supported and is what gives per-speaker attribution on channel 1.
+      diarize: 'true',
+      // smart_format includes punctuation plus number/date/entity formatting for a
+      // more readable transcript (superset of punctuate; both are harmless together).
+      smart_format: 'true',
       punctuate: 'true',
       interim_results: 'true',
       encoding: 'linear16',

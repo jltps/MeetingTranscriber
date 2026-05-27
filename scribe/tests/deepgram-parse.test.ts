@@ -65,4 +65,32 @@ describe('parseDeepgramMessage', () => {
       { text: 'No.', channel: 1, speakerLabel: 'Speaker 2', startMs: 4000, endMs: 4400, isFinal: true },
     ]);
   });
+
+  // Regression guard for the merged-speaker bug: diarize=true (now sent by
+  // deepgram.ts) populates word.speaker on the system channel, so two remote
+  // participants must surface as distinct labels rather than collapsing into one.
+  it('keeps three distinct system-channel speakers separate', () => {
+    const segs = parseDeepgramMessage({
+      type: 'Results',
+      channel_index: [1, 2],
+      is_final: true,
+      start: 10.0,
+      duration: 3.0,
+      channel: {
+        alternatives: [
+          {
+            transcript: 'ola tudo bem otimo',
+            words: [
+              { word: 'ola', punctuated_word: 'Olá,', start: 10.0, end: 10.4, speaker: 0 },
+              { word: 'tudo', punctuated_word: 'tudo', start: 10.5, end: 10.8, speaker: 1 },
+              { word: 'bem', punctuated_word: 'bem?', start: 10.8, end: 11.1, speaker: 1 },
+              { word: 'otimo', punctuated_word: 'Ótimo.', start: 11.3, end: 11.8, speaker: 2 },
+            ],
+          },
+        ],
+      },
+    });
+    expect(segs.map((s) => s.speakerLabel)).toEqual(['Speaker 1', 'Speaker 2', 'Speaker 3']);
+    expect(segs.map((s) => s.text)).toEqual(['Olá,', 'tudo bem?', 'Ótimo.']);
+  });
 });
