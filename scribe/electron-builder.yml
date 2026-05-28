@@ -27,12 +27,15 @@ win:
   target:
     - nsis
   icon: build/icon.ico
-  # We don't sign, so skip rcedit/signtool on the app .exe — this avoids
-  # electron-builder's winCodeSign download, whose macOS symlinks can't be
-  # extracted without admin/Developer Mode on Windows. The icon below is still
-  # used by NSIS (installer/shortcut) and the running window (main/index.ts);
-  # the packaged .exe keeps the default icon because edit is disabled here.
+  # Stay off — flipping this true triggers electron-builder to download the
+  # winCodeSign bundle, whose macOS symlinks can't be extracted on Windows
+  # without admin / Developer Mode. We embed the Nexus icon (and product /
+  # version metadata) ourselves via build/after-pack.cjs (rcedit), which
+  # runs before NSIS bundles the .exe.
   signAndEditExecutable: false
+# Embed the Nexus icon on the packaged .exe so it doesn't ship with Electron's
+# default icon (visible in File Explorer, Task Manager, pinned taskbar entries).
+afterPack: build/after-pack.cjs
 # Silent install (V07): required for background auto-updates via electron-updater.
 # Tradeoff: first-time installs are also silent (no install-dir picker) — same UX
 # as Slack/Discord/VS Code per-user installers. `deleteAppDataOnUninstall: false`
