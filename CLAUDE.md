@@ -506,6 +506,55 @@ across updates and uninstalls.
   Pre-flight Start modal + onboarding audio step from the original plan
   were deferred (the watchdog + Settings panel + diagnostics already cover
   the silent-failure modes; `runCaptureProbe` is exported for the next step).
+- **V074 — UI polish (shipped; `roadmap/V074`):** six surface-level refinements
+  raised after a week of dogfooding. (1) **Softer AI button accent.** The
+  `variant="ai"` Button (`renderer/components/ui/button.tsx`) was a bold
+  teal→blue gradient + white text that competed with the solid-teal primary
+  CTAs (New Note, Start). V074 recoloured it as a soft tinted gradient
+  (`from-primary/10 to-info/10`) with `text-primary` label and icon; gradient
+  direction preserved so the variant stays recognisable. (2) **Settings as
+  vertical tabs.** `SettingsModal.tsx` regrouped its 11 sections into 10
+  left-rail tabs (General / AI / Audio / Transcription / Calendar / Templates
+  / Updates / Usage & Cost / Data / Privacy). Language moved from Audio to
+  General; the destructive Wipe lives under Privacy. State stays hoisted at
+  the top of the component so switching tabs doesn't tear down in-progress
+  edits (API-key reveal flow, unsaved enhancement instructions). The
+  last-opened tab persists in `localStorage` under `nexus:settings:last-tab`
+  — UI-only preference, no IPC contract change. (3) **Templates full-screen
+  workspace.** New `features/templates/TemplatesPage.tsx` (Back ← / Templates
+  / + New header, scrollable list on left, editor on right) replaces the
+  sub-Dialog-on-Settings stack. The editor body was extracted from
+  `TemplateEditorModal.tsx` into a reusable `<TemplateEditor>` with
+  `variant: 'modal' | 'page'` so the legacy single-template modal still
+  works for per-meeting edits. New top-level `appView: 'meetings' |
+  'templates'` state in `App.tsx` swaps `LayoutShell` for `TemplatesPage`
+  when active; the TitleBar stays mounted for window controls. (4)
+  **Customisable sidebar.** New `features/layout/use-sidebar-layout.ts`
+  manages a `{order, hidden}` blob in `localStorage`
+  (`nexus:sidebar:layout`); `MeetingSidebar.tsx` was refactored into per-
+  section renderers (Folders, Tags, Agenda, Notes) with the top actions
+  (New Note, Search, Ask-across-notes) pinned. Each non-Notes section gets a
+  bounded scroll container (`max-h-[35vh] overflow-y-auto`) so long folder
+  or tag lists no longer push meetings off-screen. An "Edit sidebar" panel
+  at the bottom (`SlidersHorizontal` icon) replaces the section stack with
+  checkboxes + ↑↓ reorder buttons + Reset; the last visible section's hide
+  checkbox is force-disabled so users can never lock themselves out. Drag
+  reorder was deliberately *not* used — the outer DndContext for meeting-row
+  drag would conflict. The previously combined Folders+Tags panel was split
+  so the two sections can be hidden/reordered independently. (5) **About
+  dialog cleanup.** `AboutDialog.tsx` lost the Releases + Source outlinks
+  (the V07 auto-updater makes the first redundant; the second leaked the
+  repo into the consumer UI). "Check for updates" is the only button left.
+  The `openExternal('releases' | 'repo')` IPC channel stays in place — out
+  of scope to remove. (6) **Typed-WIPE double-confirm.** New
+  `features/settings/WipeDataDialog.tsx` replaces the single
+  `window.confirm()`. The dialog disables its destructive button until the
+  user types the literal phrase `WIPE` (case-sensitive); `settings.wipe()`
+  is unchanged on the wire. UI-only block — no DB migration, no new IPC
+  channels, no §1 invariant moves. Two localStorage keys
+  (`nexus:settings:last-tab`, `nexus:sidebar:layout`) chosen over new
+  typed IPC because they're renderer-only preferences with no main-side
+  observer.
 - **V0.7.1 — production OAuth credentials for calendar (shipped):** v0.7.0 shipped
   the V07 updater alongside calendar code (V03) that still pointed at a dev Google
   client and an empty Microsoft client, so Connect failed on fresh installs.

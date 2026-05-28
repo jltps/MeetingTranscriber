@@ -25,7 +25,7 @@ install silently — no installer wizard.
 
 ## Status
 
-Shipping at **v0.7.3**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
+Shipping at **v0.7.4**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
 largely built, the product was renamed **Scribe → Nexus** (V04), **V05 — transcription
 quality & cost — has shipped**, **V06 — templates & AI capabilities — has shipped**,
 **V062 — per-word "Me" attribution — has shipped**, **V07 — in-app auto-update
@@ -33,10 +33,14 @@ from GitHub Releases — has shipped** (with v0.7.1 wiring the production Google
 Microsoft calendar OAuth credentials so Connect works out of the box),
 **V072 — minor experience tweaks — has shipped** (launch splash, unified note-window
 header, drag-and-drop reorder, compact card density, date on agenda rows, tags
-sidebar affordance, ask-across-notes in sidebar), and **V073 — transcription
+sidebar affordance, ask-across-notes in sidebar), **V073 — transcription
 quality & bullet-proof Windows audio capture — has shipped** (bleed-aware "Me"
 attribution, mic + loopback fallback chains, sample-rate negotiation, in-meeting
-silence watchdog, adjacent-fragment auto-merge, capture-mode toggle):
+silence watchdog, adjacent-fragment auto-merge, capture-mode toggle), and **V074 —
+UI polish — has shipped** (softer AI button accent, vertical-tab Settings,
+full-screen Templates workspace, customisable sidebar with hide/reorder and
+per-section scroll, About cleanup, typed-WIPE confirm for the destructive
+wipe-data action):
 
 **v1 — core (shipped)**
 - Mic + Windows loopback system audio captured as a 2-channel 16 kHz PCM stream
@@ -153,6 +157,47 @@ silence watchdog, adjacent-fragment auto-merge, capture-mode toggle):
   Microsoft now work on a fresh install with no local config. Also the first
   release published end-to-end by the V07 auto-update pipeline (CI workflow
   built, signed, and uploaded the installer + `latest.yml` on tag push).
+
+**v0.7.4 — UI polish (shipped)**
+- **Softer AI button accent.** The `variant="ai"` button (Ask-across-notes,
+  Chat, Optimize-with-AI) was a bold teal→blue gradient with white text — it
+  competed with the solid-teal **New Note** and **Start** CTAs for first
+  attention. V074 recoloured it as a soft tinted gradient with primary-coloured
+  label and icon, so the primary CTAs win the visual hierarchy and the AI
+  variant reads as the accent it's meant to be.
+- **Settings as vertical tabs.** The 11-section single-scroll Settings modal
+  became a left-rail tab navigator (General / AI / Audio / Transcription /
+  Calendar / Templates / Updates / Usage & Cost / Data / Privacy). Language
+  moved from Audio to General so it sits with the other global preferences;
+  the destructive "Wipe all local data" is isolated under Privacy. State stays
+  hoisted so switching tabs preserves in-progress edits (API-key reveal flow,
+  the unsaved instructions textarea, etc.); the last-opened tab persists in
+  `localStorage`.
+- **Templates as a full-screen workspace.** Templates were one of the
+  strongest features but lived as a sub-Dialog stacked on top of Settings.
+  V074 moved them to a top-level page (Back ← / Templates / + New header,
+  scrollable list on the left, large editor on the right with the snippet
+  toolbar + Optimize-with-AI). Settings → Templates is now a single
+  "Manage templates" entry point that opens the workspace and closes
+  Settings. The reusable `<TemplateEditor>` body is shared with the legacy
+  `TemplateEditorModal` so per-meeting edits stay one-click.
+- **Customisable sidebar with per-section scroll.** New Note, Search, and
+  Ask-across-notes are pinned at the top. The four lower sections —
+  Folders, Tags, Agenda, Notes — can be hidden, reordered, and now each get
+  their own bounded scroll container (no more pushing the meetings list
+  off-screen with a long folder/tag list). A new "Edit sidebar" panel
+  (`SlidersHorizontal` icon, bottom of the sidebar) opens checkboxes + ↑↓
+  reorder + Reset; the last visible section's hide checkbox is disabled so
+  users can never lock themselves into an empty sidebar. Layout persists in
+  `localStorage` (`nexus:sidebar:layout`) — no DB migration, no IPC change.
+- **About dialog cleanup.** Removed the "Releases" and "Source" outlinks —
+  the V07 auto-updater makes the Releases link redundant and the repo
+  shouldn't be linked from the consumer UI. Only "Check for updates" remains.
+- **Typed-WIPE confirmation for destructive wipe.** A misclick after the
+  single `window.confirm()` would wipe every meeting, transcript, note,
+  template, and API key. V074 replaces that gate with a dedicated dialog —
+  the user has to type the literal word `WIPE` (case-sensitive) before the
+  destructive button enables. The wipe IPC itself is unchanged.
 
 **v0.7.3 — transcription quality & bullet-proof Windows audio capture (shipped)**
 - **Capture reliability on diverse Windows hardware.** The mic acquisition path
@@ -328,6 +373,7 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 | `roadmap/V07/…` | In-app auto-update + release CI (shipped): `electron-updater`, install guard, GitHub Releases provider, NSIS one-click, tag-driven CI build/publish. |
 | `roadmap/V072/…` | Minor experience tweaks (shipped): launch splash, unified note-window header, sidebar ask-across-notes, drag-and-drop reorder + move-to-folder (migration v12), compact/extended card density, date on agenda rows, sidebar Tags affordance. |
 | `roadmap/V073/…` | Transcription quality & bullet-proof Windows audio capture (shipped): mic + loopback fallback chains, in-worklet sample-rate decimator, in-meeting silence watchdog, bleed-aware "Me" attribution + Auto/Headphones/Speakers toggle, adjacent-fragment auto-merge. |
+| `roadmap/V074/…` | UI polish (shipped): softer AI button accent, vertical-tab Settings, full-screen Templates workspace, customisable sidebar with hide/reorder + per-section scroll, About cleanup, typed-WIPE double-confirm for the destructive wipe-data action. |
 | `scribe/docs/CALENDAR_SETUP.md` | One-time Google / Microsoft OAuth client setup. |
 
 **Ground truth is the code, not the docs.** Where any doc disagrees with the
