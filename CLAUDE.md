@@ -381,6 +381,46 @@ across updates and uninstalls.
   electron-builder doesn't trigger the winCodeSign download (macOS symlinks fail
   to extract on Windows without Developer Mode). Holds §1.1–§1.7; the `github`
   provider is anonymous against the public repo, so no API key is added.
+- **V072 — Minor experience tweaks (shipped; `roadmap/V072`):** seven small UI/UX
+  refinements that sand off rough edges from daily use. (1) **Launch splash**
+  (`main/splash.ts` + `build/splash.html`) shown immediately on `app.whenReady`,
+  dismissed when the main window fires `ready-to-show` — no preload, no IPC, no
+  network. (2) **Unified note-window header** (`renderer/features/notes/
+  NoteWindowHeader.tsx`): Folder picker + Tags dropdown + Original/Enhanced
+  toggle + Export + Chat all collapse into one sticky header inside the left
+  ResizablePanel; the right column is transcript-only (the old Transcript/Chat
+  ToggleGroup is gone); chat takes over the notes pane via a `noteSurface`
+  state. Adds **`Button variant="ai"`** for the teal→blue gradient used by
+  Chat / Ask-across-notes / Optimize-with-AI. (3) **Ask-across-notes** moves
+  from the TitleBar to a full-width sidebar button under Search; the TitleBar
+  drops the prop. (4) **Drag-and-drop reorder + move-to-folder** via
+  `@dnd-kit/{core,sortable,utilities}` (new deps): additive **migration v12**
+  adds `meeting_sort_overrides (meeting_id, sort_mode, position)` with FK ON
+  DELETE CASCADE; new IPC `meetingsListSortOverrides` + `meetingsSetSortPosition`
+  (Zod-validated, `SidebarSortMode` enum mirrors the sidebar's `SortKey`); the
+  list wraps in `DndContext`/`SortableContext`, whole-row drag with
+  `activationConstraint: { distance: 4 }` so a small click still opens the
+  meeting; folder rows are `useDroppable` targets (`folder:<id>` / `folder:none`);
+  KeyboardSensor for a11y; on drop, all visible rows are sequence-stamped (step
+  1000) and the override map reloaded. Reorder is per-sort-mode (so reordering
+  in Last-updated doesn't affect A-Z). (5) **Compact/Extended card density**:
+  new KV setting `notes_card_view` (no migration — existing KV table) with a
+  ToggleGroup in the sidebar; `MeetingRow` branches on density (single-line
+  with `py-1.5` vs the rich `py-2.5` 2-line layout). (6) **Date label on
+  agenda rows**: pure-function helper `formatEventWhen(startMs, allDay, now)`
+  (`renderer/features/calendar/format-when.ts`) returning "Today · 2:34 PM" /
+  "Tomorrow · …" / weekday-short / "Jun 4 · …" / "Today · All day"; rounds
+  day-delta over 86_400_000 ms so DST boundaries (23 h or 25 h days) still
+  classify correctly; 7 unit tests pin behaviour. (7) **Tags-section
+  affordance** (`renderer/features/organization/TagFilter.tsx`): the sidebar
+  now always renders a "Tags" header with a `+` button that opens NameDialog →
+  `org.createTag` — fresh installs had no global affordance to create a tag,
+  since `TagFilter` returned `null` when empty. UI + one additive migration;
+  holds §1.1–§1.7. Verification of the unified-header restructure (block 02)
+  expanded scope mid-stream to relocate Folder/Tags/Export from the app header
+  into the new NoteWindowHeader; `setRightTab` was retired in favour of
+  `setNoteSurface` and the command-palette `toggle-tab` action became
+  `toggle-chat`.
 - **V0.7.1 — production OAuth credentials for calendar (shipped):** v0.7.0 shipped
   the V07 updater alongside calendar code (V03) that still pointed at a dev Google
   client and an empty Microsoft client, so Connect failed on fresh installs.

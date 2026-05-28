@@ -25,13 +25,15 @@ install silently — no installer wizard.
 
 ## Status
 
-Shipping at **v0.7.1**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
+Shipping at **v0.7.2**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
 largely built, the product was renamed **Scribe → Nexus** (V04), **V05 — transcription
 quality & cost — has shipped**, **V06 — templates & AI capabilities — has shipped**,
-**V062 — per-word "Me" attribution — has shipped**, and **V07 — in-app auto-update
+**V062 — per-word "Me" attribution — has shipped**, **V07 — in-app auto-update
 from GitHub Releases — has shipped** (with v0.7.1 wiring the production Google +
-Microsoft calendar OAuth credentials so Connect works out of the box on the
-installer, no `.env` needed):
+Microsoft calendar OAuth credentials so Connect works out of the box), and
+**V072 — minor experience tweaks — has shipped** (launch splash, unified note-window
+header, drag-and-drop reorder, compact card density, date on agenda rows, tags
+sidebar affordance, ask-across-notes in sidebar):
 
 **v1 — core (shipped)**
 - Mic + Windows loopback system audio captured as a 2-channel 16 kHz PCM stream
@@ -149,6 +151,37 @@ installer, no `.env` needed):
   release published end-to-end by the V07 auto-update pipeline (CI workflow
   built, signed, and uploaded the installer + `latest.yml` on tag push).
 
+**v0.7.2 — minor experience tweaks (shipped)**
+- **Launch splash**: a small branded window appears the moment Nexus launches
+  and dismisses when the main window is ready — no more black-then-empty gap
+  on cold start. Theme-aware (light/dark) and honours `prefers-reduced-motion`.
+- **Unified note-window header**: the per-meeting Folder picker, Tags
+  dropdown, Original/Enhanced toggle, Export button, and Chat trigger all
+  collapse into one sticky header above the notes pane. The right column is
+  transcript-only. Chat takes over the notes pane instead of hiding behind a
+  tab in the wrong column. Adds a reusable `variant="ai"` Button (teal→blue
+  gradient) consumed by Chat, Ask-across-notes, and Optimize-with-AI.
+- **Ask-across-notes in the sidebar**: the cross-meeting chat trigger moved
+  from a tiny TitleBar icon to a full-width gradient button under Search —
+  same place as the rest of the notes-navigation controls.
+- **Drag-and-drop note organization**: drag a meeting card to reorder it
+  within the current sort mode (overrides are per-sort-mode — reordering in
+  Last-updated doesn't affect A-Z); drop onto a folder row to move it. New
+  `@dnd-kit/{core,sortable,utilities}` deps, additive **migration v12** for a
+  `meeting_sort_overrides` table, two new Zod-validated IPC channels, and a
+  KeyboardSensor for a11y. The right-click "Move to folder" menu still works.
+- **Compact / Extended card density**: a toggle in the sidebar header swaps
+  meeting cards between the current rich 2-line layout (Extended, default)
+  and a single-line layout (Compact) so power users with hundreds of
+  meetings can scan more rows at once. Persisted via a `notes_card_view` KV
+  setting (no migration).
+- **Date on agenda rows**: every Upcoming row now reads "Today · 2:34 PM" /
+  "Tomorrow · 9:00 AM" / "Wed · 9:00 AM" / "Jun 4 · 9:00 AM" — pure helper
+  with DST-aware day-delta and 7 unit tests.
+- **Tags sidebar affordance**: the sidebar always renders a "Tags" section
+  with a `+` button (mirroring the Folders affordance), so fresh installs
+  can create tags from the sidebar instead of having to open a meeting first.
+
 Not yet built: transcript/enhancement quality eval loop (v03 ROADMAP_03) and the
 sync/sharing phases of the data block (v03 ROADMAP_04). Code-signing the
 installer (removes Windows SmartScreen warnings) is named future work — flip
@@ -252,6 +285,8 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 | `roadmap/v05/…` | Transcription quality & cost: speaker diarization, single-channel mono capture + mic-energy "Me", per-meeting cost accounting. |
 | `roadmap/V06/…` | Templates & AI (shipped): guidance-slot template model + reseed, template editor UX, summary depths, AI cost/quality routing, multi-provider, UI polish (see `ROADMAP_00_INDEX.md`). |
 | `roadmap/V062/…` | Per-word "Me" attribution (shipped): word-level energy classification + attribution-first regrouping so own-voice no longer fragments across Deepgram speaker IDs. |
+| `roadmap/V07/…` | In-app auto-update + release CI (shipped): `electron-updater`, install guard, GitHub Releases provider, NSIS one-click, tag-driven CI build/publish. |
+| `roadmap/V072/…` | Minor experience tweaks (shipped): launch splash, unified note-window header, sidebar ask-across-notes, drag-and-drop reorder + move-to-folder (migration v12), compact/extended card density, date on agenda rows, sidebar Tags affordance. |
 | `scribe/docs/CALENDAR_SETUP.md` | One-time Google / Microsoft OAuth client setup. |
 
 **Ground truth is the code, not the docs.** Where any doc disagrees with the
