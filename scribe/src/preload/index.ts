@@ -97,6 +97,7 @@ const api: ScribeApi = {
       ipcRenderer.invoke(IPC.settingsSetTranscriptionProvider, provider),
     setWhisperModel: (model) =>
       ipcRenderer.invoke(IPC.settingsSetWhisperModel, model),
+    setNotesCardView: (view) => ipcRenderer.invoke(IPC.settingsSetNotesCardView, view),
     test: (provider, key) => ipcRenderer.invoke(IPC.settingsTest, { provider, key }),
     acceptPrivacy: () => ipcRenderer.invoke(IPC.settingsAcceptPrivacy),
     completeOnboarding: () => ipcRenderer.invoke(IPC.settingsCompleteOnboarding),

@@ -668,6 +668,10 @@ export function App() {
               setShowCrossChat(true);
               setDrawerOpen(false);
             }}
+            cardView={settings?.notesCardView ?? 'extended'}
+            onCardViewChange={(v) => {
+              void window.api.settings.setNotesCardView(v).then(() => refreshSettings());
+            }}
             agendaSlot={
               <AgendaPanel
                 events={calendar.agenda}

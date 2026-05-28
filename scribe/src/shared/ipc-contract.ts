@@ -88,6 +88,7 @@ export const IPC = {
   // Local Whisper transcription (ROADMAP_05)
   settingsSetTranscriptionProvider: 'settings:setTranscriptionProvider',
   settingsSetWhisperModel:          'settings:setWhisperModel',
+  settingsSetNotesCardView:         'settings:setNotesCardView', // sidebar meeting-card density (V072 block 05)
   whisperModelsGet:             'whisper:modelsGet',             // → WhisperModelStatus[]
   whisperModelDownload:         'whisper:modelDownload',         // name → void (async)
   whisperModelCancel:           'whisper:modelCancel',           // → void
@@ -217,6 +218,12 @@ export const SetGlobalInstructionsSchema = z.string().max(4000);
 export const QualityModeSchema = z.enum(['economy', 'quality']);
 export type QualityMode = z.infer<typeof QualityModeSchema>;
 
+// Sidebar meeting-card density (V072 block 05). 'extended' is the rich
+// 2-line render (title + timestamp + template + tags); 'compact' is a
+// single line so more rows fit at once.
+export const NotesCardViewSchema = z.enum(['extended', 'compact']);
+export type NotesCardView = z.infer<typeof NotesCardViewSchema>;
+
 /**
  * Which LLM backend serves enhancement, chat, titles, and prompt-optimization (V06
  * block 05). 'anthropic' is the default and the one the app is tuned for;
@@ -307,6 +314,8 @@ export type SettingsView = {
   microsoftCalendarConnected: boolean;
   /** Current appearance theme (ROADMAP_V04_01). */
   theme: ThemeView;
+  /** Sidebar meeting-card density (V072 block 05). Defaults to 'extended'. */
+  notesCardView: NotesCardView;
 };
 export type TestResult = { ok: boolean; message?: string };
 
@@ -416,6 +425,7 @@ export interface SettingsApi {
   testOpenAi(config: OpenAiConfig): Promise<TestResult>;
   setTranscriptionProvider(provider: 'deepgram' | 'whisper'): Promise<void>;
   setWhisperModel(model: string): Promise<void>;
+  setNotesCardView(view: NotesCardView): Promise<void>;
   test(provider: TestProvider, key?: string): Promise<TestResult>;
   acceptPrivacy(): Promise<void>;
   completeOnboarding(): Promise<void>;

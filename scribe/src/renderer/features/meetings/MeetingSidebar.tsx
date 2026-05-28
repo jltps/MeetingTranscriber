@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { FileText, MessageSquare, Plus, Search, SearchX, X } from 'lucide-react';
+import { FileText, MessageSquare, Plus, Rows2, Rows3, Search, SearchX, X } from 'lucide-react';
+import type { NotesCardView } from '../../../shared/ipc-contract';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { EmptyState } from '../../components/EmptyState';
 import type { Folder, MeetingStatus, MeetingSummary, Tag, Template } from '../../../shared/types';
 import { useDebouncedCallback } from '../../lib/debounce';
@@ -78,6 +80,8 @@ type MeetingSidebarProps = {
   onAddMeetingTag: (meetingId: number, tagId: number) => void;
   onRemoveMeetingTag: (meetingId: number, tagId: number) => void;
   onOpenCrossChat: () => void;
+  cardView: NotesCardView;
+  onCardViewChange: (v: NotesCardView) => void;
   agendaSlot?: ReactNode;
 };
 
@@ -98,6 +102,8 @@ export function MeetingSidebar({
   onAddMeetingTag,
   onRemoveMeetingTag,
   onOpenCrossChat,
+  cardView,
+  onCardViewChange,
   agendaSlot,
 }: MeetingSidebarProps) {
   const [text, setText] = useState('');
@@ -198,20 +204,42 @@ export function MeetingSidebar({
 
       {agendaSlot}
 
-      <div className="flex items-center justify-between px-3 py-1.5">
+      <div className="flex items-center justify-between gap-1 px-3 py-1.5">
         <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           Notes
         </span>
-        <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
-          <SelectTrigger size="sm" className="h-6 gap-1 border-none px-1 text-[11px] shadow-none">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent align="end">
-            <SelectItem value="updated">Last updated</SelectItem>
-            <SelectItem value="created">Date created</SelectItem>
-            <SelectItem value="title">Title</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-1">
+          {/* Density toggle (V072 block 05). Extended = the historical rich row;
+              Compact = single-line for scanning long histories. */}
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            value={cardView}
+            onValueChange={(v) => {
+              if (v) onCardViewChange(v as NotesCardView);
+            }}
+            aria-label="Card density"
+            className="h-6"
+          >
+            <ToggleGroupItem value="extended" aria-label="Extended view" title="Extended view" className="h-6 min-w-6 px-1">
+              <Rows3 className="size-3" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="compact" aria-label="Compact view" title="Compact view" className="h-6 min-w-6 px-1">
+              <Rows2 className="size-3" />
+            </ToggleGroupItem>
+          </ToggleGroup>
+          <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
+            <SelectTrigger size="sm" className="h-6 gap-1 border-none px-1 text-[11px] shadow-none">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectItem value="updated">Last updated</SelectItem>
+              <SelectItem value="created">Date created</SelectItem>
+              <SelectItem value="title">Title</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -245,6 +273,7 @@ export function MeetingSidebar({
                     tags={tags}
                     selected={m.id === selectedId}
                     disabled={disabled}
+                    cardView={cardView}
                     onSelect={onSelect}
                     onDelete={onDelete}
                     onSetFolder={onSetMeetingFolder}
@@ -281,6 +310,7 @@ type MeetingRowProps = {
   tags: Tag[];
   selected: boolean;
   disabled: boolean;
+  cardView: NotesCardView;
   onSelect: (id: number) => void;
   onDelete: (id: number) => void;
   onSetFolder: (meetingId: number, folderId: number | null) => void;
@@ -296,6 +326,7 @@ function MeetingRow({
   tags,
   selected,
   disabled,
+  cardView,
   onSelect,
   onDelete,
   onSetFolder,
@@ -305,6 +336,7 @@ function MeetingRow({
 }: MeetingRowProps) {
   const templateName = m.templateId ? templates.find((t) => t.id === m.templateId)?.name : null;
   const meetingTags = new Set(m.tags);
+  const compact = cardView === 'compact';
 
   return (
     <ContextMenu>
@@ -319,27 +351,39 @@ function MeetingRow({
             data-meeting-item={m.id}
             disabled={disabled}
             onClick={() => onSelect(m.id)}
-            className="flex min-w-0 flex-1 items-center gap-2 px-4 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:cursor-not-allowed disabled:opacity-50"
+            className={`flex min-w-0 flex-1 items-center gap-2 px-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:cursor-not-allowed disabled:opacity-50 ${
+              compact ? 'py-1.5' : 'py-2.5'
+            }`}
           >
             <span className={`h-2 w-2 shrink-0 rounded-full ${statusDot(m.status)}`} />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm text-foreground">{m.title}</span>
-              <span className="block text-[11px] text-muted-foreground">{formatWhen(m.createdAt)}</span>
-              {templateName && (
-                <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
-                  {templateName}
+            {compact ? (
+              // Single line: title + timestamp on the right.
+              <>
+                <span className="min-w-0 flex-1 truncate text-sm text-foreground">{m.title}</span>
+                <span className="shrink-0 text-[11px] text-muted-foreground">
+                  {formatWhen(m.createdAt)}
                 </span>
-              )}
-              {m.tags.length > 0 && (
-                <span className="mt-1 flex flex-wrap gap-1">
-                  {m.tags.slice(0, 3).map((t) => (
-                    <span key={t} className="rounded-full bg-secondary px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                      {t}
-                    </span>
-                  ))}
-                </span>
-              )}
-            </span>
+              </>
+            ) : (
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-foreground">{m.title}</span>
+                <span className="block text-[11px] text-muted-foreground">{formatWhen(m.createdAt)}</span>
+                {templateName && (
+                  <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                    {templateName}
+                  </span>
+                )}
+                {m.tags.length > 0 && (
+                  <span className="mt-1 flex flex-wrap gap-1">
+                    {m.tags.slice(0, 3).map((t) => (
+                      <span key={t} className="rounded-full bg-secondary px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                        {t}
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </span>
+            )}
           </button>
           <Button
             variant="ghost"

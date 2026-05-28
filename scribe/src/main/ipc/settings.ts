@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   IPC,
   LlmProviderSchema,
+  NotesCardViewSchema,
   OpenAiConfigSchema,
   QualityModeSchema,
   SetGlobalInstructionsSchema,
@@ -22,10 +23,12 @@ import {
   getOpenAiModel,
   getQualityMode,
   getSetting,
+  getNotesCardView,
   getOnboardingDone,
   getTranscriptionProvider,
   getWhisperModel,
   setLlmProvider,
+  setNotesCardView,
   setOnboardingDone,
   setOpenAiBaseUrl,
   setOpenAiModel,
@@ -74,6 +77,7 @@ export function registerSettingsIpc(): void {
     googleCalendarConnected: isGoogleConnected(),
     microsoftCalendarConnected: isMicrosoftConnected(),
     theme: themeView(),
+    notesCardView: getNotesCardView(),
   }));
 
   ipcMain.handle(IPC.settingsSetKeys, (_event, raw) => {
@@ -134,6 +138,10 @@ export function registerSettingsIpc(): void {
   ipcMain.handle(IPC.settingsSetWhisperModel, (_event, raw) => {
     const model = WhisperModelNameSchema.parse(raw);
     setWhisperModel(model);
+  });
+
+  ipcMain.handle(IPC.settingsSetNotesCardView, (_event, raw) => {
+    setNotesCardView(NotesCardViewSchema.parse(raw));
   });
 
   ipcMain.handle(IPC.settingsAcceptPrivacy, () => {

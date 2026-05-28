@@ -1,5 +1,16 @@
-import { LlmProviderSchema, QualityModeSchema, SetLanguageSchema, ThemeModeSchema } from '../../shared/ipc-contract';
-import type { LlmProvider, QualityMode, ThemeMode } from '../../shared/ipc-contract';
+import {
+  LlmProviderSchema,
+  NotesCardViewSchema,
+  QualityModeSchema,
+  SetLanguageSchema,
+  ThemeModeSchema,
+} from '../../shared/ipc-contract';
+import type {
+  LlmProvider,
+  NotesCardView,
+  QualityMode,
+  ThemeMode,
+} from '../../shared/ipc-contract';
 import type { LanguageSetting } from '../../shared/types';
 import type { WhisperModelName } from '../transcription/whisper-models';
 import { WHISPER_MODEL_NAMES } from '../transcription/whisper-models';
@@ -163,6 +174,18 @@ export function getWhisperModel(): WhisperModelName {
 
 export function setWhisperModel(m: WhisperModelName): void {
   setSetting('whisper_model', m);
+}
+
+// ── Sidebar card density (V072 block 05) ───────────────────────────────────
+
+/** Sidebar meeting-card density. Defaults to 'extended' (the historical look). */
+export function getNotesCardView(): NotesCardView {
+  const parsed = NotesCardViewSchema.safeParse(getSetting('notes_card_view'));
+  return parsed.success ? parsed.data : 'extended';
+}
+
+export function setNotesCardView(v: NotesCardView): void {
+  setSetting('notes_card_view', NotesCardViewSchema.parse(v));
 }
 
 // Leaves nothing behind (PRODUCT_SPEC.md §7): meetings + children + FTS + every
