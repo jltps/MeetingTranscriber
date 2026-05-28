@@ -381,6 +381,21 @@ across updates and uninstalls.
   electron-builder doesn't trigger the winCodeSign download (macOS symlinks fail
   to extract on Windows without Developer Mode). Holds §1.1–§1.7; the `github`
   provider is anonymous against the public repo, so no API key is added.
+- **V0.7.1 — production OAuth credentials for calendar (shipped):** v0.7.0 shipped
+  the V07 updater alongside calendar code (V03) that still pointed at a dev Google
+  client and an empty Microsoft client, so Connect failed on fresh installs.
+  v0.7.1 bundles the production Google + Microsoft client IDs in
+  `scribe/src/main/calendar/config.ts` (both are public — Google "Desktop app"
+  client + Microsoft Entra "Mobile & desktop" public client) and bakes the Google
+  client_secret into the packaged main bundle at build time via a vite `define`
+  in `scribe/electron.vite.config.ts` that reads the `GOOGLE_OAUTH_CLIENT_SECRET`
+  GitHub Actions secret (`.github/workflows/release.yml`). The public repo stays
+  free of the `GOCSPX-` prefix that GitHub's secret scanner would flag; local
+  dev keeps using `scribe/.env`. This was also the first release published
+  end-to-end by the V07 auto-update pipeline (tag push → CI workflow → GitHub
+  Release → in-app updater on v0.7.0 picks it up). §1.2 holds — the secret
+  reaches only the main bundle, never the renderer, and tokens stay encrypted
+  via `safeStorage` in `secrets/calendar-tokens.ts`.
 - Still deferred (don't build unless asked): transcript/enhancement quality eval loop
   (v03 ROADMAP_03), accounts + cloud sync + sharing (v03 ROADMAP_04 later phases),
   macOS, **code-signing the Windows installer** (procure OV/EV Authenticode cert

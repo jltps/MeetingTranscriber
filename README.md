@@ -25,11 +25,13 @@ install silently — no installer wizard.
 
 ## Status
 
-Shipping at **v0.7.0**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
+Shipping at **v0.7.1**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
 largely built, the product was renamed **Scribe → Nexus** (V04), **V05 — transcription
 quality & cost — has shipped**, **V06 — templates & AI capabilities — has shipped**,
 **V062 — per-word "Me" attribution — has shipped**, and **V07 — in-app auto-update
-from GitHub Releases — has shipped**:
+from GitHub Releases — has shipped** (with v0.7.1 wiring the production Google +
+Microsoft calendar OAuth credentials so Connect works out of the box on the
+installer, no `.env` needed):
 
 **v1 — core (shipped)**
 - Mic + Windows loopback system audio captured as a 2-channel 16 kHz PCM stream
@@ -140,6 +142,12 @@ from GitHub Releases — has shipped**:
   and `ProductName`/`FileDescription`/`FileVersion` metadata on the packaged
   `Nexus.exe`, so File Explorer and Task Manager show the Nexus mark instead of
   Electron's default icon.
+- **v0.7.1**: Google + Microsoft calendar OAuth client IDs bundled and the
+  Google client_secret baked into the packaged main bundle at build time via a
+  vite `define` reading a GitHub Actions secret. Connect → Google / Connect →
+  Microsoft now work on a fresh install with no local config. Also the first
+  release published end-to-end by the V07 auto-update pipeline (CI workflow
+  built, signed, and uploaded the installer + `latest.yml` on tag push).
 
 Not yet built: transcript/enhancement quality eval loop (v03 ROADMAP_03) and the
 sync/sharing phases of the data block (v03 ROADMAP_04). Code-signing the

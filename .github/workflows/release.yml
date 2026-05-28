@@ -50,8 +50,12 @@ jobs:
       - name: Build + publish to GitHub Releases
         # Call electron-builder directly so CI publishes; the local `pnpm dist`
         # script uses `--publish never` to keep dev laptops from publishing.
+        # GOOGLE_OAUTH_CLIENT_SECRET is read by vite's `define` in
+        # electron.vite.config.ts during `electron-vite build` and baked into
+        # the main bundle (V0.7.1). Microsoft has no secret.
         run: |
           corepack pnpm exec electron-vite build
           corepack pnpm exec cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}

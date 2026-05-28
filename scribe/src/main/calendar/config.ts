@@ -31,12 +31,18 @@ function ensureEnvLoaded(): void {
 }
 
 // Public Desktop OAuth client ID. GOOGLE_OAUTH_CLIENT_ID env overrides for dev.
-const BUNDLED_GOOGLE_CLIENT_ID = '172739372349-3k6s3ssfrmu7uvbrn3dl14f3agtu72vg.apps.googleusercontent.com';
+// Project nexus-497712, client "Nexus" (Desktop app).
+const BUNDLED_GOOGLE_CLIENT_ID = '527354122786-orpth3vlbsglk71jgs5fgpvhdpa9ajjd.apps.googleusercontent.com';
 
 // Google's Desktop client type ALSO requires a client_secret in the token/refresh
 // requests, even with PKCE (it's "not confidential" per Google for installed apps,
-// but it is mandatory). We do NOT commit it: supply via GOOGLE_OAUTH_CLIENT_SECRET
-// in scribe/.env (gitignored). Bundling is left empty intentionally.
+// but it is mandatory). We do NOT commit it to the public repo: instead it is
+// injected into the packaged main bundle at build time by vite's `define` in
+// scribe/electron.vite.config.ts when the `GOOGLE_OAUTH_CLIENT_SECRET` env var is
+// set (CI provides it from a GitHub Actions secret). Local dev keeps using
+// scribe/.env (gitignored). Bundling stays empty intentionally — the resolver
+// below reads `process.env.GOOGLE_OAUTH_CLIENT_SECRET`, which vite rewrites to a
+// literal at build time in packaged builds.
 const BUNDLED_GOOGLE_CLIENT_SECRET = '';
 
 export const GOOGLE_OAUTH = {
@@ -73,7 +79,8 @@ export function isGoogleConfigured(): boolean {
 // Portal → App registrations; see docs/CALENDAR_SETUP.md) and paste its
 // Application (client) ID into BUNDLED_MICROSOFT_CLIENT_ID (public — safe to ship)
 // or override with MICROSOFT_OAUTH_CLIENT_ID in .env.
-const BUNDLED_MICROSOFT_CLIENT_ID = '';
+// Entra app registration "Nexus desktop" (Mobile and desktop platform).
+const BUNDLED_MICROSOFT_CLIENT_ID = '4e037953-515b-46c1-ad4c-9b7e53018d03';
 
 export const MICROSOFT_OAUTH = {
   // {tenant} is substituted at call time. 'common' = work/school + personal MS
