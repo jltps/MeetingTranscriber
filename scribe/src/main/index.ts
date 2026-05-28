@@ -7,6 +7,7 @@ import { registerIpcHandlers } from './ipc';
 import { disposeTranscription } from './ipc/transcription';
 import { logger } from './logger';
 import { disposeUpdater, initUpdater } from './updater';
+import { closeSplash, createSplash } from './splash';
 import { initTheme, initialBackgroundColor, overlayConfig, registerThemeWindow } from './theme';
 import { initialWindowBounds, MIN_SIZE, registerWindowState } from './window-state';
 
@@ -56,7 +57,7 @@ const windowIcon = isDev
   ? join(__dirname, '../../build/icon.png')
   : join(process.resourcesPath, 'icon.png');
 
-function createWindow(): void {
+function createWindow(onReadyToShow?: () => void): void {
   const win = new BrowserWindow({
     // Restored size/position, clamped to a visible display (ROADMAP_V04_06).
     ...initialWindowBounds(),
@@ -77,7 +78,10 @@ function createWindow(): void {
     },
   });
 
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    win.show();
+    onReadyToShow?.();
+  });
 
   // Keep the native background in step with the effective theme (ROADMAP_V04_01).
   registerThemeWindow(win);
@@ -100,11 +104,15 @@ app
     initDb();
     // Before the window loads, so prefers-color-scheme is correct on first paint.
     initTheme();
+    // Branded splash (V072 block 01) — appears immediately so the user has
+    // feedback while the main window's renderer boots; dismissed below when
+    // the main window fires ready-to-show.
+    const splash = createSplash();
     // Drop Electron's generic File/Edit/View menu; the app uses a custom title bar
     // (ROADMAP_V04_03). Chromium still handles clipboard/undo in editable content.
     Menu.setApplicationMenu(null);
     registerIpcHandlers();
-    createWindow();
+    createWindow(() => closeSplash(splash));
     // Start the in-app auto-updater (V07). No-op in dev; in packaged builds it
     // schedules a check 60 s after boot and every 6 h after.
     initUpdater();

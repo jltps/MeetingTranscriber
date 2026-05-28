@@ -20,6 +20,8 @@ asarUnpack:
 extraResources:
   - from: build/icon.png
     to: icon.png
+  - from: build/splash.html
+    to: splash.html
 # Native deps are already built for Electron's ABI via .npmrc (runtime=electron),
 # so don't let electron-builder rebuild them (this machine has no C++ toolchain).
 npmRebuild: false
