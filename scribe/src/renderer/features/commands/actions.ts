@@ -40,12 +40,12 @@ export type ActionContext = {
   startRecording: () => void;
   stopRecording: () => void;
   setView: (v: 'original' | 'enhanced') => void;
-  setRightTab: (t: 'transcript' | 'chat') => void;
+  setNoteSurface: (s: 'notes' | 'chat') => void;
   hasMeeting: boolean;
   running: boolean;
   hasEnhanced: boolean;
   view: 'original' | 'enhanced';
-  rightTab: 'transcript' | 'chat';
+  noteSurface: 'notes' | 'chat';
 };
 
 // Accessed via globalThis so this module needs no DOM lib (it's also pulled into the
@@ -156,11 +156,11 @@ export function buildActions(ctx: ActionContext): Action[] {
       run: () => ctx.setView(ctx.view === 'enhanced' ? 'original' : 'enhanced'),
     },
     {
-      id: 'toggle-tab',
-      label: ctx.rightTab === 'chat' ? 'Show transcript' : 'Show chat',
+      id: 'toggle-chat',
+      label: ctx.noteSurface === 'chat' ? 'Back to notes' : 'Open chat',
       icon: MessageSquare,
       enabled: inMeeting,
-      run: () => ctx.setRightTab(ctx.rightTab === 'chat' ? 'transcript' : 'chat'),
+      run: () => ctx.setNoteSurface(ctx.noteSurface === 'chat' ? 'notes' : 'chat'),
     },
     {
       id: 'start-recording',

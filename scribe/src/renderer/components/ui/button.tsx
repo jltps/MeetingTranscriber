@@ -19,6 +19,9 @@ const buttonVariants = cva(
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
+        // AI accent — teal→blue gradient (--primary → --info). Used for AI-driven
+        // actions: Optimize-with-AI, Chat, Ask-across-notes (V072 block 02).
+        ai: "bg-gradient-to-r from-primary to-info text-white shadow-sm hover:opacity-90",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",

@@ -8,6 +8,7 @@ import { useMeetings } from '../features/meetings/use-meetings';
 import { MeetingSidebar } from '../features/meetings/MeetingSidebar';
 import { NotesEditor } from '../features/notes/NotesEditor';
 import { EnhancedPane } from '../features/notes/EnhancedPane';
+import { NoteWindowHeader } from '../features/notes/NoteWindowHeader';
 import { useSettings } from '../features/settings/use-settings';
 import { SettingsModal } from '../features/settings/SettingsModal';
 import { OnboardingFlow } from '../features/onboarding/OnboardingFlow';
@@ -23,7 +24,6 @@ import { AutoStartPrompt } from '../features/calendar/AutoStartPrompt';
 import { useDebouncedCallback } from '../lib/debounce';
 import type { ImperativePanelHandle } from 'react-resizable-panels';
 import { useOrganization } from '../features/organization/use-organization';
-import { MeetingOrgControls } from '../features/organization/MeetingOrgControls';
 import { useTheme } from '../features/theme/use-theme';
 import { useLayoutMode } from '../features/layout/use-responsive';
 import { LayoutShell } from '../features/layout/LayoutShell';
@@ -35,7 +35,7 @@ import { CaptureProbe } from './CaptureProbe';
 import { TitleBar } from './TitleBar';
 import { UpdateBanner } from '../features/updates/UpdateBanner';
 import { AboutDialog } from '../features/updates/AboutDialog';
-import { Download, Mic, NotebookPen, PanelRightClose, PanelRightOpen, Sparkles, Square } from 'lucide-react';
+import { Mic, NotebookPen, PanelRightClose, PanelRightOpen, Sparkles, Square } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -72,8 +72,6 @@ export function App() {
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const chat = useChat(selectedId);
-  /** Right-column view: live transcript or per-meeting chat (ROADMAP_07 Phase 1). */
-  const [rightTab, setRightTab] = useState<'transcript' | 'chat'>('transcript');
 
   // Cross-meeting querying (ROADMAP_07 Phase 2): a full-pane view, plus a deferred
   // highlight so a citation can open another meeting and flash the line once loaded.
@@ -92,6 +90,10 @@ export function App() {
   const [enhanced, setEnhanced] = useState<EnhancedNotes | null>(null);
   const [degraded, setDegraded] = useState(false);
   const [view, setView] = useState<'original' | 'enhanced'>('original');
+  // V072 block 02: the note window's primary surface — notes (Original/Enhanced)
+  // or per-meeting chat. Chat used to live as a tab in the right column; it now
+  // takes over the notes pane when active.
+  const [noteSurface, setNoteSurface] = useState<'notes' | 'chat'>('notes');
   // Whether the transcript/chat side panel is shown (wide layout). Hiding it gives the
   // notes the full width. Local + default visible.
   const [transcriptVisible, setTranscriptVisible] = useState(true);
@@ -198,6 +200,8 @@ export function App() {
       setEnhanceError(null);
       setExportError(null);
       setView(parsed ? 'enhanced' : 'original');
+      // Switching meetings always lands on notes, never chat (V072 block 02).
+      setNoteSurface('notes');
     })();
     return () => {
       cancelled = true;
@@ -254,6 +258,51 @@ export function App() {
         initialMarkdown={detail.rawUserMd}
         onSave={(id, markdown) => void window.api.meetings.saveNotes(id, markdown)}
       />
+    );
+  };
+
+  // The note window's primary surface — NoteWindowHeader above either the notes
+  // pane (renderNotes) or the per-meeting ChatPanel, swapped by noteSurface
+  // (V072 block 02). Used in both wide and narrow layouts so the header and
+  // chat-takeover behave identically across responsive modes.
+  const renderNoteSurface = () => {
+    if (!detail) return null;
+    const hasEnhanced = enhanced !== null;
+    return (
+      <div className="flex h-full flex-col">
+        <NoteWindowHeader
+          meetingId={detail.id}
+          folderId={detail.folderId}
+          tagNames={detail.tags}
+          folders={org.folders}
+          tags={org.tags}
+          hasEnhanced={hasEnhanced}
+          view={view}
+          surface={noteSurface}
+          exporting={exporting}
+          recording={running}
+          onViewChange={setView}
+          onSurfaceChange={setNoteSurface}
+          onSetFolder={setMeetingFolder}
+          onAddTag={addMeetingTag}
+          onRemoveTag={removeMeetingTag}
+          onCreateTag={org.createTag}
+          onExport={() => void exportMeeting(detail.id)}
+        />
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          {noteSurface === 'chat' ? (
+            <ChatPanel
+              controller={chat}
+              onCiteClick={onCiteFromChat}
+              available={chatAvailable}
+              keyMissing={!settings?.anthropicKeySet}
+              onConnectKeys={() => setShowSettings(true)}
+            />
+          ) : (
+            renderNotes()
+          )}
+        </div>
+      </div>
     );
   };
 
@@ -480,19 +529,21 @@ export function App() {
     startRecording: () => void start(),
     stopRecording: () => void stop(),
     setView,
-    setRightTab,
+    setNoteSurface,
     hasMeeting: detail !== null,
     running,
     hasEnhanced,
     view,
-    rightTab,
+    noteSurface,
   });
   useShortcuts(actions, () => setPaletteOpen((o) => !o));
 
-  /** A chat citation jump: flash the cited transcript line and switch back to it. */
+  /** A chat citation jump: flash the cited transcript line + return to the notes
+      surface so the cite is visible against the notes pane and the right-column
+      transcript. */
   const onCiteFromChat = useCallback((segmentId: number): void => {
     setHighlight({ ids: [segmentId], nonce: Date.now() });
-    setRightTab('transcript');
+    setNoteSurface('notes');
   }, []);
 
   /** Cross-meeting citation jump: open the source meeting, then flash once it loads. */
@@ -508,7 +559,6 @@ export function App() {
     if (!pendingHighlight || pendingHighlight.meetingId !== selectedId) return;
     if (!loadedSegments.some((s) => s.id === pendingHighlight.segmentId)) return;
     setHighlight({ ids: [pendingHighlight.segmentId], nonce: Date.now() });
-    setRightTab('transcript');
     setPendingHighlight(null);
   }, [pendingHighlight, selectedId, loadedSegments]);
 
@@ -690,17 +740,8 @@ export function App() {
                     ))}
                   </SelectContent>
                 </Select>
-                <MeetingOrgControls
-                  meetingId={detail.id}
-                  folderId={detail.folderId}
-                  tagNames={detail.tags}
-                  folders={org.folders}
-                  tags={org.tags}
-                  onSetFolder={setMeetingFolder}
-                  onAddTag={addMeetingTag}
-                  onRemoveTag={removeMeetingTag}
-                  onCreateTag={org.createTag}
-                />
+                {/* Folder picker + Tags dropdown moved into the note window's
+                    unified header (V072 block 02 — NoteWindowHeader). */}
                 {running && (
                   <span role="status" className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-destructive">
                     <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-destructive" />
@@ -721,19 +762,9 @@ export function App() {
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 ml-auto">
                 {/* Cost moved out of the header (V06 block 06) — it lives in Settings → Usage & Cost.
-                    The Extended / Key points depth toggle moved into the notes pane (EnhancedPane). */}
-                {hasEnhanced && (
-                  <ToggleGroup
-                    type="single"
-                    variant="outline"
-                    size="sm"
-                    value={view}
-                    onValueChange={(v) => { if (v) setView(v as 'original' | 'enhanced'); }}
-                  >
-                    <ToggleGroupItem value="original">Original</ToggleGroupItem>
-                    <ToggleGroupItem value="enhanced">Enhanced</ToggleGroupItem>
-                  </ToggleGroup>
-                )}
+                    The Extended / Key points depth toggle moved into the notes pane (EnhancedPane).
+                    The Original/Enhanced toggle and Export button moved into the note window's
+                    unified header (V072 block 02 — NoteWindowHeader). */}
                 {layoutMode === 'wide' && (
                   <Button
                     variant="outline"
@@ -746,27 +777,15 @@ export function App() {
                   </Button>
                 )}
                 {!running && (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void exportMeeting(detail.id)}
-                      disabled={exporting}
-                      title="Export meeting to Markdown file"
-                    >
-                      <Download />
-                      {exporting ? 'Exporting…' : 'Export'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void enhanceMeeting(detail.id)}
-                      disabled={enhancing}
-                    >
-                      <Sparkles />
-                      {enhancing ? 'Enhancing…' : 'Enhance'}
-                    </Button>
-                  </>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void enhanceMeeting(detail.id)}
+                    disabled={enhancing}
+                  >
+                    <Sparkles />
+                    {enhancing ? 'Enhancing…' : 'Enhance'}
+                  </Button>
                 )}
                 {running ? (
                   <Button variant="destructive" size="sm" onClick={() => void stop()}>
@@ -801,44 +820,24 @@ export function App() {
                 className="flex-1 overflow-hidden"
               >
                 <ResizablePanel defaultSize={58} minSize={30} className="border-r border-border">
-                  {/* The scroll container must live INSIDE the panel: react-resizable-panels
-                      sets overflow:hidden as an inline style on the panel itself, which would
-                      override an overflow-y-auto class here and clip long notes with no scrollbar. */}
-                  <div className="h-full overflow-y-auto p-6">{renderNotes()}</div>
+                  {/* The note surface owns its scroll container so the unified header
+                      (NoteWindowHeader) can stay sticky while long notes scroll. */}
+                  {renderNoteSurface()}
                 </ResizablePanel>
                 <ResizableHandle withHandle />
                 <ResizablePanel defaultSize={42} minSize={25} className="flex flex-col overflow-hidden p-6">
-                  <ToggleGroup
-                    type="single"
-                    variant="outline"
-                    size="sm"
-                    value={rightTab}
-                    onValueChange={(v) => { if (v) setRightTab(v as 'transcript' | 'chat'); }}
-                    className="mb-3"
-                  >
-                    <ToggleGroupItem value="transcript">Transcript</ToggleGroupItem>
-                    <ToggleGroupItem value="chat">Chat</ToggleGroupItem>
-                  </ToggleGroup>
+                  {/* Right column is transcript-only since V072 block 02 — chat lives
+                      in the left column behind the unified header's Chat button. */}
                   <div className="min-h-0 flex-1">
-                    {rightTab === 'chat' ? (
-                      <ChatPanel
-                      controller={chat}
-                      onCiteClick={onCiteFromChat}
-                      available={chatAvailable}
-                      keyMissing={!settings?.anthropicKeySet}
-                      onConnectKeys={() => setShowSettings(true)}
+                    <TranscriptPanel
+                      finals={finals}
+                      interims={interims}
+                      highlight={highlight}
+                      speakerNames={speakerNames}
+                      onRenameSpeaker={onRenameSpeaker}
+                      onReassignSegment={onReassignSegment}
+                      distinctRawLabels={distinctRawLabels}
                     />
-                    ) : (
-                      <TranscriptPanel
-                        finals={finals}
-                        interims={interims}
-                        highlight={highlight}
-                        speakerNames={speakerNames}
-                        onRenameSpeaker={onRenameSpeaker}
-                        onReassignSegment={onReassignSegment}
-                        distinctRawLabels={distinctRawLabels}
-                      />
-                    )}
                   </div>
                   <details className="mt-4 text-xs text-muted-foreground">
                     <summary className="cursor-pointer select-none">Capture diagnostics</summary>
@@ -850,45 +849,43 @@ export function App() {
               </ResizablePanelGroup>
               ) : (
                 // Transcript hidden — notes take the full width.
-                <div className="flex-1 overflow-hidden">
-                  <div className="h-full overflow-y-auto p-6">{renderNotes()}</div>
-                </div>
+                <div className="flex-1 overflow-hidden">{renderNoteSurface()}</div>
               )
             ) : (
-              <div className="flex flex-1 flex-col overflow-hidden p-4">
-                <ToggleGroup
-                  type="single"
-                  variant="outline"
-                  size="sm"
-                  value={mainTab}
-                  onValueChange={(v) => { if (v) setMainTab(v as 'notes' | 'transcript' | 'chat'); }}
-                  className="mb-3"
-                >
-                  <ToggleGroupItem value="notes">Notes</ToggleGroupItem>
-                  <ToggleGroupItem value="transcript">Transcript</ToggleGroupItem>
-                  <ToggleGroupItem value="chat">Chat</ToggleGroupItem>
-                </ToggleGroup>
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                  {mainTab === 'notes' ? (
-                    renderNotes()
-                  ) : mainTab === 'chat' ? (
-                    <ChatPanel
-                      controller={chat}
-                      onCiteClick={onCiteFromChat}
-                      available={chatAvailable}
-                      keyMissing={!settings?.anthropicKeySet}
-                      onConnectKeys={() => setShowSettings(true)}
-                    />
+              // Narrow layout: a tab toolbar at the top lets the user swap between
+              // Notes and Transcript. Chat is reached from the unified header's
+              // Chat button inside the Notes surface (V072 block 02 — no more
+              // separate Chat tab here).
+              <div className="flex flex-1 flex-col overflow-hidden">
+                <div className="border-b border-border px-4 py-2">
+                  <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    size="sm"
+                    value={mainTab === 'chat' ? 'notes' : mainTab}
+                    onValueChange={(v) => {
+                      if (v) setMainTab(v as 'notes' | 'transcript');
+                    }}
+                  >
+                    <ToggleGroupItem value="notes">Notes</ToggleGroupItem>
+                    <ToggleGroupItem value="transcript">Transcript</ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  {mainTab === 'transcript' ? (
+                    <div className="h-full overflow-y-auto p-4">
+                      <TranscriptPanel
+                        finals={finals}
+                        interims={interims}
+                        highlight={highlight}
+                        speakerNames={speakerNames}
+                        onRenameSpeaker={onRenameSpeaker}
+                        onReassignSegment={onReassignSegment}
+                        distinctRawLabels={distinctRawLabels}
+                      />
+                    </div>
                   ) : (
-                    <TranscriptPanel
-                      finals={finals}
-                      interims={interims}
-                      highlight={highlight}
-                      speakerNames={speakerNames}
-                      onRenameSpeaker={onRenameSpeaker}
-                      onReassignSegment={onReassignSegment}
-                      distinctRawLabels={distinctRawLabels}
-                    />
+                    renderNoteSurface()
                   )}
                 </div>
               </div>

@@ -171,11 +171,11 @@ export function TemplateEditorModal({ template, onSave, onClose }: TemplateEdito
                 accent (the palette's --primary and --info) so it reads as the special action. */}
             <div className="flex flex-col items-center gap-1 pt-1">
               <Button
+                variant="ai"
                 size="sm"
                 onClick={() => void handleOptimize()}
                 disabled={optimizing || !instructions.trim()}
                 title="Rewrite your instructions into clear, structured guidance"
-                className="bg-gradient-to-r from-primary to-info text-white shadow-sm hover:opacity-90"
               >
                 <Sparkles />
                 {optimizing ? 'Optimizing…' : 'Optimize with AI'}
