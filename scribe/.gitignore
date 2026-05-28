@@ -1,7 +1,10 @@
 node_modules
 dist
 out
-release
+release/_old/
+release/win-unpacked/
+release/*.exe
+release/*.blockmap
 *.sqlite
 *.sqlite-journal
 *.sqlite-wal
