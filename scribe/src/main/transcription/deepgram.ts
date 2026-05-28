@@ -2,7 +2,7 @@ import WebSocket from 'ws';
 import type { LanguageSetting, TranscriptSegment } from '../../shared/types';
 import type { TranscriptionSession } from './session';
 import type { TranscriptionStatus } from '../../shared/ipc-contract';
-import { parseDeepgramMessage } from './parse';
+import { parseDeepgramMessage, parseDeepgramWords, type DeepgramWordView } from './parse';
 
 const DEEPGRAM_URL = 'wss://api.deepgram.com/v1/listen';
 
@@ -89,6 +89,7 @@ export class DeepgramSession implements TranscriptionSession {
   private ws: WebSocket | null = null;
   private partialCb: ((seg: TranscriptSegment) => void) | null = null;
   private finalCb: ((seg: TranscriptSegment) => void) | null = null;
+  private wordsCb: ((words: DeepgramWordView[]) => void) | null = null;
   private keepAlive: ReturnType<typeof setInterval> | null = null;
   /** Guard — fires onLanguageDetected only once per session. */
   private langDetectedFired = false;
@@ -115,6 +116,10 @@ export class DeepgramSession implements TranscriptionSession {
 
   onFinal(cb: (seg: TranscriptSegment) => void): void {
     this.finalCb = cb;
+  }
+
+  onWords(cb: (words: DeepgramWordView[]) => void): void {
+    this.wordsCb = cb;
   }
 
   pushAudio(pcm: Int16Array): void {
@@ -203,6 +208,17 @@ export class DeepgramSession implements TranscriptionSession {
           if (detected) {
             this.langDetectedFired = true;
             this.config.onLanguageDetected(detected);
+          }
+        }
+        // V062 ROADMAP_01: single-channel finals route through the per-word path so
+        // own-voice doesn't get scattered across Deepgram speaker IDs. The IPC layer
+        // owns the energy timeline and does attribution + regrouping there. Interim
+        // results and the legacy 2-channel path keep using parseDeepgramMessage.
+        if (opts.channels === 1 && this.wordsCb) {
+          const { words, isFinal } = parseDeepgramWords(parsed);
+          if (isFinal && words.length > 0) {
+            this.wordsCb(words);
+            return;
           }
         }
         for (const seg of parseDeepgramMessage(parsed, { singleChannel: opts.channels === 1 })) {

@@ -1,5 +1,11 @@
 # ROADMAP_00_INDEX.md
 
+> **Follow-up shipped: V062 ROADMAP_01 — Per-Word "Me" Attribution.** Block 02's
+> segment-level mic-energy classification scattered own-voice across multiple
+> Deepgram speaker IDs in production use. V062 moved the decision to per-word
+> and added attribution-first regrouping; everything else in block 02 (mono
+> capture, energy timeline, thresholds) is unchanged. See `roadmap/V062/`.
+
 The **V05 backlog — Transcription Quality & Cost.** v1→v4 shipped capture,
 transcription, enhancement, organization, and the UI/UX rebrand. V05 is the first
 phase that goes back into the **speech-to-text core** to fix two real problems seen

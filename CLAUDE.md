@@ -180,12 +180,22 @@ Structural rules (these hold regardless of exact folder names):
   indicator goes off.
 - Transcription sends a **single mono channel** (mic + system downmixed in the
   worklet) to halve Deepgram's per-channel billing. Speakers are split by
-  **diarization**, and "Me" is derived in the main process by correlating each
-  segment with the per-frame mic-vs-system RMS levels
+  **diarization**, and "Me" is derived in the main process by correlating
+  Deepgram's word timings against the per-frame mic-vs-system RMS levels
   (`main/transcription/me-attribution.ts`) — it is no longer a physical channel.
   The per-frame levels are scalars, never audio bytes (§1.1). The legacy 2-channel
-  path (mic = ch0, system = ch1) still works when `channels > 1` is passed. (V05
-  ROADMAP_02 — the mic-energy heuristic is tuned against live calls.)
+  path (mic = ch0, system = ch1) still works when `channels > 1` is passed.
+  (V05 ROADMAP_02 introduced the heuristic; **V062 ROADMAP_01 moved attribution
+  per-word** and regroups words with `isMe` as the primary partition key and
+  Deepgram speaker as the secondary one, so the user's own voice coalesces into a
+  single `"Me"` run even when Deepgram fragments it across speaker IDs. The
+  heuristic is tuned against live calls.)
+- Per-word "Me" attribution runs **only for single-channel finals**: `deepgram.ts`
+  gates them through `onWords`, and the IPC layer (`ipc/transcription.ts`, the
+  owner of the energy timeline) runs `attributeWords` + `groupAttributedWords`
+  there. Interim results and the legacy 2-channel path keep flowing through
+  `attributeSpeaker` → `attributeMe`. The on-wire `TranscriptSegment` shape is
+  unchanged; this is purely how segments are produced.
 - The capture module stays swappable behind its interface (Electron loopback now;
   a native WASAPI addon could replace it later without touching the renderer). Do
   not add the native addon unless the Electron path is proven to fail.
@@ -301,6 +311,21 @@ treat a stale `latest.yaml` the same as a broken build.
   accounting (DB migration v10). Decision on record: **stay on nova-3, not Flux**
   (a voice-agent model lacking diarization/word-timing/meeting support, at higher
   cost). The mono "Me" heuristic is tuned by live multi-person validation (§6, §9).
+- **V062 — Per-word "Me" attribution (shipped; `roadmap/V062`):** V05's
+  segment-level mic-energy classification scattered the user's own voice across
+  multiple Deepgram speaker IDs (Deepgram does not preserve a stable identity
+  across pauses/language shifts, and per-segment averaging buried the dominance
+  signal on long mixed segments). V062 decides `isMe` **per word**
+  (`attributeWords` in `main/transcription/me-attribution.ts`, tighter `windowPadMs`
+  default of 60 ms) and **regroups with attribution as the primary partition
+  key** (`groupAttributedWords`), so consecutive Me-words coalesce into one
+  `"Me"` segment across Deepgram speaker boundaries while remote speakers still
+  split on Deepgram-speaker change. Plumbed through an optional `onWords`
+  callback on `TranscriptionSession` (Deepgram-only — Whisper has no word-level
+  diarization); single-channel finals route through `onWords`, interim + legacy
+  2-channel paths are untouched. No DB migration, no IPC contract change, no
+  payload-shape change — only how segments are produced. §1.1 holds (timeline
+  still scalar RMS).
 - **V06 — Templates & AI capabilities (shipped; `roadmap/V06`):** template `instructions`
   are now a **guidance slot** (not a full prompt) — the LLM mechanics (tool use, origin
   rules, `sourceSegmentIds`, block types, the anti-AI-tell style directive) live in

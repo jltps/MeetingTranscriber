@@ -17,9 +17,10 @@ The app lives in [`scribe/`](scribe/). This file is the project overview; see th
 
 ## Status
 
-Shipping at **v0.6.0**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
+Shipping at **v0.6.2**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
 largely built, the product was renamed **Scribe → Nexus** (V04), **V05 — transcription
-quality & cost — has shipped**, and **V06 — templates & AI capabilities — has shipped**:
+quality & cost — has shipped**, **V06 — templates & AI capabilities — has shipped**,
+and **V062 — per-word "Me" attribution — has shipped**:
 
 **v1 — core (shipped)**
 - Mic + Windows loopback system audio captured as a 2-channel 16 kHz PCM stream
@@ -78,6 +79,19 @@ quality & cost — has shipped**, and **V06 — templates & AI capabilities — 
   usage readout correct across the change.
 - Decision on record: **stay on nova-3, not Deepgram Flux** (a voice-agent model that
   lacks diarization, word timing, and meeting transcription, at higher cost).
+
+**v6.2 — per-word "Me" attribution (shipped)**
+- **Per-word attribution.** V05's segment-level mic-energy classification scattered
+  the user's own voice across multiple Deepgram speaker IDs (Deepgram doesn't keep a
+  stable identity across pauses/language shifts, and per-segment averaging buried the
+  dominance signal on long mixed segments). V062 decides `isMe` **per word** against
+  the same energy timeline (with a tighter window pad) and then **regroups with
+  attribution as the primary partition key** — so consecutive Me-words coalesce into
+  one "Me" segment even when Deepgram fragmented them across "Speaker 3 / 4 / 5".
+  Remote speakers still split by Deepgram speaker as before.
+- Single-channel finals route through a new optional `onWords` callback on
+  `TranscriptionSession`; interim results and the legacy 2-channel path are
+  unchanged. No DB migration, no IPC payload change.
 
 **v6 — templates & AI capabilities (shipped)**
 - **Template instruction model**: `instructions` is now a guidance slot (not a full
@@ -171,7 +185,9 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 │  ├─ v02/FEATURES_LANGUAGE_PROMPT_TEMPLATES.md   # language/prompts/templates
 │  ├─ v03/ROADMAP_*.md                            # post-v1 backlog blocks
 │  ├─ v04/ROADMAP_*.md                            # UI/UX + rebrand phase (Nexus)
-│  └─ v05/ROADMAP_*.md                            # transcription quality & cost
+│  ├─ v05/ROADMAP_*.md                            # transcription quality & cost
+│  ├─ V06/ROADMAP_*.md                            # templates & AI capabilities
+│  └─ V062/ROADMAP_*.md                           # per-word "Me" attribution
 └─ scribe/              # the application
    ├─ build/            # brand assets: icon.ico, icon.png, make-icons.mjs
    └─ src/
@@ -195,6 +211,7 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 | `roadmap/v04/…` | UI/UX + rebrand: design tokens/theming, shadcn/ui, app shell, folders/tags, command palette, layout, onboarding, accessibility, Nexus rebrand. |
 | `roadmap/v05/…` | Transcription quality & cost: speaker diarization, single-channel mono capture + mic-energy "Me", per-meeting cost accounting. |
 | `roadmap/V06/…` | Templates & AI (shipped): guidance-slot template model + reseed, template editor UX, summary depths, AI cost/quality routing, multi-provider, UI polish (see `ROADMAP_00_INDEX.md`). |
+| `roadmap/V062/…` | Per-word "Me" attribution (shipped): word-level energy classification + attribution-first regrouping so own-voice no longer fragments across Deepgram speaker IDs. |
 | `scribe/docs/CALENDAR_SETUP.md` | One-time Google / Microsoft OAuth client setup. |
 
 **Ground truth is the code, not the docs.** Where any doc disagrees with the

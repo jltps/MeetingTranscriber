@@ -4,7 +4,12 @@ import { IPC, TranscriptionStartSchema } from '../../shared/ipc-contract';
 import type { TranscriptSegment } from '../../shared/types';
 import { createTranscriptionSession } from '../transcription';
 import type { TranscriptionSession } from '../transcription/session';
-import { attributeMe, type EnergySample } from '../transcription/me-attribution';
+import {
+  attributeMe,
+  attributeWords,
+  groupAttributedWords,
+  type EnergySample,
+} from '../transcription/me-attribution';
 import { insertTranscriptSegment, saveDeepgramUsage } from '../db/meetings';
 import { logger } from '../logger';
 
@@ -63,9 +68,24 @@ export function registerTranscriptionIpc(): void {
     const next = createTranscriptionSession({
       onSegment: (seg) => {
         // Single-channel mode: recover "Me" from the mic-energy signal before persist.
+        // In single-channel mode this path now only sees interim segments — Deepgram
+        // routes single-channel finals to onWords (V062 ROADMAP_01).
         const out = attributeSpeaker(seg);
         if (out.isFinal && meetingId !== null) insertTranscriptSegment(meetingId, out);
         target?.send(IPC.transcriptionSegment, out);
+      },
+      onWords: (words) => {
+        // V062 ROADMAP_01: per-word "Me" attribution against the energy timeline,
+        // then regroup with attribution as the primary partition key so own-voice
+        // coalesces into one "Me" run even when Deepgram fragmented it across
+        // multiple speaker IDs. Single-channel-final path only.
+        if (audioChannels !== 1) return;
+        const attributed = attributeWords(words, energyTimeline);
+        const segs = groupAttributedWords(attributed);
+        for (const seg of segs) {
+          if (meetingId !== null) insertTranscriptSegment(meetingId, seg);
+          target?.send(IPC.transcriptionSegment, seg);
+        }
       },
       onStatus: (status) => target?.send(IPC.transcriptionStatus, status),
       onLanguageDetected: (bcp47) => {

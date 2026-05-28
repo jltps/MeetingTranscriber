@@ -19,6 +19,18 @@ type DeepgramWord = {
   speaker?: number;
 };
 
+/**
+ * Minimal projection of a Deepgram word into the shape downstream per-word "Me"
+ * attribution needs (V062 ROADMAP_01). Kept here next to `DeepgramWord` so the
+ * mapping stays in one place.
+ */
+export type DeepgramWordView = {
+  text: string;
+  startMs: number;
+  endMs: number;
+  deepgramSpeaker: number;
+};
+
 type DeepgramAlternative = { transcript?: string; words?: DeepgramWord[] };
 
 type DeepgramResult = {
@@ -75,6 +87,36 @@ export function parseDeepgramMessage(
   return [
     { text: transcript, channel: 1, speakerLabel, startMs: baseStartMs, endMs: baseEndMs, isFinal },
   ];
+}
+
+/**
+ * Word-level projection of a Deepgram "Results" message, used by the V062
+ * single-channel per-word "Me" attribution path. Returns an empty `words` array
+ * for non-`Results` messages, results with no alternatives, empty transcripts,
+ * and interim results (the per-word path is final-only). `channel_index` is
+ * intentionally ignored — only the legacy multichannel parser cares about it.
+ */
+export function parseDeepgramWords(message: unknown): {
+  words: DeepgramWordView[];
+  isFinal: boolean;
+} {
+  const result = message as DeepgramResult;
+  if (result.type !== 'Results' || !result.channel) return { words: [], isFinal: false };
+  const isFinal = result.is_final === true;
+  if (!isFinal) return { words: [], isFinal };
+
+  const alternative = result.channel.alternatives?.[0];
+  const transcript = alternative?.transcript?.trim();
+  if (!alternative || !transcript) return { words: [], isFinal };
+
+  const rawWords = alternative.words ?? [];
+  const words: DeepgramWordView[] = rawWords.map((w) => ({
+    text: w.punctuated_word ?? w.word,
+    startMs: w.start * 1000,
+    endMs: w.end * 1000,
+    deepgramSpeaker: w.speaker ?? 0,
+  }));
+  return { words, isFinal };
 }
 
 function splitBySpeaker(words: DeepgramWord[]): TranscriptSegment[] {

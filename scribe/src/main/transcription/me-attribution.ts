@@ -1,4 +1,5 @@
 import type { TranscriptSegment } from '../../shared/types';
+import type { DeepgramWordView } from './parse';
 
 // Pure mic-energy "Me" attribution for single-channel (mono) transcription
 // (V05 ROADMAP_02). Kept side-effect free so it can be unit-tested without a socket.
@@ -68,4 +69,116 @@ export function attributeMe(
   if (seg.speakerLabel === 'Me') return seg;
   if (!micDominatedWindow(timeline, seg.startMs, seg.endMs, options)) return seg;
   return { ...seg, channel: 0, speakerLabel: 'Me' };
+}
+
+// ─── Per-word "Me" attribution (V062 ROADMAP_01) ─────────────────────────────
+// Deepgram does not preserve a stable speaker identity across a session and
+// readily fragments one physical voice into multiple speaker IDs. Per-segment
+// averaging also buries the dominance signal on long mixed-speaker windows. We
+// decide "Me" per word, then regroup with attribution as the primary partition
+// key — so own-voice coalesces into one "Me" run regardless of how many speaker
+// IDs Deepgram scattered it across. Remote speakers still split by Deepgram
+// speaker exactly as today.
+
+/** Default window pad (ms) for the per-word attribution path. Word time windows
+ * are typically 200–800 ms; a tighter pad than the segment-level 150 ms keeps
+ * the dominance signal sharp while still absorbing word-boundary jitter. */
+const PER_WORD_WINDOW_PAD_MS = 60;
+
+/** A Deepgram word with its per-word "Me" decision attached. */
+export type AttributedWord = DeepgramWordView & { isMe: boolean };
+
+/**
+ * Decide `isMe` for each word from the energy timeline. Uses the same
+ * `micDominatedWindow` heuristic as the segment-level path with a tighter
+ * default pad (see `PER_WORD_WINDOW_PAD_MS`). `micFloor` and `dominance`
+ * defaults carry over via `MeAttributionOptions`.
+ */
+export function attributeWords(
+  words: readonly DeepgramWordView[],
+  timeline: readonly EnergySample[],
+  options: MeAttributionOptions = {},
+): AttributedWord[] {
+  const effective: MeAttributionOptions = {
+    windowPadMs: PER_WORD_WINDOW_PAD_MS,
+    ...options,
+  };
+  return words.map((w) => ({
+    ...w,
+    isMe: micDominatedWindow(timeline, w.startMs, w.endMs, effective),
+  }));
+}
+
+/**
+ * Regroup attributed words into segments with attribution as the **primary**
+ * partition key. Consecutive `isMe=true` words fuse into one "Me" segment
+ * across Deepgram speaker boundaries (the fragmentation case). Consecutive
+ * non-Me words still split on Deepgram-speaker change, preserving remote-speaker
+ * separation exactly as the segment-level path does. Empty input → `[]`.
+ */
+export function groupAttributedWords(
+  words: readonly AttributedWord[],
+): TranscriptSegment[] {
+  const segments: TranscriptSegment[] = [];
+  type Run = {
+    isMe: boolean;
+    deepgramSpeaker: number;
+    parts: string[];
+    startMs: number;
+    endMs: number;
+  };
+  let run: Run | null = null;
+
+  const flush = (r: Run): void => {
+    segments.push(
+      r.isMe
+        ? {
+            text: r.parts.join(' '),
+            channel: 0,
+            speakerLabel: 'Me',
+            startMs: r.startMs,
+            endMs: r.endMs,
+            isFinal: true,
+          }
+        : {
+            text: r.parts.join(' '),
+            channel: 1,
+            speakerLabel: `Speaker ${r.deepgramSpeaker + 1}`,
+            startMs: r.startMs,
+            endMs: r.endMs,
+            isFinal: true,
+          },
+    );
+  };
+
+  for (const w of words) {
+    if (run === null) {
+      run = {
+        isMe: w.isMe,
+        deepgramSpeaker: w.deepgramSpeaker,
+        parts: [w.text],
+        startMs: w.startMs,
+        endMs: w.endMs,
+      };
+      continue;
+    }
+    const boundary =
+      run.isMe !== w.isMe ||
+      (run.isMe === false && w.isMe === false && run.deepgramSpeaker !== w.deepgramSpeaker);
+    if (boundary) {
+      flush(run);
+      run = {
+        isMe: w.isMe,
+        deepgramSpeaker: w.deepgramSpeaker,
+        parts: [w.text],
+        startMs: w.startMs,
+        endMs: w.endMs,
+      };
+    } else {
+      run.parts.push(w.text);
+      run.endMs = w.endMs;
+    }
+  }
+  if (run) flush(run);
+  return segments;
 }

@@ -11,7 +11,7 @@ fed to Claude Code. Build in the milestone order given in §11. Do not skip the
 non-goals in §3 — they existed to keep v1 shippable.
 
 > **Status (historical document).** v1 (§11, milestones M0–M6) is **shipped**. The
-> app is at v0.6.0 and has since absorbed most of the §3 non-goals and §13 roadmap:
+> app is at v0.6.2 and has since absorbed most of the §3 non-goals and §13 roadmap:
 > multi-language + auto-detect, enhancement prompt control + templates, reliability
 > hardening + usage/cost, speaker naming, export/backup, local Whisper, calendar
 > (Google + Microsoft, free/busy only), and cross-meeting chat are all built. It has
@@ -25,7 +25,10 @@ non-goals in §3 — they existed to keep v1 shippable.
 > (guidance-slot templates with always-on app scaffolding, a richer template editor with
 > "Optimize with AI", key-points/extended summary depths, centralized task→model routing
 > with an Economy/Quality setting, a pluggable **OpenAI-compatible** provider alongside the
-> default Anthropic, Markdown-rendered + scope-limited chat, and UI polish). The rename is
+> default Anthropic, Markdown-rendered + scope-limited chat, and UI polish), and
+> **V062 — per-word "Me" attribution** (word-level energy classification with
+> attribution-first regrouping, so the user's own voice no longer fragments across
+> Deepgram speaker IDs in single-channel mode). The rename is
 > cosmetic only: the `scribe/` directory, the `com.scribe.app` app id, and the
 > `scribe.sqlite` database are unchanged so existing installs keep their data. This file
 > keeps the original **"Scribe"** name as historical v1 intent; for *how* the code should
@@ -227,10 +230,15 @@ Send a **single mono** stream to Deepgram (mic + system downmixed):
 - **Diarization** (`diarize=true`) separates every speaker on the one stream into
   "Speaker 1", "Speaker 2", … — including the local user.
 - **"Me" attribution** is recovered in the main process: the worklet reports a
-  per-frame **mic RMS** and **system RMS** level, and each transcript segment whose
-  window was mic-dominated is relabelled **"Me"** (see
-  `main/transcription/me-attribution.ts`). This is a heuristic tuned on live calls,
-  not a physical guarantee — the trade for halving the per-minute cost.
+  per-frame **mic RMS** and **system RMS** level, and each Deepgram word whose
+  time window was mic-dominated is tagged `isMe=true`. Words are then regrouped
+  with attribution as the primary partition key, so consecutive Me-words coalesce
+  into a single `"Me"` segment even when Deepgram fragmented them across multiple
+  speaker IDs; non-Me words still split on Deepgram-speaker change. See
+  `main/transcription/me-attribution.ts` (`attributeWords` + `groupAttributedWords`,
+  introduced in **V062 ROADMAP_01**, superseding V05's segment-level
+  `attributeMe`). This is a heuristic tuned on live calls, not a physical
+  guarantee — the trade for halving the per-minute cost.
 
 Enable Deepgram options: `diarize=true`, `smart_format=true`, `punctuate=true`,
 `interim_results=true`, `model=nova-3`, `encoding=linear16`, `sample_rate=16000`,

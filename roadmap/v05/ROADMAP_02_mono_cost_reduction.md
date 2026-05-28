@@ -1,5 +1,14 @@
 # ROADMAP_02 — Single-Channel Cost Reduction
 
+> **Update (V062, shipped).** The energy-based "Me" recovery this block introduced
+> was originally applied **per segment**, which scattered the user's own voice
+> across multiple Deepgram speaker IDs in real calls. **V062 ROADMAP_01** moved
+> attribution to the **word level** and regroups with attribution as the primary
+> partition key — Me-words now coalesce into one `"Me"` run regardless of how
+> Deepgram fragmented them. The single-mono-channel capture, the energy timeline,
+> and the heuristic itself (`micFloor`, `dominance`, `micDominatedWindow`) are
+> all unchanged; only the *grain* of the decision moved from segment to word.
+
 Halve the Deepgram bill by sending **one mono channel** instead of two, recovering
 speaker separation from streaming **diarization** (block 01) and recovering the "Me"
 label from the **mic-energy signal** the capture worklet already computes.
