@@ -16,7 +16,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Node 22+ required: some tests use the `node:sqlite` built-in (stable
+          # since Node 22). Local dev runs Node 24; 22 is the matching LTS.
+          node-version: 22
 
       - name: Enable corepack
         run: corepack enable
