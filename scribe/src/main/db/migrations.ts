@@ -440,6 +440,25 @@ Distinguish clearly between what the prospect actually said and what remains unk
       WHERE is_builtin = 1 AND name = 'Sales discovery';
     `,
   },
+  {
+    version: 12,
+    name: 'meeting-sort-overrides',
+    // V072 block 04. Per-sort-mode manual reorder of the sidebar meeting list.
+    // Drag-reorder writes a fractional `position` between neighbours so most
+    // drags don't need a renumber. Rows without an override fall back to the
+    // mode's natural rank (created_at DESC for Recent, LOWER(title) for A-Z,
+    // etc.). Cascade on meeting delete keeps the table from drifting.
+    sql: `
+      CREATE TABLE meeting_sort_overrides (
+        meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+        sort_mode  TEXT    NOT NULL,
+        position   REAL    NOT NULL,
+        PRIMARY KEY (meeting_id, sort_mode)
+      );
+      CREATE INDEX idx_meeting_sort_overrides_mode_pos
+        ON meeting_sort_overrides (sort_mode, position);
+    `,
+  },
 ];
 
 export function runMigrations(db: Database): void {

@@ -131,6 +131,9 @@ export const IPC = {
   meetingsSetFolder: 'meetings:setFolder',
   meetingsAddTag: 'meetings:addTag',
   meetingsRemoveTag: 'meetings:removeTag',
+  // Manual sort overrides for sidebar drag-reorder (V072 block 04).
+  meetingsListSortOverrides: 'meetings:listSortOverrides',
+  meetingsSetSortPosition:   'meetings:setSortPosition',
 } as const;
 
 export const AppStatusSchema = z.object({
@@ -708,6 +711,21 @@ export const MeetingSetFolderSchema = z.object({
 });
 export const MeetingTagSchema = z.object({ meetingId: MeetingIdSchema, tagId: MeetingIdSchema });
 
+// V072 block 04 — sidebar drag-reorder overrides. Sort modes mirror the sidebar's
+// existing SortKey ('updated' | 'created' | 'title').
+export const SidebarSortModeSchema = z.enum(['updated', 'created', 'title']);
+export type SidebarSortMode = z.infer<typeof SidebarSortModeSchema>;
+export const MeetingSetSortPositionSchema = z.object({
+  meetingId: MeetingIdSchema,
+  sortMode: SidebarSortModeSchema,
+  position: z.number(),
+});
+export const SidebarSortOverride = z.object({
+  meetingId: MeetingIdSchema,
+  position: z.number(),
+});
+export type SidebarSortOverride = z.infer<typeof SidebarSortOverride>;
+
 /** Folders + tags management. Folder delete nulls its meetings (never deletes them). */
 export interface OrganizationApi {
   listFolders(): Promise<Folder[]>;
@@ -721,6 +739,9 @@ export interface OrganizationApi {
   setMeetingFolder(meetingId: number, folderId: number | null): Promise<void>;
   addMeetingTag(meetingId: number, tagId: number): Promise<void>;
   removeMeetingTag(meetingId: number, tagId: number): Promise<void>;
+  // V072 block 04 — sidebar drag-reorder overrides.
+  listSortOverrides(sortMode: SidebarSortMode): Promise<SidebarSortOverride[]>;
+  setSortPosition(meetingId: number, sortMode: SidebarSortMode, position: number): Promise<void>;
 }
 
 // ─── In-app auto-update (V07) ───────────────────────────────────────────────

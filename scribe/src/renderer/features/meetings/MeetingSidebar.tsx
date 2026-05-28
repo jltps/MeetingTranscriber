@@ -1,8 +1,27 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { FileText, MessageSquare, Plus, Rows2, Rows3, Search, SearchX, X } from 'lucide-react';
 import type { NotesCardView } from '../../../shared/ipc-contract';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { EmptyState } from '../../components/EmptyState';
 import type { Folder, MeetingStatus, MeetingSummary, Tag, Template } from '../../../shared/types';
 import { useDebouncedCallback } from '../../lib/debounce';
@@ -113,13 +132,27 @@ export function MeetingSidebar({
   const [sort, setSort] = useState<SortKey>('updated');
   // Meeting id for which the row's "New tag…" dialog is open.
   const [newTagFor, setNewTagFor] = useState<number | null>(null);
+  // V072 block 04: manual reorder positions for the current sort mode. Loaded
+  // per sort change; refreshed after each drag.
+  const [overrides, setOverrides] = useState<Map<number, number>>(new Map());
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+
+  const reloadOverrides = useCallback(async (): Promise<void> => {
+    const rows = await org.listSortOverrides(sort);
+    setOverrides(new Map(rows.map((r) => [r.meetingId, r.position])));
+  }, [org, sort]);
+  useEffect(() => {
+    void reloadOverrides();
+  }, [reloadOverrides]);
 
   const selectedTagNames = useMemo(
     () => new Set(tags.filter((t) => selectedTagIds.has(t.id)).map((t) => t.name)),
     [tags, selectedTagIds],
   );
 
-  // Client-side filter (folder = direct membership; tags = AND) then sort.
+  // Client-side filter (folder = direct membership; tags = AND) then sort. When
+  // a meeting has a manual position for the current sort mode, that position
+  // takes precedence over the natural key (V072 block 04).
   const filtered = useMemo(() => {
     let list = meetings;
     if (selectedFolderId !== null) list = list.filter((m) => m.folderId === selectedFolderId);
@@ -127,14 +160,28 @@ export function MeetingSidebar({
       list = list.filter((m) => [...selectedTagNames].every((n) => m.tags.includes(n)));
     }
     const sorted = [...list];
-    if (sort === 'title') sorted.sort((a, b) => a.title.localeCompare(b.title));
-    else sorted.sort((a, b) => sortValue(b, sort) - sortValue(a, sort));
+    sorted.sort((a, b) => {
+      const oa = overrides.get(a.id);
+      const ob = overrides.get(b.id);
+      if (oa !== undefined && ob !== undefined) return oa - ob;
+      // Manually-ordered items take precedence; everything else falls back to
+      // natural sort below them. New meetings added after a drag thus appear
+      // at the bottom of the manual list until they're also reordered.
+      if (oa !== undefined) return -1;
+      if (ob !== undefined) return 1;
+      if (sort === 'title') return a.title.localeCompare(b.title);
+      return sortValue(b, sort) - sortValue(a, sort);
+    });
     return sorted;
-  }, [meetings, selectedFolderId, selectedTagNames, sort]);
+  }, [meetings, selectedFolderId, selectedTagNames, sort, overrides]);
 
-  // Group by date for date sorts; a single flat group for title sort.
+  // Group by date for date sorts; a single flat group for title sort or when
+  // any manual reorder override is active (so the user-imposed order is
+  // visible instead of being clobbered by BUCKET_ORDER).
   const groups = useMemo(() => {
-    if (sort === 'title') return [{ label: null as string | null, items: filtered }];
+    if (sort === 'title' || overrides.size > 0) {
+      return [{ label: null as string | null, items: filtered }];
+    }
     const byBucket = new Map<DateBucket, MeetingSummary[]>();
     for (const m of filtered) {
       const b = dateBucket(sortValue(m, sort));
@@ -146,7 +193,7 @@ export function MeetingSidebar({
       label: b as string | null,
       items: byBucket.get(b)!,
     }));
-  }, [filtered, sort]);
+  }, [filtered, sort, overrides.size]);
 
   const toggleTag = (id: number): void =>
     setSelectedTagIds((prev) => {
@@ -156,7 +203,54 @@ export function MeetingSidebar({
       return next;
     });
 
+  // V072 block 04 — drag wiring. The pointer activation distance of 4 px lets a
+  // small click fall through to the row's open-meeting handler.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const draggedMeeting = useMemo(
+    () => (draggingId !== null ? filtered.find((m) => m.id === draggingId) ?? null : null),
+    [draggingId, filtered],
+  );
+  const handleDragStart = (e: DragStartEvent): void => {
+    const id = Number(e.active.id);
+    if (!Number.isNaN(id)) setDraggingId(id);
+  };
+  const handleDragEnd = (e: DragEndEvent): void => {
+    setDraggingId(null);
+    const activeId = Number(e.active.id);
+    const over = e.over;
+    if (Number.isNaN(activeId) || over === null) return;
+    const overIdStr = String(over.id);
+    // Folder drop target ids carry a 'folder:' prefix; meeting ids are bare
+    // numbers. 'folder:none' clears the meeting's folder (drop on "All notes").
+    if (overIdStr.startsWith('folder:')) {
+      const target = overIdStr.slice('folder:'.length);
+      const folderId = target === 'none' ? null : Number(target);
+      onSetMeetingFolder(activeId, folderId);
+      return;
+    }
+    const overId = Number(overIdStr);
+    if (Number.isNaN(overId) || overId === activeId) return;
+    const oldIndex = filtered.findIndex((m) => m.id === activeId);
+    const newIndex = filtered.findIndex((m) => m.id === overId);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const reordered = arrayMove(filtered, oldIndex, newIndex);
+    // Stamp every item with its new position so manual order is unambiguous
+    // for the current sort mode. Spacing by 1000 leaves room for future
+    // between-neighbour averaging without renumbering.
+    const writes = reordered.map((m, i) => org.setSortPosition(m.id, sort, (i + 1) * 1000));
+    void Promise.all(writes).then(() => void reloadOverrides());
+  };
+
   return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
     <aside className="flex h-full w-full flex-col border-r border-border bg-card">
       <div className="space-y-2 border-b border-border p-3">
         <Button size="sm" onClick={() => onNew(selectedFolderId)} className="w-full">
@@ -242,51 +336,65 @@ export function MeetingSidebar({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        {filtered.length === 0 ? (
-          searching ? (
-            <EmptyState compact icon={SearchX} title="No matches" description="Try a different search." />
+      <>
+        <div className="flex-1 overflow-y-auto">
+          {filtered.length === 0 ? (
+            searching ? (
+              <EmptyState compact icon={SearchX} title="No matches" description="Try a different search." />
+            ) : (
+              <EmptyState
+                compact
+                icon={FileText}
+                title="No notes here"
+                description="Create a note to start capturing a meeting."
+                action={{ label: 'New note', onClick: () => onNew(selectedFolderId) }}
+              />
+            )
           ) : (
-            <EmptyState
-              compact
-              icon={FileText}
-              title="No notes here"
-              description="Create a note to start capturing a meeting."
-              action={{ label: 'New note', onClick: () => onNew(selectedFolderId) }}
-            />
-          )
-        ) : (
-          groups.map((group) => (
-            <div key={group.label ?? 'all'}>
-              {group.label && (
-                <div className="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {group.label}
+            <SortableContext
+              items={filtered.map((m) => m.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {groups.map((group) => (
+                <div key={group.label ?? 'all'}>
+                  {group.label && (
+                    <div className="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {group.label}
+                    </div>
+                  )}
+                  <ul aria-label={group.label ? `Meetings — ${group.label}` : 'Meetings'}>
+                    {group.items.map((m) => (
+                      <MeetingRow
+                        key={m.id}
+                        meeting={m}
+                        templates={templates}
+                        folders={folders}
+                        tags={tags}
+                        selected={m.id === selectedId}
+                        disabled={disabled}
+                        cardView={cardView}
+                        onSelect={onSelect}
+                        onDelete={onDelete}
+                        onSetFolder={onSetMeetingFolder}
+                        onAddTag={onAddMeetingTag}
+                        onRemoveTag={onRemoveMeetingTag}
+                        onNewTag={() => setNewTagFor(m.id)}
+                      />
+                    ))}
+                  </ul>
                 </div>
-              )}
-              <ul aria-label={group.label ? `Meetings — ${group.label}` : 'Meetings'}>
-                {group.items.map((m) => (
-                  <MeetingRow
-                    key={m.id}
-                    meeting={m}
-                    templates={templates}
-                    folders={folders}
-                    tags={tags}
-                    selected={m.id === selectedId}
-                    disabled={disabled}
-                    cardView={cardView}
-                    onSelect={onSelect}
-                    onDelete={onDelete}
-                    onSetFolder={onSetMeetingFolder}
-                    onAddTag={onAddMeetingTag}
-                    onRemoveTag={onRemoveMeetingTag}
-                    onNewTag={() => setNewTagFor(m.id)}
-                  />
-                ))}
-              </ul>
+              ))}
+            </SortableContext>
+          )}
+        </div>
+        <DragOverlay>
+          {draggedMeeting && (
+            <div className="rounded border border-border bg-card px-3 py-1.5 text-xs shadow-md">
+              {draggedMeeting.title || 'Untitled'}
             </div>
-          ))
-        )}
-      </div>
+          )}
+        </DragOverlay>
+      </>
 
       <NameDialog
         open={newTagFor !== null}
@@ -300,6 +408,7 @@ export function MeetingSidebar({
         }}
       />
     </aside>
+    </DndContext>
   );
 }
 
@@ -338,10 +447,24 @@ function MeetingRow({
   const meetingTags = new Set(m.tags);
   const compact = cardView === 'compact';
 
+  // V072 block 04 — make the row a sortable handle. The whole row is the drag
+  // surface; activationConstraint on the DndContext's PointerSensor keeps a
+  // small click from starting a drag, so the open-meeting click still fires.
+  const sortable = useSortable({ id: m.id });
+  const style = {
+    transform: CSS.Translate.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.3 : undefined,
+  };
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <li
+          ref={sortable.setNodeRef}
+          style={style}
+          {...sortable.attributes}
+          {...sortable.listeners}
           className={`group flex items-stretch border-b border-border/60 ${
             selected ? 'bg-muted' : 'hover:bg-muted/50'
           }`}

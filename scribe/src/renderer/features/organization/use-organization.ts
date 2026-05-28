@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Folder, Tag } from '../../../shared/types';
+import type { SidebarSortMode } from '../../../shared/ipc-contract';
 
 export type OrganizationController = {
   folders: Folder[];
@@ -11,6 +12,14 @@ export type OrganizationController = {
   deleteFolder: (id: number) => Promise<void>;
   createTag: (name: string) => Promise<Tag>;
   deleteTag: (id: number) => Promise<void>;
+  listSortOverrides: (
+    sortMode: SidebarSortMode,
+  ) => Promise<Array<{ meetingId: number; position: number }>>;
+  setSortPosition: (
+    meetingId: number,
+    sortMode: SidebarSortMode,
+    position: number,
+  ) => Promise<void>;
 };
 
 // Owns the folder + tag lists (ROADMAP_V04_04). Folder/tag CRUD reloads these
@@ -77,6 +86,16 @@ export function useOrganization(): OrganizationController {
     [reload],
   );
 
+  const listSortOverrides = useCallback(
+    (sortMode: SidebarSortMode) => window.api.organization.listSortOverrides(sortMode),
+    [],
+  );
+  const setSortPosition = useCallback(
+    (meetingId: number, sortMode: SidebarSortMode, position: number) =>
+      window.api.organization.setSortPosition(meetingId, sortMode, position),
+    [],
+  );
+
   return {
     folders,
     tags,
@@ -87,6 +106,8 @@ export function useOrganization(): OrganizationController {
     deleteFolder,
     createTag,
     deleteTag,
+    listSortOverrides,
+    setSortPosition,
   };
 }
 

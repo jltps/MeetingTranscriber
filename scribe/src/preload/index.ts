@@ -122,6 +122,10 @@ const api: ScribeApi = {
       ipcRenderer.invoke(IPC.meetingsAddTag, { meetingId, tagId }),
     removeMeetingTag: (meetingId, tagId) =>
       ipcRenderer.invoke(IPC.meetingsRemoveTag, { meetingId, tagId }),
+    listSortOverrides: (sortMode) =>
+      ipcRenderer.invoke(IPC.meetingsListSortOverrides, sortMode),
+    setSortPosition: (meetingId, sortMode, position) =>
+      ipcRenderer.invoke(IPC.meetingsSetSortPosition, { meetingId, sortMode, position }),
   },
   whisper: {
     getModels: () => ipcRenderer.invoke(IPC.whisperModelsGet),

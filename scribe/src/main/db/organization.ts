@@ -162,3 +162,29 @@ export function meetingIdsWithTag(tagId: number): number[] {
     .all(tagId) as Array<{ id: number }>;
   return rows.map((r) => r.id);
 }
+
+// ─── Sidebar sort overrides (V072 block 04) ─────────────────────────────────
+
+/** Return all manual reorder positions for the given sort mode. */
+export function listSortOverrides(sortMode: string): Array<{ meetingId: number; position: number }> {
+  const rows = getDb()
+    .prepare(
+      `SELECT meeting_id AS meetingId, position
+         FROM meeting_sort_overrides
+        WHERE sort_mode = ?`,
+    )
+    .all(sortMode) as Array<{ meetingId: number; position: number }>;
+  return rows;
+}
+
+/** Upsert a meeting's manual position for the given sort mode. */
+export function setSortPosition(meetingId: number, sortMode: string, position: number): void {
+  getDb()
+    .prepare(
+      `INSERT INTO meeting_sort_overrides (meeting_id, sort_mode, position)
+       VALUES (?, ?, ?)
+       ON CONFLICT(meeting_id, sort_mode)
+       DO UPDATE SET position = excluded.position`,
+    )
+    .run(meetingId, sortMode, position);
+}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Folder as FolderIcon, FolderPlus, Inbox } from 'lucide-react';
+import { useDroppable } from '@dnd-kit/core';
 import type { Folder } from '../../../shared/types';
 import { Button } from '@/components/ui/button';
 import {
@@ -56,6 +57,9 @@ export function FolderTree({ folders, org, selectedFolderId, onSelectFolder }: F
   const hasChildren = foldersWithChildren(folders);
   const nodes = flattenFolders(folders, expanded);
 
+  // Droppable target for clearing a meeting's folder (drag onto "All notes").
+  const allNotesDrop = useDroppable({ id: 'folder:none' });
+
   const toggle = (id: number): void =>
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -89,15 +93,16 @@ export function FolderTree({ folders, org, selectedFolderId, onSelectFolder }: F
       </div>
 
       <div role="tree" aria-label="Folders" className="space-y-0.5">
-      {/* All notes */}
+      {/* All notes (also a drop target — clears the dragged meeting's folder). */}
       <button
+        ref={allNotesDrop.setNodeRef}
         type="button"
         role="treeitem"
         aria-selected={selectedFolderId === null}
         onClick={() => onSelectFolder(null)}
         className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring ${
           selectedFolderId === null ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/50'
-        }`}
+        } ${allNotesDrop.isOver ? 'ring-2 ring-primary/50' : ''}`}
       >
         <Inbox className="size-3.5" />
         All notes
@@ -115,40 +120,14 @@ export function FolderTree({ folders, org, selectedFolderId, onSelectFolder }: F
         return (
           <ContextMenu key={node.id}>
             <ContextMenuTrigger asChild>
-              <div
-                role="treeitem"
-                tabIndex={0}
-                aria-selected={selectedFolderId === node.id}
-                aria-expanded={expandable ? isOpen : undefined}
-                onClick={() => onSelectFolder(node.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') onSelectFolder(node.id);
-                }}
-                style={{ paddingLeft: `${node.depth * 12 + 8}px` }}
-                className={`flex w-full cursor-pointer items-center gap-1 rounded py-1 pr-2 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${
-                  selectedFolderId === node.id
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:bg-muted/50'
-                }`}
-              >
-                {expandable ? (
-                  <button
-                    type="button"
-                    aria-label={isOpen ? 'Collapse' : 'Expand'}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggle(node.id);
-                    }}
-                    className="shrink-0 rounded p-0.5 hover:bg-muted"
-                  >
-                    {isOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-                  </button>
-                ) : (
-                  <span className="w-4 shrink-0" />
-                )}
-                <FolderIcon className="size-3.5 shrink-0" />
-                <span className="truncate">{node.name}</span>
-              </div>
+              <FolderRowBody
+                node={node}
+                expandable={expandable}
+                isOpen={isOpen}
+                isSelected={selectedFolderId === node.id}
+                onSelect={() => onSelectFolder(node.id)}
+                onToggle={() => toggle(node.id)}
+              />
             </ContextMenuTrigger>
             <ContextMenuContent>
               <ContextMenuItem onSelect={() => setDialog({ mode: 'rename', id: node.id, initial: node.name })}>
@@ -203,6 +182,65 @@ export function FolderTree({ folders, org, selectedFolderId, onSelectFolder }: F
           }
         }}
       />
+    </div>
+  );
+}
+
+// One folder row, isolated so each can register its own droppable id with
+// @dnd-kit (V072 block 04). Receives a forwarded ref via the ContextMenuTrigger's
+// asChild wrapper, but @dnd-kit's setNodeRef takes precedence here — the
+// trigger only needs the ref forwarded to the outermost DOM node.
+type FolderRowBodyProps = {
+  node: { id: number; name: string; depth: number };
+  expandable: boolean;
+  isOpen: boolean;
+  isSelected: boolean;
+  onSelect: () => void;
+  onToggle: () => void;
+};
+
+function FolderRowBody({
+  node,
+  expandable,
+  isOpen,
+  isSelected,
+  onSelect,
+  onToggle,
+}: FolderRowBodyProps) {
+  const drop = useDroppable({ id: `folder:${node.id}` });
+  return (
+    <div
+      ref={drop.setNodeRef}
+      role="treeitem"
+      tabIndex={0}
+      aria-selected={isSelected}
+      aria-expanded={expandable ? isOpen : undefined}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') onSelect();
+      }}
+      style={{ paddingLeft: `${node.depth * 12 + 8}px` }}
+      className={`flex w-full cursor-pointer items-center gap-1 rounded py-1 pr-2 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${
+        isSelected ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/50'
+      } ${drop.isOver ? 'ring-2 ring-primary/50' : ''}`}
+    >
+      {expandable ? (
+        <button
+          type="button"
+          aria-label={isOpen ? 'Collapse' : 'Expand'}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle();
+          }}
+          className="shrink-0 rounded p-0.5 hover:bg-muted"
+        >
+          {isOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+        </button>
+      ) : (
+        <span className="w-4 shrink-0" />
+      )}
+      <FolderIcon className="size-3.5 shrink-0" />
+      <span className="truncate">{node.name}</span>
     </div>
   );
 }

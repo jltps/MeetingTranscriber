@@ -6,7 +6,9 @@ import {
   IPC,
   MeetingIdSchema,
   MeetingSetFolderSchema,
+  MeetingSetSortPositionSchema,
   MeetingTagSchema,
+  SidebarSortModeSchema,
   TagNameSchema,
 } from '../../shared/ipc-contract';
 import {
@@ -16,11 +18,13 @@ import {
   deleteFolder,
   deleteTag,
   listFolders,
+  listSortOverrides,
   listTags,
   moveFolder,
   removeMeetingTag,
   renameFolder,
   setMeetingFolder,
+  setSortPosition,
 } from '../db/organization';
 
 // Note organization IPC (ROADMAP_V04_04). Every input is Zod-validated before any
@@ -56,5 +60,13 @@ export function registerOrganizationIpc(): void {
   ipcMain.handle(IPC.meetingsRemoveTag, (_e, raw) => {
     const { meetingId, tagId } = MeetingTagSchema.parse(raw);
     removeMeetingTag(meetingId, tagId);
+  });
+
+  ipcMain.handle(IPC.meetingsListSortOverrides, (_e, raw) => {
+    return listSortOverrides(SidebarSortModeSchema.parse(raw));
+  });
+  ipcMain.handle(IPC.meetingsSetSortPosition, (_e, raw) => {
+    const { meetingId, sortMode, position } = MeetingSetSortPositionSchema.parse(raw);
+    setSortPosition(meetingId, sortMode, position);
   });
 }
