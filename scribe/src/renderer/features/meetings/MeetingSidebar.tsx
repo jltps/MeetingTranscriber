@@ -317,10 +317,10 @@ export function MeetingSidebar({
             className="h-6"
           >
             <ToggleGroupItem value="extended" aria-label="Extended view" title="Extended view" className="h-6 min-w-6 px-1">
-              <Rows3 className="size-3" />
+              <Rows2 className="size-3" />
             </ToggleGroupItem>
             <ToggleGroupItem value="compact" aria-label="Compact view" title="Compact view" className="h-6 min-w-6 px-1">
-              <Rows2 className="size-3" />
+              <Rows3 className="size-3" />
             </ToggleGroupItem>
           </ToggleGroup>
           <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
