@@ -627,7 +627,6 @@ export function App() {
 
       <TitleBar
         onOpenSettings={() => setShowSettings(true)}
-        onOpenCrossChat={() => setShowCrossChat(true)}
         onToggleSidebar={toggleSidebar}
         onOpenAbout={() => setShowAbout(true)}
       />
@@ -665,6 +664,10 @@ export function App() {
             onSetMeetingFolder={setMeetingFolder}
             onAddMeetingTag={addMeetingTag}
             onRemoveMeetingTag={removeMeetingTag}
+            onOpenCrossChat={() => {
+              setShowCrossChat(true);
+              setDrawerOpen(false);
+            }}
             agendaSlot={
               <AgendaPanel
                 events={calendar.agenda}

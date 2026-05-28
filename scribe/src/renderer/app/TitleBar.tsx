@@ -1,4 +1,4 @@
-import { Info, MessageSquare, PanelLeft, Settings } from 'lucide-react';
+import { Info, PanelLeft, Settings } from 'lucide-react';
 import logoUrl from '../assets/logo.svg';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -12,12 +12,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 
 type TitleBarProps = {
   onOpenSettings: () => void;
-  onOpenCrossChat: () => void;
   onToggleSidebar: () => void;
   onOpenAbout: () => void;
 };
 
-export function TitleBar({ onOpenSettings, onOpenCrossChat, onToggleSidebar, onOpenAbout }: TitleBarProps) {
+export function TitleBar({ onOpenSettings, onToggleSidebar, onOpenAbout }: TitleBarProps) {
   return (
     <div className="titlebar-drag flex h-10 shrink-0 items-center border-b border-border bg-background">
       <div
@@ -39,19 +38,7 @@ export function TitleBar({ onOpenSettings, onOpenCrossChat, onToggleSidebar, onO
           </span>
         </div>
         <div className="titlebar-no-drag flex items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={onOpenCrossChat}
-                aria-label="Ask across meetings"
-              >
-                <MessageSquare />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Ask across meetings</TooltipContent>
-          </Tooltip>
+          {/* Ask-across-notes moved to the sidebar (V072 block 03). */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon-sm" onClick={onOpenAbout} aria-label="About Nexus">

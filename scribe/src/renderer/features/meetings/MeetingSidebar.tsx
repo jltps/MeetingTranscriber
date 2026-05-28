@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { FileText, Plus, Search, SearchX, X } from 'lucide-react';
+import { FileText, MessageSquare, Plus, Search, SearchX, X } from 'lucide-react';
 import { EmptyState } from '../../components/EmptyState';
 import type { Folder, MeetingStatus, MeetingSummary, Tag, Template } from '../../../shared/types';
 import { useDebouncedCallback } from '../../lib/debounce';
@@ -77,6 +77,7 @@ type MeetingSidebarProps = {
   onSetMeetingFolder: (meetingId: number, folderId: number | null) => void;
   onAddMeetingTag: (meetingId: number, tagId: number) => void;
   onRemoveMeetingTag: (meetingId: number, tagId: number) => void;
+  onOpenCrossChat: () => void;
   agendaSlot?: ReactNode;
 };
 
@@ -96,6 +97,7 @@ export function MeetingSidebar({
   onSetMeetingFolder,
   onAddMeetingTag,
   onRemoveMeetingTag,
+  onOpenCrossChat,
   agendaSlot,
 }: MeetingSidebarProps) {
   const [text, setText] = useState('');
@@ -169,6 +171,19 @@ export function MeetingSidebar({
             className="h-8 pl-8 text-xs"
           />
         </div>
+        {/* Ask-across-notes (V072 block 03). Moved here from the TitleBar so the
+            cross-meeting entry point sits with the rest of the notes navigation
+            (search, folders, tags). AI gradient = variant="ai". */}
+        <Button
+          variant="ai"
+          size="sm"
+          onClick={onOpenCrossChat}
+          aria-label="Ask across notes"
+          className="w-full"
+        >
+          <MessageSquare />
+          Ask across notes
+        </Button>
       </div>
 
       <div className="space-y-2 border-b border-border p-2">
