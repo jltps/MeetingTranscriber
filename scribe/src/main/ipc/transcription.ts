@@ -29,6 +29,14 @@ export function getDetectedLanguage(): string | null {
   return detectedLanguage;
 }
 
+/**
+ * Whether a transcription session is active right now. Used by the updater's
+ * install guard (V07) so we never `quitAndInstall` mid-meeting (§1.5).
+ */
+export function isTranscriptionActive(): boolean {
+  return session !== null;
+}
+
 // Audio duration tracking for Deepgram cost estimation (ROADMAP_01 §3).
 // PCM frames are Int16Array (2 bytes/sample), channels = audioChannels.
 // Duration (ms) = (byteLength / 2 / channels / sampleRate) * 1000

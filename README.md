@@ -13,11 +13,19 @@ keeping a clear visual line between what *you* wrote and what the AI added.
 The app lives in [`scribe/`](scribe/). This file is the project overview; see the
 [document map](#document-map) below for the spec, conventions, and build guide.
 
+## Updating
+
+Nexus checks for updates every few hours and downloads them in the background.
+When a new version is ready, an in-app banner offers to restart and install.
+You can also check manually from **Settings → Updates**, and see the version +
+the GitHub Releases link from the title-bar **About Nexus** button. Updates
+install silently — no installer wizard.
+
 ---
 
 ## Status
 
-Shipping at **v0.6.2**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
+Shipping at **v0.7.0**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
 largely built, the product was renamed **Scribe → Nexus** (V04), **V05 — transcription
 quality & cost — has shipped**, **V06 — templates & AI capabilities — has shipped**,
 and **V062 — per-word "Me" attribution — has shipped**:

@@ -117,6 +117,30 @@ export function setOpenAiModel(model: string): void {
   setSetting('openai_model', model);
 }
 
+// ── In-app auto-update (V07) ───────────────────────────────────────────────
+
+/**
+ * Whether the updater performs the boot-time check and the periodic timer.
+ * Defaults to true. The "Check now" button in Settings always works regardless.
+ */
+export function getAutoUpdateEnabled(): boolean {
+  // Stored as '1'/'0'. Missing or any other value → default true.
+  return getSetting('auto_update_enabled') !== '0';
+}
+
+export function setAutoUpdateEnabled(v: boolean): void {
+  setSetting('auto_update_enabled', v ? '1' : '0');
+}
+
+/** ISO 8601 timestamp of the last update check (success OR not-available). */
+export function getUpdateLastChecked(): string | null {
+  return getSetting('update_last_checked');
+}
+
+export function setUpdateLastChecked(iso: string): void {
+  setSetting('update_last_checked', iso);
+}
+
 // ── Local Whisper settings (ROADMAP_05) ────────────────────────────────────
 
 export type TranscriptionProvider = 'deepgram' | 'whisper';

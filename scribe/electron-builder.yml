@@ -33,18 +33,24 @@ win:
   # used by NSIS (installer/shortcut) and the running window (main/index.ts);
   # the packaged .exe keeps the default icon because edit is disabled here.
   signAndEditExecutable: false
+# Silent install (V07): required for background auto-updates via electron-updater.
+# Tradeoff: first-time installs are also silent (no install-dir picker) — same UX
+# as Slack/Discord/VS Code per-user installers. `deleteAppDataOnUninstall: false`
+# keeps the user's DB across updates and uninstalls.
 nsis:
-  oneClick: false
+  oneClick: true
   perMachine: false
-  allowToChangeInstallationDirectory: true
+  allowToChangeInstallationDirectory: false
+  deleteAppDataOnUninstall: false
   shortcutName: Nexus
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
   installerHeaderIcon: build/icon.ico
-# Auto-update feed. electron-builder bakes this into the packaged
-# resources/app-update.yml at build time, and electron-updater reads it at
-# runtime to check for new versions. The feed serves release/latest.yaml +
-# the matching Nexus Setup <version>.exe + .blockmap.
+# Auto-update feed (V07). GitHub Releases is the source of truth: tag pushes
+# produce releases, and electron-updater pulls from them. electron-builder
+# writes the correctly-shaped `latest.yml` into `release/` on `pnpm dist`.
 publish:
-  provider: generic
-  url: https://nexus-web.vercel.app/api/updates/
+  provider: github
+  owner: jltps
+  repo: MeetingTranscriber
+  releaseType: release

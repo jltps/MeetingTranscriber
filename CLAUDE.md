@@ -268,20 +268,29 @@ pnpm typecheck    # must pass before any PR
 pnpm lint         # must pass before any PR (incl. jsx-a11y on the renderer)
 pnpm test
 pnpm build        # compile main/preload/renderer (electron-vite build) — no installer
-pnpm dist         # electron-builder NSIS installer (Windows) — also refreshes release/latest.yaml
+pnpm dist         # electron-builder NSIS installer (Windows). Uses --publish never; CI publishes.
 ```
 
 If the actual script names differ, use those and update this list. `typecheck` and
 `lint` must be clean before any task is considered done.
 
-**Release manifest (`release/latest.yaml`).** Every shipped build must have a
-matching `release/latest.yaml` for the auto-update feed. `pnpm dist` chains
-`scripts/write-latest-yaml.mjs`, which picks the newest `Nexus Setup *.exe` in
-`release/`, computes its SHA-512, and writes the manifest with the version from
-`package.json`. If a build is produced by any path that *doesn't* go through
-`pnpm dist` (e.g. an installer copied in by hand, a re-signed exe), run
-`node scripts/write-latest-yaml.mjs` yourself so the manifest stays in sync —
-treat a stale `latest.yaml` the same as a broken build.
+**Releases (V07).** GitHub Releases is the source of truth for the in-app
+auto-updater. To ship: bump `scribe/package.json` `version`, commit
+(`chore(release): X.Y.Z`), then `git tag vX.Y.Z && git push --tags`. The
+`.github/workflows/release.yml` workflow runs on a Windows runner, gates on
+typecheck/lint/test, and publishes the installer + `latest.yml` + `.blockmap`
+to the GitHub Release for the tag via electron-builder's `github` provider.
+After the workflow finishes, edit the Release's notes on GitHub
+(`gh release edit vX.Y.Z --notes …`). The local `pnpm dist` runs with
+`--publish never`, so it produces an installer for manual testing without
+touching the Release.
+
+**Silent NSIS install (V07).** `electron-builder.yml` is configured with
+`nsis.oneClick: true` so background auto-updates can install without
+prompting. The tradeoff is that *first-time* installs are also silent — no
+install-directory picker — which is the same UX as Slack/Discord/VS Code
+per-user installers. `deleteAppDataOnUninstall: false` keeps the user's DB
+across updates and uninstalls.
 
 ## 12. When you're unsure
 

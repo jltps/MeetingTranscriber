@@ -7,6 +7,7 @@ import {
   TranscriptSegmentSchema,
   TranscriptionLanguageSchema,
   TranscriptionStatusSchema,
+  UpdateStateSchema,
 } from '../shared/ipc-contract';
 import type { ScribeApi, WhisperDownloadProgress } from '../shared/ipc-contract';
 
@@ -15,6 +16,7 @@ import type { ScribeApi, WhisperDownloadProgress } from '../shared/ipc-contract'
 // the contract schemas before reaching renderer code.
 const api: ScribeApi = {
   getStatus: () => ipcRenderer.invoke(IPC.appGetStatus),
+  openExternal: (target) => ipcRenderer.invoke(IPC.appOpenExternal, target),
   startTranscription: (opts) => ipcRenderer.invoke(IPC.transcriptionStart, opts),
   stopTranscription: () => ipcRenderer.invoke(IPC.transcriptionStop),
   pushAudioFrame: (pcm, micLevel, sysLevel) =>
@@ -160,6 +162,20 @@ const api: ScribeApi = {
       ipcRenderer.on(IPC.chatToken, listener);
       return () => ipcRenderer.removeListener(IPC.chatToken, listener);
     },
+  },
+  updates: {
+    checkNow: () => ipcRenderer.invoke(IPC.updateCheckNow),
+    install: () => ipcRenderer.invoke(IPC.updateInstall),
+    getState: () => ipcRenderer.invoke(IPC.updateGetState),
+    onStatus: (cb) => {
+      const listener = (_event: IpcRendererEvent, payload: unknown): void => {
+        cb(UpdateStateSchema.parse(payload));
+      };
+      ipcRenderer.on(IPC.updateStatus, listener);
+      return () => ipcRenderer.removeListener(IPC.updateStatus, listener);
+    },
+    getSettings: () => ipcRenderer.invoke(IPC.updateGetSettings),
+    setAutoEnabled: (v) => ipcRenderer.invoke(IPC.updateSetAutoEnabled, v),
   },
 };
 

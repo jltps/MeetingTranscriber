@@ -26,6 +26,7 @@ import type {
 
 export const IPC = {
   appGetStatus: 'app:getStatus',
+  appOpenExternal: 'app:openExternal', // V07: open known external URLs via shell
 
   transcriptionStart: 'transcription:start',
   transcriptionStop: 'transcription:stop',
@@ -109,6 +110,14 @@ export const IPC = {
   // Cross-meeting querying (ROADMAP_07 Phase 2)
   crossChatAsk: 'chat:askAcross', // { scope, messages } → CrossChatResult (streams via chat:token)
 
+  // In-app auto-update from GitHub Releases (V07)
+  updateCheckNow:       'update:checkNow',       // → { ok: boolean; error?: string }
+  updateInstall:        'update:install',        // → { ok: boolean; reason?: string; message?: string }
+  updateGetState:       'update:getState',       // → UpdateState
+  updateStatus:         'update:status',         // push: UpdateState
+  updateGetSettings:    'update:getSettings',    // → { autoEnabled: boolean; lastChecked: string | null }
+  updateSetAutoEnabled: 'update:setAutoEnabled', // boolean → void
+
   // Note organization — folders + tags (ROADMAP_V04_04)
   foldersList: 'folders:list',
   foldersCreate: 'folders:create',
@@ -129,6 +138,10 @@ export const AppStatusSchema = z.object({
   dbSchemaVersion: z.number().int(),
 });
 export type AppStatus = z.infer<typeof AppStatusSchema>;
+
+/** Known external destinations the renderer can ask main to open (V07). */
+export const ExternalTargetSchema = z.enum(['releases', 'repo']);
+export type ExternalTarget = z.infer<typeof ExternalTargetSchema>;
 
 export const TranscriptionStartSchema = z.object({
   meetingId: z.number().int().positive(),
@@ -700,9 +713,75 @@ export interface OrganizationApi {
   removeMeetingTag(meetingId: number, tagId: number): Promise<void>;
 }
 
+// ─── In-app auto-update (V07) ───────────────────────────────────────────────
+
+/**
+ * The wire shape of the updater's state machine, pushed from main on every
+ * transition and returned by `updates.getState()`. Renderer never drives
+ * `autoUpdater` directly (§1.3) — it requests check / install / state and
+ * subscribes to status events.
+ */
+export const UpdateStateSchema = z.discriminatedUnion('phase', [
+  z.object({ phase: z.literal('idle') }),
+  z.object({ phase: z.literal('checking') }),
+  z.object({
+    phase: z.literal('available'),
+    version: z.string(),
+    releaseDate: z.string().optional(),
+    releaseNotes: z.string().optional(),
+  }),
+  z.object({
+    phase: z.literal('downloading'),
+    version: z.string(),
+    percent: z.number().min(0).max(100),
+  }),
+  z.object({
+    phase: z.literal('downloaded'),
+    version: z.string(),
+    releaseNotes: z.string().optional(),
+  }),
+  z.object({ phase: z.literal('none'), checkedAt: z.string() }),
+  z.object({ phase: z.literal('error'), message: z.string() }),
+]);
+export type UpdateState = z.infer<typeof UpdateStateSchema>;
+
+export const UpdateCheckResultSchema = z.object({
+  ok: z.boolean(),
+  error: z.string().optional(),
+});
+export type UpdateCheckResult = z.infer<typeof UpdateCheckResultSchema>;
+
+export const UpdateInstallResultSchema = z.object({
+  ok: z.boolean(),
+  /** 'recording' = transcription session active; 'not-downloaded' = no update ready; 'error' = unexpected. */
+  reason: z.enum(['recording', 'not-downloaded', 'error']).optional(),
+  message: z.string().optional(),
+});
+export type UpdateInstallResult = z.infer<typeof UpdateInstallResultSchema>;
+
+/** Updater-related persisted settings (separate from the live UpdateState). */
+export type UpdateSettings = {
+  /** Whether the boot-time + periodic checks run. The manual "Check now" works regardless. */
+  autoEnabled: boolean;
+  /** ISO 8601 timestamp of the last successful check, or null if never checked. */
+  lastChecked: string | null;
+};
+
+/** In-app updater API. The renderer can only request actions and observe state. */
+export interface UpdatesApi {
+  checkNow(): Promise<UpdateCheckResult>;
+  install(): Promise<UpdateInstallResult>;
+  getState(): Promise<UpdateState>;
+  onStatus(cb: (state: UpdateState) => void): () => void;
+  getSettings(): Promise<UpdateSettings>;
+  setAutoEnabled(v: boolean): Promise<void>;
+}
+
 /** The typed surface exposed to the renderer as window.api. */
 export interface ScribeApi {
   getStatus(): Promise<AppStatus>;
+  /** Open one of the known external destinations in the system browser. */
+  openExternal(target: ExternalTarget): Promise<void>;
   startTranscription(opts: TranscriptionStart): Promise<void>;
   stopTranscription(): Promise<void>;
   pushAudioFrame(pcm: ArrayBuffer, micLevel: number, sysLevel: number): void;
@@ -721,4 +800,5 @@ export interface ScribeApi {
   whisper: WhisperApi;
   calendar: CalendarApi;
   chat: ChatApi;
+  updates: UpdatesApi;
 }

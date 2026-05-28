@@ -4,6 +4,7 @@ import type { LanguageSetting, Template, TemplateCreate } from '../../../shared/
 import type { SettingsView, WhisperModelStatus } from '../../../shared/ipc-contract';
 import { TemplateEditorModal } from '../templates/TemplateEditorModal';
 import { CalendarSettingsSection } from '../calendar/CalendarSettingsSection';
+import { UpdatesSection } from './sections/UpdatesSection';
 import { KeyRow } from './KeyRow';
 import { OpenAiProviderRow } from './OpenAiProviderRow';
 import { useTheme } from '../theme/use-theme';
@@ -456,6 +457,8 @@ export function SettingsModal({
               microsoftConnected={settings.microsoftCalendarConnected}
               onChanged={onChanged}
             />
+
+            <UpdatesSection />
 
             <section className="space-y-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

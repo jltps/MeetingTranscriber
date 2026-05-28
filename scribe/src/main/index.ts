@@ -6,6 +6,7 @@ import { initDb, closeDb } from './db';
 import { registerIpcHandlers } from './ipc';
 import { disposeTranscription } from './ipc/transcription';
 import { logger } from './logger';
+import { disposeUpdater, initUpdater } from './updater';
 import { initTheme, initialBackgroundColor, overlayConfig, registerThemeWindow } from './theme';
 import { initialWindowBounds, MIN_SIZE, registerWindowState } from './window-state';
 
@@ -104,6 +105,9 @@ app
     Menu.setApplicationMenu(null);
     registerIpcHandlers();
     createWindow();
+    // Start the in-app auto-updater (V07). No-op in dev; in packaged builds it
+    // schedules a check 60 s after boot and every 6 h after.
+    initUpdater();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -121,5 +125,6 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   void disposeTranscription();
   stopCalendarSync();
+  disposeUpdater();
   closeDb();
 });

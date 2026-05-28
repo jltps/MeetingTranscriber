@@ -1,0 +1,55 @@
+name: Release
+on:
+  push:
+    tags: ['v*.*.*']
+permissions:
+  # Required for electron-builder to upload installer + latest.yml + blockmap
+  # to the GitHub Release for the matching tag.
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: scribe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Verify tag matches package.json version
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $tagVersion = $tag -replace '^v', ''
+          $pkgVersion = (Get-Content package.json | ConvertFrom-Json).version
+          if ($tagVersion -ne $pkgVersion) {
+            Write-Error "Tag version ($tagVersion) does not match package.json version ($pkgVersion). Bump the version, commit, and re-tag."
+            exit 1
+          }
+          Write-Host "Tag $tag matches package.json version $pkgVersion."
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: corepack pnpm typecheck
+
+      - name: Lint
+        run: corepack pnpm lint
+
+      - name: Test
+        run: corepack pnpm test
+
+      - name: Build + publish to GitHub Releases
+        # Call electron-builder directly so CI publishes; the local `pnpm dist`
+        # script uses `--publish never` to keep dev laptops from publishing.
+        run: |
+          corepack pnpm exec electron-vite build
+          corepack pnpm exec cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

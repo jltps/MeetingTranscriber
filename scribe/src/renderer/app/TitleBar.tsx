@@ -1,4 +1,4 @@
-import { MessageSquare, PanelLeft, Settings } from 'lucide-react';
+import { Info, MessageSquare, PanelLeft, Settings } from 'lucide-react';
 import logoUrl from '../assets/logo.svg';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -14,9 +14,10 @@ type TitleBarProps = {
   onOpenSettings: () => void;
   onOpenCrossChat: () => void;
   onToggleSidebar: () => void;
+  onOpenAbout: () => void;
 };
 
-export function TitleBar({ onOpenSettings, onOpenCrossChat, onToggleSidebar }: TitleBarProps) {
+export function TitleBar({ onOpenSettings, onOpenCrossChat, onToggleSidebar, onOpenAbout }: TitleBarProps) {
   return (
     <div className="titlebar-drag flex h-10 shrink-0 items-center border-b border-border bg-background">
       <div
@@ -50,6 +51,14 @@ export function TitleBar({ onOpenSettings, onOpenCrossChat, onToggleSidebar }: T
               </Button>
             </TooltipTrigger>
             <TooltipContent>Ask across meetings</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon-sm" onClick={onOpenAbout} aria-label="About Nexus">
+                <Info />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>About Nexus</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>

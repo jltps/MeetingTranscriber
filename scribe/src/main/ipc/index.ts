@@ -10,6 +10,7 @@ import { registerSpeakersIpc } from './speakers';
 import { registerTemplatesIpc } from './templates';
 import { registerThemeIpc } from './theme';
 import { registerTranscriptionIpc } from './transcription';
+import { registerUpdatesIpc } from './updates';
 import { registerWhisperIpc } from './whisper';
 
 // One registration entry point; each IPC domain gets its own file (CLAUDE.md §3).
@@ -27,4 +28,5 @@ export function registerIpcHandlers(): void {
   registerWhisperIpc();
   registerCalendarIpc();
   registerChatIpc();
+  registerUpdatesIpc();
 }

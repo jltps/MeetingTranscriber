@@ -33,6 +33,8 @@ import { buildActions } from '../features/commands/actions';
 import { useShortcuts } from '../features/commands/use-shortcuts';
 import { CaptureProbe } from './CaptureProbe';
 import { TitleBar } from './TitleBar';
+import { UpdateBanner } from '../features/updates/UpdateBanner';
+import { AboutDialog } from '../features/updates/AboutDialog';
 import { Download, Mic, NotebookPen, PanelRightClose, PanelRightOpen, Sparkles, Square } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
@@ -99,6 +101,7 @@ export function App() {
   const [exportError, setExportError] = useState<string | null>(null);
 
   const [showSettings, setShowSettings] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   // First-run onboarding (ROADMAP_V04_07). Local-state controlled so the flow doesn't
   // vanish mid-way when its privacy step persists; shown once when settings load unonboarded.
@@ -576,7 +579,12 @@ export function App() {
         onOpenSettings={() => setShowSettings(true)}
         onOpenCrossChat={() => setShowCrossChat(true)}
         onToggleSidebar={toggleSidebar}
+        onOpenAbout={() => setShowAbout(true)}
       />
+
+      <UpdateBanner />
+
+      <AboutDialog open={showAbout} onClose={() => setShowAbout(false)} />
 
       <LayoutShell
         mode={layoutMode}
