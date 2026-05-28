@@ -1,6 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { FileText, MessageSquare, Plus, Rows2, Rows3, Search, SearchX, X } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  MessageSquare,
+  Plus,
+  Rows2,
+  Rows3,
+  Search,
+  SearchX,
+  SlidersHorizontal,
+  X,
+} from 'lucide-react';
 import type { NotesCardView } from '../../../shared/ipc-contract';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
@@ -49,6 +61,16 @@ import { FolderTree } from '../organization/FolderTree';
 import { TagFilter } from '../organization/TagFilter';
 import { NameDialog } from '../organization/NameDialog';
 import { flattenFolders, type OrganizationController } from '../organization/use-organization';
+import { useSidebarLayout, type SidebarSection } from '../layout/use-sidebar-layout';
+
+// V074 block 02 — section labels mirror the layout hook's section ids. Kept here
+// because the edit panel renders them as user-facing names.
+const SECTION_LABELS: Record<SidebarSection, string> = {
+  folders: 'Folders',
+  tags: 'Tags',
+  agenda: 'Agenda',
+  notes: 'Notes',
+};
 
 type SortKey = 'updated' | 'created' | 'title';
 
@@ -132,6 +154,9 @@ export function MeetingSidebar({
   const [sort, setSort] = useState<SortKey>('updated');
   // Meeting id for which the row's "New tag…" dialog is open.
   const [newTagFor, setNewTagFor] = useState<number | null>(null);
+  // V074 block 02 — sidebar customisation state.
+  const sidebarLayout = useSidebarLayout();
+  const [editingLayout, setEditingLayout] = useState(false);
   // V072 block 04: manual reorder positions for the current sort mode. Loaded
   // per sort change; refreshed after each drag.
   const [overrides, setOverrides] = useState<Map<number, number>>(new Map());
@@ -244,60 +269,68 @@ export function MeetingSidebar({
     void Promise.all(writes).then(() => void reloadOverrides());
   };
 
-  return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
-    <aside className="flex h-full w-full flex-col border-r border-border bg-card">
-      <div className="space-y-2 border-b border-border p-3">
-        <Button size="sm" onClick={() => onNew(selectedFolderId)} className="w-full">
-          <Plus />
-          New Note
-        </Button>
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            data-search-input
-            value={text}
-            placeholder="Search notes & transcripts"
-            onChange={(e) => {
-              setText(e.target.value);
-              debouncedSearch(e.target.value);
-            }}
-            className="h-8 pl-8 text-xs"
-          />
-        </div>
-        {/* Ask-across-notes (V072 block 03). Moved here from the TitleBar so the
-            cross-meeting entry point sits with the rest of the notes navigation
-            (search, folders, tags). AI gradient = variant="ai". */}
-        <Button
-          variant="ai"
-          size="sm"
-          onClick={onOpenCrossChat}
-          aria-label="Ask across notes"
-          className="w-full"
-        >
-          <MessageSquare />
-          Ask across notes
-        </Button>
-      </div>
-
-      <div className="space-y-2 border-b border-border p-2">
-        <FolderTree
-          folders={folders}
-          org={org}
-          selectedFolderId={selectedFolderId}
-          onSelectFolder={setSelectedFolderId}
+  // ── V074 block 02 — section renderers. Each non-Notes section gets a
+  // bounded scroll container so a long folder/tag list never pushes the meetings
+  // list off-screen. Notes always claims `flex-1`, regardless of position.
+  const renderTopActions = (): ReactNode => (
+    <div className="space-y-2 border-b border-border p-3">
+      <Button size="sm" onClick={() => onNew(selectedFolderId)} className="w-full">
+        <Plus />
+        New Note
+      </Button>
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          type="search"
+          data-search-input
+          value={text}
+          placeholder="Search notes & transcripts"
+          onChange={(e) => {
+            setText(e.target.value);
+            debouncedSearch(e.target.value);
+          }}
+          className="h-8 pl-8 text-xs"
         />
-        <TagFilter tags={tags} selectedTagIds={selectedTagIds} onToggle={toggleTag} org={org} />
       </div>
+      {/* Ask-across-notes (V072 block 03). Moved here from the TitleBar so the
+          cross-meeting entry point sits with the rest of the notes navigation
+          (search, folders, tags). AI accent = variant="ai" (V074 block 01 made
+          it a soft tint so the primary New Note CTA wins the visual hierarchy). */}
+      <Button
+        variant="ai"
+        size="sm"
+        onClick={onOpenCrossChat}
+        aria-label="Ask across notes"
+        className="w-full"
+      >
+        <MessageSquare />
+        Ask across notes
+      </Button>
+    </div>
+  );
 
-      {agendaSlot}
+  const renderFoldersSection = (): ReactNode => (
+    <div className="max-h-[35vh] overflow-y-auto border-b border-border p-2">
+      <FolderTree
+        folders={folders}
+        org={org}
+        selectedFolderId={selectedFolderId}
+        onSelectFolder={setSelectedFolderId}
+      />
+    </div>
+  );
 
+  const renderTagsSection = (): ReactNode => (
+    <div className="max-h-[35vh] overflow-y-auto border-b border-border p-2">
+      <TagFilter tags={tags} selectedTagIds={selectedTagIds} onToggle={toggleTag} org={org} />
+    </div>
+  );
+
+  const renderAgendaSection = (): ReactNode =>
+    agendaSlot ? <div className="border-b border-border">{agendaSlot}</div> : null;
+
+  const renderNotesSection = (): ReactNode => (
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between gap-1 px-3 py-1.5">
         <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           Notes
@@ -335,58 +368,188 @@ export function MeetingSidebar({
           </Select>
         </div>
       </div>
-
-      <>
-        <div className="flex-1 overflow-y-auto">
-          {filtered.length === 0 ? (
-            searching ? (
-              <EmptyState compact icon={SearchX} title="No matches" description="Try a different search." />
-            ) : (
-              <EmptyState
-                compact
-                icon={FileText}
-                title="No notes here"
-                description="Create a note to start capturing a meeting."
-                action={{ label: 'New note', onClick: () => onNew(selectedFolderId) }}
-              />
-            )
+      <div className="flex-1 overflow-y-auto">
+        {filtered.length === 0 ? (
+          searching ? (
+            <EmptyState compact icon={SearchX} title="No matches" description="Try a different search." />
           ) : (
-            <SortableContext
-              items={filtered.map((m) => m.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              {groups.map((group) => (
-                <div key={group.label ?? 'all'}>
-                  {group.label && (
-                    <div className="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      {group.label}
-                    </div>
-                  )}
-                  <ul aria-label={group.label ? `Meetings — ${group.label}` : 'Meetings'}>
-                    {group.items.map((m) => (
-                      <MeetingRow
-                        key={m.id}
-                        meeting={m}
-                        templates={templates}
-                        folders={folders}
-                        tags={tags}
-                        selected={m.id === selectedId}
-                        disabled={disabled}
-                        cardView={cardView}
-                        onSelect={onSelect}
-                        onDelete={onDelete}
-                        onSetFolder={onSetMeetingFolder}
-                        onAddTag={onAddMeetingTag}
-                        onRemoveTag={onRemoveMeetingTag}
-                        onNewTag={() => setNewTagFor(m.id)}
-                      />
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </SortableContext>
-          )}
+            <EmptyState
+              compact
+              icon={FileText}
+              title="No notes here"
+              description="Create a note to start capturing a meeting."
+              action={{ label: 'New note', onClick: () => onNew(selectedFolderId) }}
+            />
+          )
+        ) : (
+          <SortableContext
+            items={filtered.map((m) => m.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {groups.map((group) => (
+              <div key={group.label ?? 'all'}>
+                {group.label && (
+                  <div className="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {group.label}
+                  </div>
+                )}
+                <ul aria-label={group.label ? `Meetings — ${group.label}` : 'Meetings'}>
+                  {group.items.map((m) => (
+                    <MeetingRow
+                      key={m.id}
+                      meeting={m}
+                      templates={templates}
+                      folders={folders}
+                      tags={tags}
+                      selected={m.id === selectedId}
+                      disabled={disabled}
+                      cardView={cardView}
+                      onSelect={onSelect}
+                      onDelete={onDelete}
+                      onSetFolder={onSetMeetingFolder}
+                      onAddTag={onAddMeetingTag}
+                      onRemoveTag={onRemoveMeetingTag}
+                      onNewTag={() => setNewTagFor(m.id)}
+                    />
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </SortableContext>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderSection = (s: SidebarSection): ReactNode => {
+    switch (s) {
+      case 'folders': return renderFoldersSection();
+      case 'tags': return renderTagsSection();
+      case 'agenda': return renderAgendaSection();
+      case 'notes': return renderNotesSection();
+    }
+  };
+
+  // ── Edit-sidebar panel. Replaces the section stack while open. Reorder uses
+  // up/down buttons rather than drag-and-drop because the outer DndContext below
+  // (which handles meeting-row drag) would conflict with a nested section drag.
+  // Hide/show via checkbox; the last visible section can't be hidden (so the
+  // user can never lock themselves into an empty sidebar). ─────────────────
+  const renderEditPanel = (): ReactNode => {
+    const moveSection = (s: SidebarSection, delta: -1 | 1): void => {
+      const idx = sidebarLayout.layout.order.indexOf(s);
+      if (idx < 0) return;
+      const next = [...sidebarLayout.layout.order];
+      const swapIdx = idx + delta;
+      if (swapIdx < 0 || swapIdx >= next.length) return;
+      [next[idx], next[swapIdx]] = [next[swapIdx]!, next[idx]!];
+      sidebarLayout.setOrder(next);
+    };
+    const visibleCount = sidebarLayout.visibleOrder.length;
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-2 border-b border-border p-3">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Edit sidebar
+          </span>
+          <Button variant="ghost" size="xs" onClick={() => setEditingLayout(false)}>
+            Done
+          </Button>
         </div>
+        <ul className="space-y-1">
+          {sidebarLayout.layout.order.map((s, idx) => {
+            const hidden = sidebarLayout.isHidden(s);
+            const isOnlyVisible = !hidden && visibleCount === 1;
+            return (
+              <li
+                key={s}
+                className="flex items-center justify-between gap-2 rounded-md border border-border bg-background px-2 py-1.5"
+              >
+                <label className="flex flex-1 items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={!hidden}
+                    disabled={isOnlyVisible}
+                    onChange={() => sidebarLayout.toggleHidden(s)}
+                    className="size-3.5 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                    aria-label={`${hidden ? 'Show' : 'Hide'} ${SECTION_LABELS[s]}`}
+                  />
+                  <span className={hidden ? 'text-muted-foreground' : 'text-foreground'}>
+                    {SECTION_LABELS[s]}
+                  </span>
+                </label>
+                <div className="flex gap-0.5">
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={() => moveSection(s, -1)}
+                    disabled={idx === 0}
+                    aria-label={`Move ${SECTION_LABELS[s]} up`}
+                    title="Move up"
+                  >
+                    <ChevronUp />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={() => moveSection(s, 1)}
+                    disabled={idx === sidebarLayout.layout.order.length - 1}
+                    aria-label={`Move ${SECTION_LABELS[s]} down`}
+                    title="Move down"
+                  >
+                    <ChevronDown />
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        <Button
+          variant="link"
+          size="xs"
+          onClick={sidebarLayout.reset}
+          className="self-start text-muted-foreground"
+        >
+          Reset layout
+        </Button>
+      </div>
+    );
+  };
+
+  const renderEditButton = (): ReactNode => (
+    <div className="border-t border-border p-2">
+      <Button
+        variant="ghost"
+        size="xs"
+        onClick={() => setEditingLayout(true)}
+        className="w-full justify-start text-muted-foreground"
+        aria-label="Edit sidebar"
+      >
+        <SlidersHorizontal />
+        Edit sidebar
+      </Button>
+    </div>
+  );
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <aside className="flex h-full w-full flex-col border-r border-border bg-card">
+        {renderTopActions()}
+        {editingLayout ? (
+          renderEditPanel()
+        ) : (
+          <>
+            {sidebarLayout.visibleOrder.map((s) => (
+              <Fragment key={s}>{renderSection(s)}</Fragment>
+            ))}
+          </>
+        )}
+        {!editingLayout && renderEditButton()}
         <DragOverlay>
           {draggedMeeting && (
             <div className="rounded border border-border bg-card px-3 py-1.5 text-xs shadow-md">
@@ -394,20 +557,19 @@ export function MeetingSidebar({
             </div>
           )}
         </DragOverlay>
-      </>
 
-      <NameDialog
-        open={newTagFor !== null}
-        title="New tag"
-        submitLabel="Create"
-        maxLength={40}
-        onClose={() => setNewTagFor(null)}
-        onSubmit={async (name) => {
-          const tag = await org.createTag(name);
-          if (newTagFor !== null) onAddMeetingTag(newTagFor, tag.id);
-        }}
-      />
-    </aside>
+        <NameDialog
+          open={newTagFor !== null}
+          title="New tag"
+          submitLabel="Create"
+          maxLength={40}
+          onClose={() => setNewTagFor(null)}
+          onSubmit={async (name) => {
+            const tag = await org.createTag(name);
+            if (newTagFor !== null) onAddMeetingTag(newTagFor, tag.id);
+          }}
+        />
+      </aside>
     </DndContext>
   );
 }

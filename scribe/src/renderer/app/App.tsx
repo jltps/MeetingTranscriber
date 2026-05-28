@@ -14,6 +14,7 @@ import { SettingsModal } from '../features/settings/SettingsModal';
 import { AudioWarningBanner } from '../features/settings/AudioWarningBanner';
 import { OnboardingFlow } from '../features/onboarding/OnboardingFlow';
 import { TemplatePickerModal } from '../features/templates/TemplatePickerModal';
+import { TemplatesPage } from '../features/templates/TemplatesPage';
 import { ChatPanel } from '../features/chat/ChatPanel';
 import { useChat } from '../features/chat/use-chat';
 import { CrossChatView } from '../features/chat/CrossChatView';
@@ -105,6 +106,10 @@ export function App() {
 
   const [showSettings, setShowSettings] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  // V074 block 04 — top-level routing between the meetings workspace and the
+  // standalone Templates page. Templates is full-screen so it replaces the
+  // LayoutShell entirely; the TitleBar stays mounted for window controls.
+  const [appView, setAppView] = useState<'meetings' | 'templates'>('meetings');
   const [paletteOpen, setPaletteOpen] = useState(false);
   // First-run onboarding (ROADMAP_V04_07). Local-state controlled so the flow doesn't
   // vanish mid-way when its privacy step persists; shown once when settings load unonboarded.
@@ -594,6 +599,10 @@ export function App() {
             void window.api.templates.list().then(setTemplates);
           }}
           onWiped={() => void wiped()}
+          onManageTemplates={() => {
+            setShowSettings(false);
+            setAppView('templates');
+          }}
         />
       )}
       {showTemplatePicker && (
@@ -637,6 +646,15 @@ export function App() {
 
       <AboutDialog open={showAbout} onClose={() => setShowAbout(false)} />
 
+      {appView === 'templates' ? (
+        <TemplatesPage
+          templates={templates}
+          onChanged={() => {
+            void window.api.templates.list().then(setTemplates);
+          }}
+          onBack={() => setAppView('meetings')}
+        />
+      ) : (
       <LayoutShell
         mode={layoutMode}
         sidebarRef={sidebarPanelRef}
@@ -903,6 +921,7 @@ export function App() {
         )}
         </main>
       </LayoutShell>
+      )}
     </div>
   );
 }

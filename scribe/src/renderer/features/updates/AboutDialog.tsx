@@ -9,10 +9,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
-// "About Nexus" modal (V07 block 02). Shows the installed version + links out
-// to the GitHub Releases page and the repo via a typed IPC that asks main to
-// open the URL with shell.openExternal — the renderer can never pass an
-// arbitrary URL across the bridge.
+// "About Nexus" modal (V07 block 02). Shows the installed version + a
+// "Check for updates" trigger. V074 block 05 removed the Releases + Source
+// outlinks — the V07 auto-updater makes Releases redundant, and the repo
+// link doesn't belong in the consumer UI.
 
 type Props = {
   open: boolean;
@@ -49,12 +49,6 @@ export function AboutDialog({ open, onClose }: Props) {
             <span className="text-foreground">{appVersion ? `v${appVersion}` : '—'}</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => void window.api.openExternal('releases')}>
-              Releases
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => void window.api.openExternal('repo')}>
-              Source
-            </Button>
             <Button size="sm" onClick={onCheckUpdates}>
               Check for updates
             </Button>

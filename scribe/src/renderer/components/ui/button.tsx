@@ -19,9 +19,12 @@ const buttonVariants = cva(
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
-        // AI accent — teal→blue gradient (--primary → --info). Used for AI-driven
-        // actions: Optimize-with-AI, Chat, Ask-across-notes (V072 block 02).
-        ai: "bg-gradient-to-r from-primary to-info text-white shadow-sm hover:opacity-90",
+        // AI accent — soft-tinted teal→blue gradient (--primary → --info) with
+        // brand-coloured label/icon. V074 block 01 dropped the bold solid-gradient
+        // + white text so the primary CTAs (New Note, Start) win the visual
+        // hierarchy; the gradient direction stays so the variant is still
+        // recognisable. Used by Ask-across-notes, Chat, Optimize-with-AI.
+        ai: "bg-gradient-to-r from-primary/10 to-info/10 text-primary hover:from-primary/20 hover:to-info/20",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
