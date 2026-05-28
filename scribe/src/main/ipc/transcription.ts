@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import type { WebContents } from 'electron';
 import { IPC, TranscriptionStartSchema } from '../../shared/ipc-contract';
+import type { TranscriptionWarning } from '../../shared/ipc-contract';
 import type { TranscriptSegment } from '../../shared/types';
 import { createTranscriptionSession } from '../transcription';
 import type { TranscriptionSession } from '../transcription/session';
@@ -10,6 +11,7 @@ import {
   groupAttributedWords,
   type EnergySample,
 } from '../transcription/me-attribution';
+import { getAudioCaptureMode } from '../db/settings';
 import { insertTranscriptSegment, saveDeepgramUsage } from '../db/meetings';
 import { logger } from '../logger';
 
@@ -52,11 +54,65 @@ let audioMs = 0;
 let energyTimeline: EnergySample[] = [];
 // Bound memory on marathon sessions; 200k samples ≈ 5.5h at 10 Hz. Cleared per session.
 const ENERGY_TIMELINE_CAP = 200_000;
+/** Capture mode (V073) snapshot for the current session. */
+let captureMode: ReturnType<typeof getAudioCaptureMode> = 'auto';
 
 /** Apply "Me" attribution, but only in single-channel mode. */
 function attributeSpeaker(seg: TranscriptSegment): TranscriptSegment {
   if (audioChannels !== 1) return seg;
-  return attributeMe(seg, energyTimeline);
+  return attributeMe(seg, energyTimeline, { captureMode });
+}
+
+// ─── In-meeting silence watchdog (V073 block 01.5) ──────────────────────────
+// Counts non-silent frames per channel during a session; if neither side has
+// produced signal a few seconds in, push a one-shot warning so the UI can
+// surface "Microphone silent — check your input device" (and clear it on signal).
+const WATCHDOG_GRACE_MS = 3000;
+const WATCHDOG_RMS_FLOOR = 0.005;
+let sessionStartedAt = 0;
+let micSignalFrames = 0;
+let sysSignalFrames = 0;
+let watchdogFiredKind: TranscriptionWarning['kind'] | null = null;
+
+function pushWarning(warn: TranscriptionWarning): void {
+  target?.send(IPC.transcriptionWarning, warn);
+}
+
+function checkWatchdog(micLevel: number, sysLevel: number): void {
+  if (micLevel >= WATCHDOG_RMS_FLOOR) micSignalFrames++;
+  if (sysLevel >= WATCHDOG_RMS_FLOOR) sysSignalFrames++;
+  const elapsed = Date.now() - sessionStartedAt;
+  if (elapsed < WATCHDOG_GRACE_MS) return;
+  if (watchdogFiredKind === null) {
+    if (micSignalFrames === 0) {
+      watchdogFiredKind = 'mic-silent';
+      pushWarning({
+        kind: 'mic-silent',
+        message:
+          'No microphone signal detected. Check Settings → Audio, and confirm Windows allows app mic access.',
+      });
+    } else if (sysSignalFrames === 0) {
+      watchdogFiredKind = 'system-silent';
+      pushWarning({
+        kind: 'system-silent',
+        message:
+          'No system audio detected. Make sure the call is playing on the same output device Windows is using.',
+      });
+    }
+  } else if (
+    (watchdogFiredKind === 'mic-silent' && micSignalFrames > 0) ||
+    (watchdogFiredKind === 'system-silent' && sysSignalFrames > 0)
+  ) {
+    watchdogFiredKind = null;
+    pushWarning({ kind: 'cleared', message: 'Audio is back.' });
+  }
+}
+
+function resetWatchdog(): void {
+  sessionStartedAt = Date.now();
+  micSignalFrames = 0;
+  sysSignalFrames = 0;
+  watchdogFiredKind = null;
 }
 
 export function registerTranscriptionIpc(): void {
@@ -69,6 +125,8 @@ export function registerTranscriptionIpc(): void {
     audioChannels = opts.channels;
     audioMs = 0;
     energyTimeline = [];
+    captureMode = getAudioCaptureMode();
+    resetWatchdog();
     if (session) {
       await session.stop();
       session = null;
@@ -86,9 +144,10 @@ export function registerTranscriptionIpc(): void {
         // V062 ROADMAP_01: per-word "Me" attribution against the energy timeline,
         // then regroup with attribution as the primary partition key so own-voice
         // coalesces into one "Me" run even when Deepgram fragmented it across
-        // multiple speaker IDs. Single-channel-final path only.
+        // multiple speaker IDs. Single-channel-final path only. V073: pass the
+        // session captureMode so the bleed-aware dominance threshold kicks in.
         if (audioChannels !== 1) return;
-        const attributed = attributeWords(words, energyTimeline);
+        const attributed = attributeWords(words, energyTimeline, { captureMode });
         const segs = groupAttributedWords(attributed);
         for (const seg of segs) {
           if (meetingId !== null) insertTranscriptSegment(meetingId, seg);
@@ -120,6 +179,7 @@ export function registerTranscriptionIpc(): void {
     meetingId = null;
     audioMs = 0;
     energyTimeline = [];
+    resetWatchdog();
     logger.info('transcription stopped');
   });
 
@@ -135,6 +195,7 @@ export function registerTranscriptionIpc(): void {
         if (energyTimeline.length > ENERGY_TIMELINE_CAP) {
           energyTimeline.splice(0, energyTimeline.length - ENERGY_TIMELINE_CAP);
         }
+        checkWatchdog(micLevel, sysLevel);
       }
       // Accumulate audio duration for cost estimation (ROADMAP_01 §3).
       if (audioSampleRate > 0 && audioChannels > 0) {

@@ -302,6 +302,30 @@ export function SettingsModal({
                 </p>
               </div>
               <div className="space-y-1.5">
+                <label className="text-sm text-muted-foreground">Listening on</label>
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  size="sm"
+                  value={settings.audioCaptureMode}
+                  onValueChange={(v) => {
+                    if (v) void window.api.settings
+                      .setAudioCaptureMode(v as 'auto' | 'headphones' | 'speakers')
+                      .then(onChanged);
+                  }}
+                >
+                  <ToggleGroupItem value="auto">Auto-detect</ToggleGroupItem>
+                  <ToggleGroupItem value="headphones">Headphones</ToggleGroupItem>
+                  <ToggleGroupItem value="speakers">Speakers</ToggleGroupItem>
+                </ToggleGroup>
+                <p className="text-[11px] text-muted-foreground">
+                  Auto-detect measures whether your speakers are leaking into the mic and tightens
+                  the &ldquo;Me&rdquo; threshold accordingly. Pick &ldquo;Headphones&rdquo; if
+                  remote speakers ever get mis-tagged as you, or &ldquo;Speakers&rdquo; if your own
+                  voice keeps getting split across speakers.
+                </p>
+              </div>
+              <div className="space-y-1.5">
                 <label className="text-sm text-muted-foreground">Transcription language</label>
                 <Select
                   value={langSettingToSelectValue(settings.language)}

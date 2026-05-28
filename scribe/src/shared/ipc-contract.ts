@@ -34,6 +34,10 @@ export const IPC = {
   transcriptionSegment: 'transcription:segment', // main -> renderer
   transcriptionStatus: 'transcription:status', // main -> renderer
   transcriptionLanguageDetected: 'transcription:languageDetected', // main -> renderer
+  // V073 — capture diagnostics. Pushed when the main loopback handler can't
+  // grant system audio, or when the in-meeting watchdog spots prolonged silence.
+  audioLoopbackDenied: 'audio:loopbackDenied', // main -> renderer
+  transcriptionWarning: 'transcription:warning', // main -> renderer
 
   meetingsList: 'meetings:list',
   meetingsCreate: 'meetings:create',
@@ -89,6 +93,7 @@ export const IPC = {
   settingsSetTranscriptionProvider: 'settings:setTranscriptionProvider',
   settingsSetWhisperModel:          'settings:setWhisperModel',
   settingsSetNotesCardView:         'settings:setNotesCardView', // sidebar meeting-card density (V072 block 05)
+  settingsSetAudioCaptureMode:      'settings:setAudioCaptureMode', // V073 — headphones/speakers/auto bias for "Me" attribution
   whisperModelsGet:             'whisper:modelsGet',             // → WhisperModelStatus[]
   whisperModelDownload:         'whisper:modelDownload',         // name → void (async)
   whisperModelCancel:           'whisper:modelCancel',           // → void
@@ -227,6 +232,26 @@ export type QualityMode = z.infer<typeof QualityModeSchema>;
 export const NotesCardViewSchema = z.enum(['extended', 'compact']);
 export type NotesCardView = z.infer<typeof NotesCardViewSchema>;
 
+// V073 — how strictly the per-word "Me" attribution should suppress speaker
+// bleed. 'auto' lets the cross-correlation between mic + system levels
+// drive the dominance threshold (the right default for most users).
+// 'headphones' assumes no bleed — keeps "Me" sensitive (good for headsets).
+// 'speakers' assumes constant bleed — only crisp mic peaks count as "Me"
+// (right for laptop-speaker calls).
+export const AudioCaptureModeSchema = z.enum(['auto', 'headphones', 'speakers']);
+export type AudioCaptureMode = z.infer<typeof AudioCaptureModeSchema>;
+
+/** Push payload when main can't grant the loopback (V073 block 01.2). */
+export const AudioLoopbackDeniedSchema = z.object({ reason: z.string() });
+export type AudioLoopbackDenied = z.infer<typeof AudioLoopbackDeniedSchema>;
+
+/** Push payload for the in-meeting silence watchdog (V073 block 01.5). */
+export const TranscriptionWarningSchema = z.object({
+  kind: z.enum(['mic-silent', 'system-silent', 'cleared']),
+  message: z.string(),
+});
+export type TranscriptionWarning = z.infer<typeof TranscriptionWarningSchema>;
+
 /**
  * Which LLM backend serves enhancement, chat, titles, and prompt-optimization (V06
  * block 05). 'anthropic' is the default and the one the app is tuned for;
@@ -319,6 +344,12 @@ export type SettingsView = {
   theme: ThemeView;
   /** Sidebar meeting-card density (V072 block 05). Defaults to 'extended'. */
   notesCardView: NotesCardView;
+  /**
+   * Audio capture bias for "Me" attribution (V073). 'auto' tracks
+   * mic↔system bleed dynamically; 'headphones' assumes none; 'speakers'
+   * assumes constant bleed. Defaults to 'auto'.
+   */
+  audioCaptureMode: AudioCaptureMode;
 };
 export type TestResult = { ok: boolean; message?: string };
 
@@ -429,6 +460,7 @@ export interface SettingsApi {
   setTranscriptionProvider(provider: 'deepgram' | 'whisper'): Promise<void>;
   setWhisperModel(model: string): Promise<void>;
   setNotesCardView(view: NotesCardView): Promise<void>;
+  setAudioCaptureMode(mode: AudioCaptureMode): Promise<void>;
   test(provider: TestProvider, key?: string): Promise<TestResult>;
   acceptPrivacy(): Promise<void>;
   completeOnboarding(): Promise<void>;
@@ -820,6 +852,10 @@ export interface ScribeApi {
   onTranscriptionStatus(cb: (status: TranscriptionStatus) => void): () => void;
   /** Fires once when Deepgram (or LLM layer) identifies the transcript language. */
   onTranscriptionLanguage(cb: (lang: TranscriptionLanguage) => void): () => void;
+  /** V073 — loopback grant failed; the UI should surface remediation guidance. */
+  onAudioLoopbackDenied(cb: (info: AudioLoopbackDenied) => void): () => void;
+  /** V073 — silence watchdog (or its clearance) during an active session. */
+  onTranscriptionWarning(cb: (w: TranscriptionWarning) => void): () => void;
   meetings: MeetingsApi;
   templates: TemplatesApi;
   speakers: SpeakersApi;

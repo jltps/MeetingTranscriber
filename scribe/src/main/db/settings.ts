@@ -1,4 +1,5 @@
 import {
+  AudioCaptureModeSchema,
   LlmProviderSchema,
   NotesCardViewSchema,
   QualityModeSchema,
@@ -6,6 +7,7 @@ import {
   ThemeModeSchema,
 } from '../../shared/ipc-contract';
 import type {
+  AudioCaptureMode,
   LlmProvider,
   NotesCardView,
   QualityMode,
@@ -186,6 +188,23 @@ export function getNotesCardView(): NotesCardView {
 
 export function setNotesCardView(v: NotesCardView): void {
   setSetting('notes_card_view', NotesCardViewSchema.parse(v));
+}
+
+// ── Audio capture mode (V073) ──────────────────────────────────────────────
+
+/**
+ * How aggressively the "Me" heuristic should resist mic↔system bleed. 'auto'
+ * tracks cross-correlation and raises the dominance threshold when bleed is
+ * detected (the right default). 'headphones' assumes no bleed; 'speakers'
+ * assumes constant bleed.
+ */
+export function getAudioCaptureMode(): AudioCaptureMode {
+  const parsed = AudioCaptureModeSchema.safeParse(getSetting('audio_capture_mode'));
+  return parsed.success ? parsed.data : 'auto';
+}
+
+export function setAudioCaptureMode(m: AudioCaptureMode): void {
+  setSetting('audio_capture_mode', AudioCaptureModeSchema.parse(m));
 }
 
 // Leaves nothing behind (PRODUCT_SPEC.md §7): meetings + children + FTS + every

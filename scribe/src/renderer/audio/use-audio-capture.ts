@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AudioCapture, type CaptureFrame, type CaptureState, type SysTrackInfo } from './capture';
+import {
+  AudioCapture,
+  type CaptureFrame,
+  type CaptureState,
+  type MicFallbackStep,
+  type SysTrackInfo,
+} from './capture';
 
 export type AudioCaptureController = {
   state: CaptureState;
@@ -9,6 +15,8 @@ export type AudioCaptureController = {
   bytes: number;
   sampleRate: number | null;
   sysTrack: SysTrackInfo | null;
+  /** Which mic-device fallback step succeeded (V073). null until capture starts. */
+  micFallbackStep: MicFallbackStep | null;
   error: string | null;
   start: () => Promise<void>;
   stop: () => Promise<void>;
@@ -43,6 +51,7 @@ export function useAudioCapture(options: UseAudioCaptureOptions = {}): AudioCapt
   const [bytes, setBytes] = useState(0);
   const [sampleRate, setSampleRate] = useState<number | null>(null);
   const [sysTrack, setSysTrack] = useState<SysTrackInfo | null>(null);
+  const [micFallbackStep, setMicFallbackStep] = useState<MicFallbackStep | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const onFrame = useCallback((frame: CaptureFrame) => {
@@ -63,7 +72,10 @@ export function useAudioCapture(options: UseAudioCaptureOptions = {}): AudioCapt
       onFrame,
       onError: (e) => setError(e.message),
       onState: setState,
-      onReady: ({ sampleRate: sr }) => setSampleRate(sr),
+      onReady: ({ sampleRate: sr, micFallbackStep: step }) => {
+        setSampleRate(sr);
+        setMicFallbackStep(step);
+      },
       onSysTrack: setSysTrack,
     });
     captureRef.current = capture;
@@ -79,6 +91,7 @@ export function useAudioCapture(options: UseAudioCaptureOptions = {}): AudioCapt
     setBytes(0);
     setSampleRate(null);
     setSysTrack(null);
+    setMicFallbackStep(null);
     try {
       await captureRef.current?.start({ micDeviceId: micDeviceIdRef.current ?? undefined });
     } catch {
@@ -94,5 +107,17 @@ export function useAudioCapture(options: UseAudioCaptureOptions = {}): AudioCapt
     setSysLevel(0);
   }, []);
 
-  return { state, micLevel, sysLevel, frames, bytes, sampleRate, sysTrack, error, start, stop };
+  return {
+    state,
+    micLevel,
+    sysLevel,
+    frames,
+    bytes,
+    sampleRate,
+    sysTrack,
+    micFallbackStep,
+    error,
+    start,
+    stop,
+  };
 }

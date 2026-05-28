@@ -11,6 +11,7 @@ import { EnhancedPane } from '../features/notes/EnhancedPane';
 import { NoteWindowHeader } from '../features/notes/NoteWindowHeader';
 import { useSettings } from '../features/settings/use-settings';
 import { SettingsModal } from '../features/settings/SettingsModal';
+import { AudioWarningBanner } from '../features/settings/AudioWarningBanner';
 import { OnboardingFlow } from '../features/onboarding/OnboardingFlow';
 import { TemplatePickerModal } from '../features/templates/TemplatePickerModal';
 import { ChatPanel } from '../features/chat/ChatPanel';
@@ -632,6 +633,7 @@ export function App() {
       />
 
       <UpdateBanner />
+      <AudioWarningBanner />
 
       <AboutDialog open={showAbout} onClose={() => setShowAbout(false)} />
 

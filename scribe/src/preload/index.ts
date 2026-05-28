@@ -2,11 +2,13 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcRendererEvent } from 'electron';
 import {
   AgendaListSchema,
+  AudioLoopbackDeniedSchema,
   ChatTokenSchema,
   IPC,
   TranscriptSegmentSchema,
   TranscriptionLanguageSchema,
   TranscriptionStatusSchema,
+  TranscriptionWarningSchema,
   UpdateStateSchema,
 } from '../shared/ipc-contract';
 import type { ScribeApi, WhisperDownloadProgress } from '../shared/ipc-contract';
@@ -41,6 +43,20 @@ const api: ScribeApi = {
     };
     ipcRenderer.on(IPC.transcriptionLanguageDetected, listener);
     return () => ipcRenderer.removeListener(IPC.transcriptionLanguageDetected, listener);
+  },
+  onAudioLoopbackDenied: (cb) => {
+    const listener = (_event: IpcRendererEvent, payload: unknown): void => {
+      cb(AudioLoopbackDeniedSchema.parse(payload));
+    };
+    ipcRenderer.on(IPC.audioLoopbackDenied, listener);
+    return () => ipcRenderer.removeListener(IPC.audioLoopbackDenied, listener);
+  },
+  onTranscriptionWarning: (cb) => {
+    const listener = (_event: IpcRendererEvent, payload: unknown): void => {
+      cb(TranscriptionWarningSchema.parse(payload));
+    };
+    ipcRenderer.on(IPC.transcriptionWarning, listener);
+    return () => ipcRenderer.removeListener(IPC.transcriptionWarning, listener);
   },
   meetings: {
     list: () => ipcRenderer.invoke(IPC.meetingsList),
@@ -98,6 +114,8 @@ const api: ScribeApi = {
     setWhisperModel: (model) =>
       ipcRenderer.invoke(IPC.settingsSetWhisperModel, model),
     setNotesCardView: (view) => ipcRenderer.invoke(IPC.settingsSetNotesCardView, view),
+    setAudioCaptureMode: (mode) =>
+      ipcRenderer.invoke(IPC.settingsSetAudioCaptureMode, mode),
     test: (provider, key) => ipcRenderer.invoke(IPC.settingsTest, { provider, key }),
     acceptPrivacy: () => ipcRenderer.invoke(IPC.settingsAcceptPrivacy),
     completeOnboarding: () => ipcRenderer.invoke(IPC.settingsCompleteOnboarding),

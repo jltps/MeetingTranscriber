@@ -37,8 +37,7 @@ function Stat({ label, value, ok }: { label: string; value: string; ok?: boolean
 }
 
 export function CaptureProbe({ controller }: { controller: AudioCaptureController }) {
-  const { state, micLevel, sysLevel, frames, bytes, sampleRate, sysTrack, error } = controller;
-  const rateWarning = sampleRate !== null && sampleRate !== 16000;
+  const { state, micLevel, sysLevel, frames, bytes, sampleRate, sysTrack, micFallbackStep, error } = controller;
 
   return (
     <div className="w-full rounded-lg border border-border bg-card p-4">
@@ -56,8 +55,8 @@ export function CaptureProbe({ controller }: { controller: AudioCaptureControlle
         <Stat label="state" value={state} />
         <Stat
           label="sample rate"
-          value={sampleRate === null ? '—' : `${sampleRate} Hz`}
-          ok={sampleRate === 16000}
+          value={sampleRate === null ? '—' : `${sampleRate} Hz → 16000 Hz`}
+          ok={sampleRate !== null}
         />
         <Stat label="frames · 100ms" value={String(frames)} />
         <Stat label="pcm streamed" value={`${(bytes / 1024).toFixed(0)} KB`} />
@@ -78,10 +77,10 @@ export function CaptureProbe({ controller }: { controller: AudioCaptureControlle
         </p>
       )}
 
-      {rateWarning && (
+      {micFallbackStep === 'system-default' && (
         <p className="mt-4 rounded-md border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs text-warning">
-          Driver returned {sampleRate} Hz instead of 16000 Hz. Capture still runs, but PCM is not
-          at the target rate — a fallback resampler arrives in M2.
+          Your selected microphone wasn&apos;t available — capture fell back to the Windows system
+          default. Re-pick a device in Settings if this is wrong.
         </p>
       )}
 

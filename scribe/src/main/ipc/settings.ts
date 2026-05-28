@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { z } from 'zod';
 import {
+  AudioCaptureModeSchema,
   IPC,
   LlmProviderSchema,
   NotesCardViewSchema,
@@ -16,6 +17,7 @@ import {
 import type { SettingsView, TestResult } from '../../shared/ipc-contract';
 import {
   deleteSetting,
+  getAudioCaptureMode,
   getGlobalInstructions,
   getLanguage,
   getLlmProvider,
@@ -27,6 +29,7 @@ import {
   getOnboardingDone,
   getTranscriptionProvider,
   getWhisperModel,
+  setAudioCaptureMode,
   setLlmProvider,
   setNotesCardView,
   setOnboardingDone,
@@ -78,6 +81,7 @@ export function registerSettingsIpc(): void {
     microsoftCalendarConnected: isMicrosoftConnected(),
     theme: themeView(),
     notesCardView: getNotesCardView(),
+    audioCaptureMode: getAudioCaptureMode(),
   }));
 
   ipcMain.handle(IPC.settingsSetKeys, (_event, raw) => {
@@ -142,6 +146,10 @@ export function registerSettingsIpc(): void {
 
   ipcMain.handle(IPC.settingsSetNotesCardView, (_event, raw) => {
     setNotesCardView(NotesCardViewSchema.parse(raw));
+  });
+
+  ipcMain.handle(IPC.settingsSetAudioCaptureMode, (_event, raw) => {
+    setAudioCaptureMode(AudioCaptureModeSchema.parse(raw));
   });
 
   ipcMain.handle(IPC.settingsAcceptPrivacy, () => {

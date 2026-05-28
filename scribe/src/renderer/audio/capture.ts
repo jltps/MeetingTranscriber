@@ -1,16 +1,20 @@
-// Dual-source capture pipeline for M1 (PRODUCT_SPEC.md §6.1, §6.3).
+// Dual-source capture pipeline (PRODUCT_SPEC.md §6.1, §6.3; V073 hardening).
 //
-//   mic (getUserMedia)                              -> worklet input 0 -> channel 0 ("Me")
-//   sys (getDisplayMedia loopback, video discarded) -> worklet input 1 -> channel 1 ("Others")
+//   mic (getUserMedia)                              -> worklet input 0
+//   sys (getDisplayMedia loopback, video discarded) -> worklet input 1
 //
-// The AudioContext is forced to 16 kHz so the browser handles resampling and the
-// worklet only frames/interleaves. Frames + per-channel levels are handed to the
-// caller via onFrame. NO AUDIO IS PERSISTED — stop() drops everything (§1.1, §6.4).
+// V073: the AudioContext is no longer forced to 16 kHz — some WASAPI endpoints
+// (Bluetooth A2DP, certain Realtek drivers) silently refuse the request and the
+// context comes up at 44.1/48 kHz, which used to ship PCM at the wrong rate. We
+// now read the actual rate after construction and tell the worklet to decimate
+// to 16 kHz before posting frames. Mic acquisition also has a layered fallback
+// (exact → ideal → system default) so a stale stored deviceId can no longer
+// silently fail. NO AUDIO IS PERSISTED — stop() drops everything (§1.1, §6.4).
 
 export type CaptureState = 'idle' | 'starting' | 'running' | 'stopping';
 
 export type CaptureFrame = {
-  pcm: ArrayBuffer; // interleaved 16-bit PCM, ch0 = mic, ch1 = system
+  pcm: ArrayBuffer; // mono 16-bit PCM @ 16 kHz (worklet decimates if needed)
   micLevel: number; // 0..1 RMS
   sysLevel: number; // 0..1 RMS
   samplesPerChannel: number;
@@ -23,16 +27,17 @@ export type SysTrackInfo = {
   enabled: boolean;
 };
 
+/** Which fallback step the mic acquisition ended up on. */
+export type MicFallbackStep = 'exact' | 'ideal' | 'system-default';
+
 export type CaptureHandlers = {
   onFrame?: (frame: CaptureFrame) => void;
   onError?: (error: Error) => void;
   onState?: (state: CaptureState) => void;
-  // The AudioContext's actual rate. Surfaced because rare drivers refuse 16 kHz;
-  // the UI warns rather than letting bad PCM flow (M2 adds a fallback resampler).
-  onReady?: (info: { sampleRate: number }) => void;
-  // Diagnostics for the loopback track. If this reports live + unmuted but CH1
-  // stays flat, the captured output endpoint is silent (device/routing issue),
-  // not a capture bug.
+  // The AudioContext's actual rate + the requested mic device fallback step.
+  // Surfaced for diagnostics and so the UI can warn when a stored deviceId was
+  // stale and we fell back to the system default.
+  onReady?: (info: { sampleRate: number; micFallbackStep: MicFallbackStep }) => void;
   onSysTrack?: (info: SysTrackInfo) => void;
 };
 
@@ -45,9 +50,65 @@ type WorkletFrameMessage = {
 };
 
 // Relative so it resolves correctly in both dev (Vite dev server) and the
-// packaged app (file:// origin). An absolute '/' path would resolve to the
-// filesystem root in file:// context, causing addModule() to fail with AbortError.
+// packaged app (file:// origin).
 const WORKLET_URL = './pcm-framer.worklet.js';
+
+/** Typed capture error so the UI can surface a useful message per failure mode. */
+export type CaptureErrorKind =
+  | 'mic-unavailable' // no acceptable mic on any fallback step
+  | 'loopback-denied' // getDisplayMedia rejected (e.g. main handler returned {})
+  | 'no-system-audio'; // loopback granted but the track is missing
+export class CaptureError extends Error {
+  constructor(public kind: CaptureErrorKind, message: string, public override cause?: unknown) {
+    super(message);
+    this.name = 'CaptureError';
+  }
+}
+
+/**
+ * Acquire a mic stream with a layered fallback chain so a stale stored deviceId
+ * (Bluetooth headset that reconnected with a different id, USB device replugged,
+ * etc.) never silently fails. Returns the stream and which step succeeded.
+ */
+export async function acquireMicStream(
+  deviceId: string | undefined,
+): Promise<{ stream: MediaStream; step: MicFallbackStep }> {
+  const baseAudio = {
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false,
+  } as const;
+  const attempts: Array<{ step: MicFallbackStep; constraints: MediaStreamConstraints }> = [];
+  if (deviceId) {
+    attempts.push({
+      step: 'exact',
+      constraints: { audio: { ...baseAudio, deviceId: { exact: deviceId } }, video: false },
+    });
+    attempts.push({
+      step: 'ideal',
+      constraints: { audio: { ...baseAudio, deviceId: { ideal: deviceId } }, video: false },
+    });
+  }
+  attempts.push({
+    step: 'system-default',
+    constraints: { audio: baseAudio, video: false },
+  });
+  let lastErr: unknown = null;
+  for (const a of attempts) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(a.constraints);
+      return { stream, step: a.step };
+    } catch (err) {
+      lastErr = err;
+      // Try the next fallback step.
+    }
+  }
+  throw new CaptureError(
+    'mic-unavailable',
+    'No usable microphone — check that your device is plugged in and that Windows allows app mic access.',
+    lastErr,
+  );
+}
 
 export class AudioCapture {
   private ctx: AudioContext | null = null;
@@ -73,33 +134,37 @@ export class AudioCapture {
     if (this.state !== 'idle') return;
     this.setState('starting');
     try {
-      // 1) Microphone. Disable processing so channel 0 is a clean local signal.
-      //    Use the device chosen in Settings (§10); otherwise the OS default.
-      this.micStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          deviceId: opts.micDeviceId ? { exact: opts.micDeviceId } : undefined,
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
-        video: false,
-      });
+      // 1) Microphone with fallback chain (V073 block 01.1). Mic processing
+      //    stays disabled so channel 0 is a clean local signal.
+      const { stream: micStream, step: micFallbackStep } = await acquireMicStream(
+        opts.micDeviceId,
+      );
+      this.micStream = micStream;
 
-      // 2) System / loopback audio. We must request video (Chromium constraint);
-      //    the main process supplies a screen source + 'loopback' audio. Discard
-      //    the video track immediately — we only want the system audio.
-      this.sysStream = await navigator.mediaDevices.getDisplayMedia({
-        audio: true,
-        video: true,
-      });
+      // 2) System / loopback audio. Chromium normally requires a video source
+      //    alongside the loopback audio; the main process supplies one if it
+      //    can. On hosts where no screen source exists (V073 block 01.2 path:
+      //    RDP / HDMI-only) main returns audio-only and Chromium accepts it.
+      try {
+        this.sysStream = await navigator.mediaDevices.getDisplayMedia({
+          audio: true,
+          video: true,
+        });
+      } catch (err) {
+        throw new CaptureError(
+          'loopback-denied',
+          'System audio (loopback) was not granted. Open the app from your own desktop session and check Windows Sound settings.',
+          err,
+        );
+      }
       this.sysStream.getVideoTracks().forEach((t) => t.stop());
       if (this.sysStream.getAudioTracks().length === 0) {
-        throw new Error('No system audio track — loopback capture was not granted.');
+        throw new CaptureError(
+          'no-system-audio',
+          'No system audio track — Windows did not expose a loopback endpoint. Make sure an output device is set as default and not muted.',
+        );
       }
 
-      // Report the loopback track's state so the UI can distinguish "silent
-      // endpoint" from "no track at all". muted flips when the source delivers
-      // silence; we re-report on mute/unmute.
       const sysTrack = this.sysStream.getAudioTracks()[0];
       const reportSysTrack = (): void =>
         this.handlers.onSysTrack?.({
@@ -112,9 +177,13 @@ export class AudioCapture {
       sysTrack.onmute = reportSysTrack;
       sysTrack.onunmute = reportSysTrack;
 
-      // 3) 16 kHz context => browser resamples both inputs; no manual resampler.
-      this.ctx = new AudioContext({ sampleRate: 16000 });
-      this.handlers.onReady?.({ sampleRate: this.ctx.sampleRate });
+      // 3) AudioContext without a forced sample rate (V073 block 01.3). Some
+      //    WASAPI endpoints silently refuse 16 kHz and come up at 44.1/48 kHz;
+      //    we read the actual rate and tell the worklet to decimate. Speech is
+      //    band-limited so linear interpolation in the worklet is acceptable.
+      this.ctx = new AudioContext();
+      const ctxRate = this.ctx.sampleRate;
+      this.handlers.onReady?.({ sampleRate: ctxRate, micFallbackStep });
       await this.ctx.audioWorklet.addModule(WORKLET_URL);
 
       // 4) Two-input, zero-output worklet. channelCount:1 forces each input mono.
@@ -124,6 +193,7 @@ export class AudioCapture {
         channelCount: 1,
         channelCountMode: 'explicit',
         channelInterpretation: 'discrete',
+        processorOptions: { sourceRate: ctxRate, targetRate: 16000 },
       });
       this.node.port.onmessage = (ev: MessageEvent) => {
         const msg = ev.data as WorkletFrameMessage;
@@ -193,4 +263,80 @@ export class AudioCapture {
     this.ctx = null;
     this.setState('idle');
   }
+}
+
+// ─── Pre-flight capture probe (V073 block 01.4) ──────────────────────────────
+
+/** Result of a brief capture probe — used by the pre-flight dialog + Settings. */
+export type CaptureProbeResult = {
+  micRmsPeak: number;
+  sysRmsPeak: number;
+  micFrames: number;
+  sysFrames: number;
+  sampleRate: number;
+  sysMuted: boolean;
+  micFallbackStep: MicFallbackStep;
+  error?: string;
+};
+
+/**
+ * Spin up capture for ~1500 ms, observe whether mic + loopback are actually
+ * producing signal, then tear down. Used to surface silent-failure modes
+ * (stale device id, muted loopback, non-default output endpoint) before the
+ * user starts a real meeting. All audio is discarded; no IPC, no transcription.
+ */
+export async function runCaptureProbe(
+  opts: { micDeviceId?: string; durationMs?: number } = {},
+): Promise<CaptureProbeResult> {
+  const duration = opts.durationMs ?? 1500;
+  let micRmsPeak = 0;
+  let sysRmsPeak = 0;
+  let micFrames = 0;
+  let sysFrames = 0;
+  let sampleRate = 0;
+  let sysMuted = false;
+  let micFallbackStep: MicFallbackStep = 'system-default';
+  let error: string | undefined;
+
+  const capture = new AudioCapture({
+    onFrame: (f) => {
+      if (f.micLevel > 0.001) {
+        micRmsPeak = Math.max(micRmsPeak, f.micLevel);
+        micFrames++;
+      }
+      if (f.sysLevel > 0.001) {
+        sysRmsPeak = Math.max(sysRmsPeak, f.sysLevel);
+        sysFrames++;
+      }
+    },
+    onReady: (info) => {
+      sampleRate = info.sampleRate;
+      micFallbackStep = info.micFallbackStep;
+    },
+    onSysTrack: (t) => {
+      sysMuted = t.muted;
+    },
+    onError: (e) => {
+      error = e instanceof CaptureError ? e.message : e.message;
+    },
+  });
+
+  try {
+    await capture.start({ micDeviceId: opts.micDeviceId });
+    await new Promise<void>((resolve) => setTimeout(resolve, duration));
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e);
+  } finally {
+    await capture.stop();
+  }
+  return {
+    micRmsPeak,
+    sysRmsPeak,
+    micFrames,
+    sysFrames,
+    sampleRate,
+    sysMuted,
+    micFallbackStep,
+    error,
+  };
 }
