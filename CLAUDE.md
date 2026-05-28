@@ -459,6 +459,53 @@ across updates and uninstalls.
   into the new NoteWindowHeader; `setRightTab` was retired in favour of
   `setNoteSurface` and the command-palette `toggle-tab` action became
   `toggle-chat`.
+- **V073 — Transcription quality & bullet-proof Windows audio capture (shipped;
+  `roadmap/V073`):** addressed two long-standing pain points hitting users on
+  varied Windows hardware. (1) **Capture reliability.** Mic acquisition now
+  uses a layered fallback (`{exact:id}` → `{ideal:id}` → system default) inside
+  a new `acquireMicStream` helper in `renderer/audio/capture.ts`; the result
+  reports which step won so `CaptureProbe` can warn when a stale stored
+  deviceId got us. The main loopback grant in `main/audio/loopback.ts` now
+  tries `desktopCapturer.getSources({types:['screen']})` → `['window']` → an
+  audio-only response (`{audio:'loopback'}`, accepted by Electron 33), and
+  pushes a typed `audio:loopbackDenied` IPC event when none works. The
+  AudioContext is no longer pinned to 16 kHz — `pcm-framer.worklet.js` now
+  reads `processorOptions.sourceRate` + `targetRate` and linear-decimates to
+  16 kHz when they differ (fast pass-through when they match), so Bluetooth
+  A2DP and 48 kHz Realtek endpoints stop silently shipping wrong-rate PCM.
+  A new `runCaptureProbe()` helper spins up capture for 1.5 s and reports
+  peak RMS / muted flag / fallback step — exported for a future preflight
+  modal; not yet wired to the Start button. An in-meeting silence watchdog
+  in `main/ipc/transcription.ts` pushes `transcription:warning` (`mic-silent`
+  / `system-silent`, `cleared` on recovery) after a 3 s grace period, and a
+  new `AudioWarningBanner` in the renderer surfaces both warning channels.
+  (2) **Diarization quality.** New `computeBleedScore` in
+  `main/transcription/me-attribution.ts` measures the rolling 10 s normalised
+  zero-lag cross-correlation of mic vs system RMS envelopes (with a
+  floating-point variance epsilon to keep constant envelopes from looking
+  perfectly correlated). `micDominatedWindow` scales the effective dominance
+  threshold (`1.5 × (1 + 2·bleed)`) and mic floor by the live score, so
+  laptop-speaker setups stop mis-attributing remote speech to "Me". A new
+  `audio_capture_mode` KV setting (`'auto' | 'headphones' | 'speakers'`)
+  clamps the bleed score: `headphones` → 0; `speakers` → max(0.5, bleed);
+  `auto` passes through. UI toggle lives in Settings → Audio. A 1-word
+  median filter inside `attributeWords` flips a single mis-classified short
+  (< 350 ms) word back to its neighbours' attribution, killing the
+  `"Yeah."`-mid-monologue artefact. Adjacent same-direction remote fragments
+  produced by `groupAttributedWords` now merge automatically when the gap is
+  < 800 ms, each fragment has ≥ 3 words, and their word rates agree within
+  ±25 % — covering the Deepgram-speaker-fragmentation case while leaving
+  single-word backchannels untouched. Manual rename of remote speakers still
+  goes through the existing V03 ROADMAP_02 `speakers.set` IPC. No DB
+  migration, no IPC contract change beyond the three new channels
+  (`audio:loopbackDenied`, `transcription:warning`, `settings:setAudioCaptureMode`).
+  New test suite `tests/me-attribution-bleed.test.ts` (9 tests) pins bleed
+  score behaviour, dominance under bleed, the capture-mode overrides, and the
+  median filter; full suite stays 256 / 256 green. Holds §1.1–§1.7 — all new
+  audio data is RMS scalar only, no new persistence, keys stay main-side.
+  Pre-flight Start modal + onboarding audio step from the original plan
+  were deferred (the watchdog + Settings panel + diagnostics already cover
+  the silent-failure modes; `runCaptureProbe` is exported for the next step).
 - **V0.7.1 — production OAuth credentials for calendar (shipped):** v0.7.0 shipped
   the V07 updater alongside calendar code (V03) that still pointed at a dev Google
   client and an empty Microsoft client, so Connect failed on fresh installs.

@@ -25,15 +25,18 @@ install silently — no installer wizard.
 
 ## Status
 
-Shipping at **v0.7.2**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
+Shipping at **v0.7.3**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
 largely built, the product was renamed **Scribe → Nexus** (V04), **V05 — transcription
 quality & cost — has shipped**, **V06 — templates & AI capabilities — has shipped**,
 **V062 — per-word "Me" attribution — has shipped**, **V07 — in-app auto-update
 from GitHub Releases — has shipped** (with v0.7.1 wiring the production Google +
-Microsoft calendar OAuth credentials so Connect works out of the box), and
+Microsoft calendar OAuth credentials so Connect works out of the box),
 **V072 — minor experience tweaks — has shipped** (launch splash, unified note-window
 header, drag-and-drop reorder, compact card density, date on agenda rows, tags
-sidebar affordance, ask-across-notes in sidebar):
+sidebar affordance, ask-across-notes in sidebar), and **V073 — transcription
+quality & bullet-proof Windows audio capture — has shipped** (bleed-aware "Me"
+attribution, mic + loopback fallback chains, sample-rate negotiation, in-meeting
+silence watchdog, adjacent-fragment auto-merge, capture-mode toggle):
 
 **v1 — core (shipped)**
 - Mic + Windows loopback system audio captured as a 2-channel 16 kHz PCM stream
@@ -150,6 +153,43 @@ sidebar affordance, ask-across-notes in sidebar):
   Microsoft now work on a fresh install with no local config. Also the first
   release published end-to-end by the V07 auto-update pipeline (CI workflow
   built, signed, and uploaded the installer + `latest.yml` on tag push).
+
+**v0.7.3 — transcription quality & bullet-proof Windows audio capture (shipped)**
+- **Capture reliability on diverse Windows hardware.** The mic acquisition path
+  now falls back layered (`{exact: id}` → `{ideal: id}` → system default) so a
+  stale stored deviceId (Bluetooth reconnect, USB replug) can no longer silently
+  fail; `CaptureProbe` surfaces *which* step won. The system loopback grant
+  tries `screen` → `window` → audio-only (Electron 33 accepts
+  `{ audio: 'loopback' }` with no video) so RDP / HDMI-only setups stop returning
+  empty source lists. If even that fails, main pushes `audio:loopbackDenied`
+  to the renderer and a non-blocking warning banner explains what to fix.
+- **Sample-rate negotiation.** The AudioContext is no longer hard-pinned to
+  16 kHz (Bluetooth A2DP and certain Realtek drivers silently came up at
+  44.1 / 48 kHz and shipped wrong-rate PCM). The worklet now reads the
+  context's actual rate and linear-decimates to 16 kHz before framing —
+  pass-through when they match.
+- **In-meeting silence watchdog.** After a 3 s grace, if the mic or system
+  side hasn't produced any signal, a `transcription:warning` push lights up an
+  inline banner ("No microphone signal detected — check Settings → Audio");
+  auto-clears when signal returns.
+- **Bleed-aware "Me" attribution.** `computeBleedScore` measures the rolling
+  10 s normalised cross-correlation of mic vs system RMS envelopes; the
+  dominance threshold and mic floor scale up with the score (×1.5 → ×4.5 at
+  full bleed), so laptop-speaker calls stop mis-tagging remote speakers as
+  "Me". A 1-word median filter kills single-word interjection artefacts
+  (`"Yeah."` getting stamped Me mid-monologue) without touching real ones.
+- **"Listening on" Settings toggle**: Auto / Headphones / Speakers — Auto
+  uses the live bleed score; Headphones clamps it to 0; Speakers floors it
+  at 0.5. Persisted as `audio_capture_mode` in the existing KV settings
+  table (no migration).
+- **Auto-merge adjacent remote fragments.** When `groupAttributedWords` emits
+  consecutive remote segments differing only by Deepgram speaker ID, with a
+  gap < 800 ms, ≥3 words each, and word rates within ±25 %, they collapse
+  into one segment. Single-word backchannels (synthetic-test-fixture-shaped
+  or real "Right.") are skipped so the merge is conservative.
+- **Roadmap saved as `roadmap/V073/`** per the new doc convention — every
+  approved plan now lives on-repo as `ROADMAP_00_INDEX.md` plus per-block
+  files, written *before* the release commit.
 
 **v0.7.2 — minor experience tweaks (shipped)**
 - **Launch splash**: a small branded window appears the moment Nexus launches
@@ -287,6 +327,7 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 | `roadmap/V062/…` | Per-word "Me" attribution (shipped): word-level energy classification + attribution-first regrouping so own-voice no longer fragments across Deepgram speaker IDs. |
 | `roadmap/V07/…` | In-app auto-update + release CI (shipped): `electron-updater`, install guard, GitHub Releases provider, NSIS one-click, tag-driven CI build/publish. |
 | `roadmap/V072/…` | Minor experience tweaks (shipped): launch splash, unified note-window header, sidebar ask-across-notes, drag-and-drop reorder + move-to-folder (migration v12), compact/extended card density, date on agenda rows, sidebar Tags affordance. |
+| `roadmap/V073/…` | Transcription quality & bullet-proof Windows audio capture (shipped): mic + loopback fallback chains, in-worklet sample-rate decimator, in-meeting silence watchdog, bleed-aware "Me" attribution + Auto/Headphones/Speakers toggle, adjacent-fragment auto-merge. |
 | `scribe/docs/CALENDAR_SETUP.md` | One-time Google / Microsoft OAuth client setup. |
 
 **Ground truth is the code, not the docs.** Where any doc disagrees with the
