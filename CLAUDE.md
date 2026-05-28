@@ -285,6 +285,44 @@ After the workflow finishes, edit the Release's notes on GitHub
 `--publish never`, so it produces an installer for manual testing without
 touching the Release.
 
+### The "build" runbook (run *all* of this when the user says "build")
+
+When the user gives a "build" / "ship vX.Y.Z" instruction, execute the full
+release sequence below in order — do not stop after just packaging the
+installer. This sequence was made durable here in v0.7.2 per direct user
+instruction.
+
+1. **Update the docs first.** Add the new version to `README.md` (status
+   line + a new `vX.Y.Z` section + the document map) and to `CLAUDE.md`'s
+   "Already shipped beyond v1" list. If the version corresponds to a roadmap
+   folder (e.g. `roadmap/VXXX/`), commit any untracked roadmap files in that
+   folder and mark its `ROADMAP_00_INDEX.md` as shipped.
+2. **Commit the doc updates** (`docs: record VXXX … as shipped`).
+3. **Bump `scribe/package.json` version to X.Y.Z** and commit
+   (`chore(release): X.Y.Z`). Keep this commit version-bump-only — no other
+   code changes.
+4. **Push main**: `git push origin main`.
+5. **Tag + push the tag**: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+   The tag push triggers `.github/workflows/release.yml`, which builds on a
+   Windows runner, gates on typecheck/lint/test, and publishes the installer
+   + `latest.yml` + `.blockmap` to the GitHub Release via electron-builder's
+   `github` provider.
+6. **Build the installer locally too** (`corepack pnpm dist`, run in
+   background). This produces `scribe/release/Nexus Setup X.Y.Z.exe` with
+   `--publish never`, giving a sanity-check installer that doesn't touch the
+   Release.
+7. **Wait for CI** (`gh run watch <id> --exit-status`) and verify the
+   Release exists with the installer attached
+   (`gh release view vX.Y.Z` — should list `Nexus-Setup-X.Y.Z.exe`,
+   `latest.yml`, and `Nexus-Setup-X.Y.Z.exe.blockmap`).
+8. Optional: write the release notes with `gh release edit vX.Y.Z --notes …`
+   if the auto-generated content needs improvement.
+
+The order matters: docs commit before the release commit so the published
+tag points at a state where the docs already describe the shipped version.
+Local `pnpm dist` runs in parallel with CI — it's a parallel sanity check,
+not a precondition for shipping.
+
 **Silent NSIS install (V07).** `electron-builder.yml` is configured with
 `nsis.oneClick: true` so background auto-updates can install without
 prompting. The tradeoff is that *first-time* installs are also silent — no
