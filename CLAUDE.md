@@ -258,11 +258,20 @@ pnpm typecheck    # must pass before any PR
 pnpm lint         # must pass before any PR (incl. jsx-a11y on the renderer)
 pnpm test
 pnpm build        # compile main/preload/renderer (electron-vite build) — no installer
-pnpm dist         # electron-builder NSIS installer (Windows)
+pnpm dist         # electron-builder NSIS installer (Windows) — also refreshes release/latest.yaml
 ```
 
 If the actual script names differ, use those and update this list. `typecheck` and
 `lint` must be clean before any task is considered done.
+
+**Release manifest (`release/latest.yaml`).** Every shipped build must have a
+matching `release/latest.yaml` for the auto-update feed. `pnpm dist` chains
+`scripts/write-latest-yaml.mjs`, which picks the newest `Nexus Setup *.exe` in
+`release/`, computes its SHA-512, and writes the manifest with the version from
+`package.json`. If a build is produced by any path that *doesn't* go through
+`pnpm dist` (e.g. an installer copied in by hand, a re-signed exe), run
+`node scripts/write-latest-yaml.mjs` yourself so the manifest stays in sync —
+treat a stale `latest.yaml` the same as a broken build.
 
 ## 12. When you're unsure
 

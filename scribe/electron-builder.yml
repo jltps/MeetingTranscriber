@@ -41,3 +41,10 @@ nsis:
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
   installerHeaderIcon: build/icon.ico
+# Auto-update feed. electron-builder bakes this into the packaged
+# resources/app-update.yml at build time, and electron-updater reads it at
+# runtime to check for new versions. The feed serves release/latest.yaml +
+# the matching Nexus Setup <version>.exe + .blockmap.
+publish:
+  provider: generic
+  url: https://nexus-web.vercel.app/api/updates/
