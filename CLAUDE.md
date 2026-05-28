@@ -355,5 +355,34 @@ across updates and uninstalls.
   UI polish: header cost chip removed (cost lives in Settings → Usage & Cost), larger
   Settings/editor dialogs, API "Connected" indicators. Holds §1.2/§1.5/§1.6/§1.7.
   See `roadmap/V06/ROADMAP_00_INDEX.md`.
+- **V07 — In-app auto-update from GitHub Releases (shipped; `roadmap/V07`):** the
+  packaged app now updates itself. `electron-updater` wired into the main process
+  (`scribe/src/main/updater/`): boot check 60 s after `whenReady` + 6 h periodic,
+  auto-download in the background, state machine pushed to the renderer over four
+  Zod-validated IPC channels (`update:{checkNow,install,getState,status}`, plus
+  `update:{getSettings,setAutoEnabled}` to back the Settings toggle). **Recording-
+  aware install guard** (`install-guard.ts` consults `isTranscriptionActive()` in
+  `ipc/transcription.ts`) — `quitAndInstall` is refused while a meeting is being
+  recorded (§1.5). Three small UI surfaces: an in-app banner when an update is
+  ready (mounted between TitleBar and LayoutShell), a Settings → Updates section,
+  and an About dialog opened from a new `Info` button in the title bar. Build
+  side: `electron-builder.yml` switched to `publish: github` (`jltps/MeetingTranscriber`)
+  with NSIS `oneClick: true` (silent installs are required for background
+  updates — same UX as Slack/Discord per-user installers; documented in §11);
+  the hand-rolled `scripts/write-latest-yaml.mjs` and tracked `release/latest.yaml`
+  were removed (electron-builder now writes `latest.yml` natively under the
+  github provider); `pnpm dist` uses `--publish never`. CI: `.github/workflows/
+  release.yml` builds on `windows-latest` for every `v*.*.*` tag push, gates on
+  typecheck/lint/test, runs a tag-vs-package version check, then publishes via
+  `electron-builder --publish always` with `GH_TOKEN`. Installer icon: a small
+  `rcedit` afterPack hook (`build/after-pack.cjs`) embeds the Nexus icon +
+  `ProductName/FileVersion` metadata on the packaged `.exe` so File Explorer /
+  Task Manager show the Nexus mark; `signAndEditExecutable: false` stays off so
+  electron-builder doesn't trigger the winCodeSign download (macOS symlinks fail
+  to extract on Windows without Developer Mode). Holds §1.1–§1.7; the `github`
+  provider is anonymous against the public repo, so no API key is added.
 - Still deferred (don't build unless asked): transcript/enhancement quality eval loop
-  (v03 ROADMAP_03), accounts + cloud sync + sharing (v03 ROADMAP_04 later phases), macOS.
+  (v03 ROADMAP_03), accounts + cloud sync + sharing (v03 ROADMAP_04 later phases),
+  macOS, **code-signing the Windows installer** (procure OV/EV Authenticode cert
+  → flip `signAndEditExecutable: true` + add `CSC_LINK`/`CSC_KEY_PASSWORD` CI
+  secrets; removes SmartScreen warnings on first install).

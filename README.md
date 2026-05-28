@@ -28,7 +28,8 @@ install silently — no installer wizard.
 Shipping at **v0.7.0**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
 largely built, the product was renamed **Scribe → Nexus** (V04), **V05 — transcription
 quality & cost — has shipped**, **V06 — templates & AI capabilities — has shipped**,
-and **V062 — per-word "Me" attribution — has shipped**:
+**V062 — per-word "Me" attribution — has shipped**, and **V07 — in-app auto-update
+from GitHub Releases — has shipped**:
 
 **v1 — core (shipped)**
 - Mic + Windows loopback system audio captured as a 2-channel 16 kHz PCM stream
@@ -119,8 +120,31 @@ and **V062 — per-word "Me" attribution — has shipped**:
 - **UI polish**: per-meeting cost chip removed from the header (cost lives in Settings →
   Usage & Cost), larger Settings/editor dialogs, and API "Connected" indicators.
 
+**v7 — in-app auto-update (shipped)**
+- **Updater engine** in the main process via `electron-updater`: checks GitHub
+  Releases on boot (after 60 s) and every 6 h, auto-downloads in the background,
+  and emits a state machine to the renderer over typed IPC.
+- **Recording-aware install guard**: `quitAndInstall` is refused while a
+  transcription session is active, so an update never tears down a live meeting.
+- **In-app surfaces**: a non-intrusive banner when an update is ready to install,
+  a Settings → Updates panel (status, progress, On/Off toggle, "Check now",
+  release notes), and an About dialog (version + links to Releases / repo).
+- **GitHub Releases as the source of truth**: publish provider switched from a
+  generic feed to `github`; NSIS flipped to `oneClick: true` for silent installs
+  and updates; the hand-rolled `latest.yaml` writer was removed in favour of
+  electron-builder's native `latest.yml`.
+- **Release CI**: a `.github/workflows/release.yml` workflow builds on a Windows
+  runner on every `v*.*.*` tag push, gates on typecheck/lint/test, and publishes
+  the installer + `latest.yml` + blockmap to the matching GitHub Release.
+- **Installer icon polish**: an `rcedit` afterPack hook embeds the Nexus icon
+  and `ProductName`/`FileDescription`/`FileVersion` metadata on the packaged
+  `Nexus.exe`, so File Explorer and Task Manager show the Nexus mark instead of
+  Electron's default icon.
+
 Not yet built: transcript/enhancement quality eval loop (v03 ROADMAP_03) and the
-sync/sharing phases of the data block (v03 ROADMAP_04).
+sync/sharing phases of the data block (v03 ROADMAP_04). Code-signing the
+installer (removes Windows SmartScreen warnings) is named future work — flip
+`signAndEditExecutable: true` once an OV/EV cert is in hand.
 
 ## Tech stack
 
