@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { AgendaEvent, CalendarProviderId } from '../../../shared/types';
 import { Button } from '@/components/ui/button';
+import { formatEventWhen } from './format-when';
 
 // Today's / upcoming agenda shown above the meeting list (ROADMAP_06). Each row
 // is labelled by source and carries an "arm auto-start" toggle. The join link is
@@ -14,11 +15,6 @@ const SOURCE_LABEL: Record<CalendarProviderId, string> = {
   microsoft: 'Outlook',
 };
 
-function formatWhen(e: AgendaEvent): string {
-  if (e.allDay) return 'All day';
-  return new Date(e.startMs).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-}
-
 type AgendaPanelProps = {
   events: AgendaEvent[];
   onArm: (providerId: CalendarProviderId, externalId: string, armed: boolean) => void;
@@ -26,10 +22,11 @@ type AgendaPanelProps = {
 };
 
 export function AgendaPanel({ events, onArm, onSelectMeeting }: AgendaPanelProps) {
-  const upcoming = useMemo(() => {
-    const now = Date.now();
-    return events.filter((e) => e.endMs > now && e.startMs < now + WINDOW_MS);
-  }, [events]);
+  const now = Date.now();
+  const upcoming = useMemo(
+    () => events.filter((e) => e.endMs > now && e.startMs < now + WINDOW_MS),
+    [events, now],
+  );
 
   if (upcoming.length === 0) return null;
 
@@ -51,8 +48,8 @@ export function AgendaPanel({ events, onArm, onSelectMeeting }: AgendaPanelProps
               </span>
             </div>
             <div className="mt-1 flex items-center justify-between gap-2">
-              <span className="text-[11px] tabular-nums text-muted-foreground">
-                {formatWhen(e)}
+              <span className="text-[11px] text-muted-foreground">
+                {formatEventWhen(e.startMs, e.allDay, now)}
                 {e.joinUrl && <span className="ml-1.5 text-muted-foreground">· has link</span>}
               </span>
               {e.meetingId !== null ? (
