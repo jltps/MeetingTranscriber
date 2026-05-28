@@ -1,8 +1,8 @@
-version: 0.6.0
+version: 0.6.2
 files:
-  - url: Nexus.Setup.0.6.0.exe
-    sha512: IZQopNknngG5KjI603f3e4DmiaENi2CyNEKeW0fXOmHKMqPZR5I8CU/xiiKqIGMt/GCvizU5WmSV9VHkqpwsrg==
-    size: 121416239
-path: Nexus.Setup.0.6.0.exe
-sha512: IZQopNknngG5KjI603f3e4DmiaENi2CyNEKeW0fXOmHKMqPZR5I8CU/xiiKqIGMt/GCvizU5WmSV9VHkqpwsrg==
-releaseDate: '2026-05-28T08:27:12.333Z'
+  - url: Nexus Setup 0.6.2.exe
+    sha512: o2NdE5jWnqydYpQRgpiUonx7Rig+0yBIrSvtdUH+hjG2PLAQKW74Shbs/+Iix3xJ8b0DxhTZo7/TIMN/HQq05g==
+    size: 121416623
+path: Nexus Setup 0.6.2.exe
+sha512: o2NdE5jWnqydYpQRgpiUonx7Rig+0yBIrSvtdUH+hjG2PLAQKW74Shbs/+Iix3xJ8b0DxhTZo7/TIMN/HQq05g==
+releaseDate: '2026-05-28T11:19:15.142Z'
