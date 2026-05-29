@@ -25,7 +25,7 @@ install silently — no installer wizard.
 
 ## Status
 
-Shipping at **v0.7.6**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
+Shipping at **v0.8.0**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
 largely built, the product was renamed **Scribe → Nexus** (V04), **V05 — transcription
 quality & cost — has shipped**, **V06 — templates & AI capabilities — has shipped**,
 **V062 — per-word "Me" attribution — has shipped**, **V07 — in-app auto-update
@@ -50,7 +50,13 @@ mic-priority "Me" attribution — has shipped** (the V073 1.5× zero-bleed basel
 that flipped quiet-Me-over-normal-remote words into "Speaker N" is now a 1.0×
 lenient baseline interpolating up to 4.0× under full bleed; plus 1.5 s Me-run
 hysteresis so a brief mic-energy dip between syllables doesn't fracture a
-coherent Me utterance):
+coherent Me utterance), and **V08 — Gladia live STT + post-call audio
+intelligence — has shipped** (a third, opt-in cloud transcription provider
+beside Deepgram and Whisper; Gladia's `solaria-1` streams the live transcript
+and, after the call ends, delivers speaker **diarization**, **named-entity
+recognition**, and **sentiment** — surfaced in a dedicated **Insights** view and
+woven inline into the transcript, with a seamless ~2.5 h session handoff for
+long calls):
 
 **v1 — core (shipped)**
 - Mic + Windows loopback system audio captured as a 2-channel 16 kHz PCM stream
@@ -167,6 +173,39 @@ coherent Me utterance):
   Microsoft now work on a fresh install with no local config. Also the first
   release published end-to-end by the V07 auto-update pipeline (CI workflow
   built, signed, and uploaded the installer + `latest.yml` on tag push).
+
+**v0.8.0 — Gladia live STT + post-call audio intelligence (shipped)**
+- **Third STT provider.** Gladia (`solaria-1`) joins Deepgram (default) and local
+  Whisper behind the one `TranscriptionSession` interface — selectable in
+  **Settings → Transcription**, with its own `safeStorage`-encrypted key. The
+  whole `@gladiaio/sdk` surface is confined to `main/transcription/gladia.ts` +
+  the pure `parse-gladia.ts`, so every other layer consumes the app's normalized
+  types. The SDK reconnects internally; audio uses the existing 16 kHz mono
+  pipeline unchanged (no renderer audio changes), and "Me" is still recovered by
+  the same single-channel energy heuristic.
+- **Post-call intelligence.** Diarization, named-entity recognition, and
+  sentiment arrive over the same WebSocket (`realtime_processing` +
+  `post_final_transcript`) and are finalized into a normalized **MeetingInsights**
+  on session end. The IPC layer keeps the session alive past `stop()` until the
+  insights are ready (a "Analysing…" state), reconciles "Me"/speaker against the
+  persisted transcript (the energy timeline is gone by then), and stores them in
+  an additive `meeting_insights` table (**migration v14**, plus a
+  `meetings.stt_provider` column for provider-aware cost).
+- **Both UX surfaces (§13).** A dedicated post-call **Insights** view (speaker
+  colour-coding, inline NER tags, per-utterance sentiment, a summary card) *and*
+  an inline **weave** that overlays NER underlines + a sentiment glyph onto the
+  live transcript panel. New entity/sentiment design tokens in `index.css`.
+- **Long calls + resilience.** A ~2.5 h internal handoff restarts the WS with a
+  continuous timestamp offset and merges results across sub-sessions; a boot-time
+  resume re-fetches insights interrupted by an app close (`GET /v2/live/:id`
+  fallback). Backup bundle bumped to **v3** (insights + `sttProvider`, fully
+  back-compat) and the Markdown export gains an Insights section. Provider-aware
+  usage/cost in Settings → Usage & Cost.
+- **Never default to English (§1.7).** The app's language setting maps to Gladia's
+  ISO-639-1 code (`pt-PT`→`pt`); auto / unmappable leaves languages empty for
+  auto-detect rather than guessing English. Insights are a *separate* layer —
+  they never touch notes or the enhancer (§1.5/§1.6); the key never leaves main
+  (§1.2); no audio on disk (§1.1). 324 / 324 tests passing (+8 new V08 files).
 
 **v0.7.6 — bleed-aware mic-priority "Me" attribution (shipped)**
 - **The fix.** In single-mono (cost-saver, default) capture mode, V073's
@@ -399,8 +438,10 @@ installer (removes Windows SmartScreen warnings) is named future work — flip
   **TipTap** (ProseMirror) for the notes editor.
 - **better-sqlite3** for local storage (main process only).
 - Web Audio API + **AudioWorklet** for capture/mix/resample to 16 kHz.
-- **Deepgram** streaming (cloud) or local **Whisper** for transcription, both
-  behind one `TranscriptionSession` interface.
+- **Deepgram** or **Gladia** streaming (cloud) or local **Whisper** for
+  transcription, all behind one `TranscriptionSession` interface. Gladia
+  (`solaria-1`) additionally produces post-call diarization, named entities, and
+  sentiment via the `@gladiaio/sdk`.
 - **Anthropic Claude** (Sonnet/Haiku, routed per task in `main/enhancer/models.ts`) for
   enhancement, titles, and chat — default and recommended — with a pluggable
   **OpenAI-compatible** provider (`openai` SDK) behind the `main/llm/` factory. Always
@@ -481,7 +522,7 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 |---|---|
 | `PRODUCT_SPEC.md` | What v1 was — product vision, flows, audio/transcription design. Historical reference now that v1 ships. |
 | `CLAUDE.md` | **How** the code should look and behave: the §1 invariants, stack, structure, IPC/DB/LLM rules. Auto-loaded by Claude Code. |
-| `SHIPPED_HISTORY.md` | Per-roadmap changelog (V04 → V076 + V0.7.1) — what was built post-v1 and why. Moved out of CLAUDE.md when it crossed the 40 KB soft limit; the "Already shipped beyond v1" runbook step now appends here. |
+| `SHIPPED_HISTORY.md` | Per-roadmap changelog (V04 → V08 + V0.7.1) — what was built post-v1 and why. Moved out of CLAUDE.md when it crossed the 40 KB soft limit; the "Already shipped beyond v1" runbook step now appends here. |
 | `BUILD_GUIDE.md` | The build *process* — milestone discipline for v1 and the roadmap-driven flow for extensions. |
 | `roadmap/v02/…` | Language, enhancement-prompt control, and templates (shipped). |
 | `roadmap/v03/…` | Reliability, speaker naming, quality, data, Whisper, calendar, cross-meeting (see `ROADMAP_00_INDEX.md`). |
@@ -495,6 +536,7 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 | `roadmap/V074/…` | UI polish (shipped): softer AI button accent, vertical-tab Settings, full-screen Templates workspace, customisable sidebar with hide/reorder + per-section scroll, About cleanup, typed-WIPE double-confirm for the destructive wipe-data action. |
 | `roadmap/V075/…` | Diarization & transcript fidelity (shipped): `paragraphs=true` + `paragraphIndex` on every word, paragraph-aware grouping that collapses fragmented remote-speaker runs (migration v13), `filler_words=true` with subdued rendering + short-filler attribution inheritance, opt-in stereo Best-quality capture mode (`multichannel=true` + `diarize=true` per Deepgram's combine-both guidance). |
 | `roadmap/V076/…` | Bleed-aware mic-priority "Me" attribution (shipped): zero-bleed dominance baseline dropped from V073's 1.5× to a lenient 1.0× interpolating up to a 4.0× full-bleed cap, plus 1.5 s Me-run hysteresis so brief mic-energy dips don't fracture a coherent Me utterance. Pure-function delta in `me-attribution.ts` — no migration, no IPC change, stereo path unaffected. |
+| `roadmap/V08/…` | Gladia live STT + post-call audio intelligence (shipped): a third opt-in cloud provider (`solaria-1`) behind the `TranscriptionSession` interface, producing post-call diarization, NER, and sentiment surfaced in a dedicated **Insights** view and woven inline into the transcript. Additive migration v14 (`meeting_insights` + `meetings.stt_provider`), ~2.5 h session handoff, boot-resume, backup v3, provider-aware cost. SDK confined to `gladia.ts` + `parse-gladia.ts`. |
 | `scribe/docs/CALENDAR_SETUP.md` | One-time Google / Microsoft OAuth client setup. |
 
 **Ground truth is the code, not the docs.** Where any doc disagrees with the

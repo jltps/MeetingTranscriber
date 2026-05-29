@@ -348,6 +348,48 @@ export + backup, **offline Whisper**, **calendar auto-start** (Google + Microsof
   Release → in-app updater on v0.7.0 picks it up). §1.2 holds — the secret
   reaches only the main bundle, never the renderer, and tokens stay encrypted
   via `safeStorage` in `secrets/calendar-tokens.ts`.
+- **V08 — Gladia live STT + post-call audio intelligence (shipped):** see
+  `roadmap/V08/`. Adds **Gladia** (`solaria-1`) as a third transcription
+  provider beside Deepgram (default) and local Whisper, behind the existing
+  `TranscriptionSession` interface and selectable in Settings → Transcription
+  with its own `safeStorage`-encrypted key (`gladia_key_enc` / `GLADIA_API_KEY`).
+  Implemented against the real `@gladiaio/sdk@1.0.4` (which differs from the
+  in-folder implementation guide): `startSession()` is synchronous and the SDK
+  reconnects internally, so — unlike `DeepgramSession` — there's no hand-rolled
+  backoff; diarization/NER/sentiment are `realtime_processing` WebSocket messages
+  plus a comprehensive `post_final_transcript`, so no separate REST fetch on the
+  live path (a `GET /v2/live/:id` fallback exists only for boot-resume); there's
+  no top-level `diarization` toggle (uses `utterance.speaker`); results carry no
+  confidence; and language is ISO-639-1 so the app's BCP-47 is mapped
+  (`pt-PT`→`pt`) — auto/unmappable leaves languages empty for auto-detect, never
+  defaulting to English (§1.7). The whole SDK surface is confined to
+  `main/transcription/gladia.ts` + the pure `parse-gladia.ts`; everything else
+  consumes a normalized `MeetingInsights`. Live utterance finals flow through the
+  existing `onSegment` path (segment-level energy "Me" recovery, same as
+  Deepgram); a new optional `onInsights` callback on `TranscriptionSession`
+  carries the post-call intelligence. Because insights arrive *after* `stop()`,
+  the IPC layer (`ipc/transcription.ts`) keeps the Gladia session alive in an
+  `enriching` set (marking the meeting "processing"), then reconciles
+  "Me"/speaker against the persisted transcript (the energy timeline is cleared
+  on stop) and stores a normalized blob in an additive **`meeting_insights`**
+  table (migration **v14**, with a `meetings.stt_provider` column for
+  provider-aware cost). UX lands both ways (guide §13): a dedicated post-call
+  **Insights** view (`renderer/features/insights/`) rendered from Gladia's own
+  utterances (speaker colour, inline NER tags, per-utterance sentiment, summary
+  card) *and* an inline **weave** overlaying NER underlines + a sentiment glyph
+  onto the live `TranscriptPanel` via a time-overlap + substring-match merge.
+  Long calls get a seamless ~2.5 h **session handoff** (restart the WS with a
+  cumulative timestamp offset; merge results across sub-session ids); a boot-time
+  **resume** re-fetches insights interrupted by an app close. Backup bundle
+  bumped to **v3** (per-meeting `insights` + `sttProvider`, default-null so v1/v2
+  bundles still validate) with restore + a Markdown-export Insights section;
+  Settings → Usage & Cost is provider-aware (new approximate Gladia per-minute
+  constant). New deps `@gladiaio/sdk` + its `eventemitter3` peer (`ws` already
+  present), externalized in the CJS main bundle. 324/324 tests pass (8 new V08
+  files). Holds §1.1 (no audio on disk — frames go straight to the socket; the
+  post-call result is server-side), §1.2 (key + the tokenized `wss://` URL stay
+  main-side and unlogged), §1.5/§1.6 (insights are a separate table + view,
+  never touching notes or the enhancer contract).
 
 ---
 
