@@ -25,7 +25,7 @@ install silently — no installer wizard.
 
 ## Status
 
-Shipping at **v0.7.4**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
+Shipping at **v0.7.5**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
 largely built, the product was renamed **Scribe → Nexus** (V04), **V05 — transcription
 quality & cost — has shipped**, **V06 — templates & AI capabilities — has shipped**,
 **V062 — per-word "Me" attribution — has shipped**, **V07 — in-app auto-update
@@ -36,11 +36,16 @@ header, drag-and-drop reorder, compact card density, date on agenda rows, tags
 sidebar affordance, ask-across-notes in sidebar), **V073 — transcription
 quality & bullet-proof Windows audio capture — has shipped** (bleed-aware "Me"
 attribution, mic + loopback fallback chains, sample-rate negotiation, in-meeting
-silence watchdog, adjacent-fragment auto-merge, capture-mode toggle), and **V074 —
+silence watchdog, adjacent-fragment auto-merge, capture-mode toggle), **V074 —
 UI polish — has shipped** (softer AI button accent, vertical-tab Settings,
 full-screen Templates workspace, customisable sidebar with hide/reorder and
 per-section scroll, About cleanup, typed-WIPE confirm for the destructive
-wipe-data action):
+wipe-data action), and **V075 — diarization & transcript fidelity (Deepgram
+May-2026 features) — has shipped** (`paragraphs=true` on the stream + paragraph-aware
+auto-merge that collapses fragmented remote-speaker runs, `filler_words=true`
+with subdued rendering and short-filler attribution inheritance, and an opt-in
+**Best quality** stereo capture mode that reinstates 2-channel mic/system
+diarization for bullet-proof "Me" at ~2× Deepgram cost):
 
 **v1 — core (shipped)**
 - Mic + Windows loopback system audio captured as a 2-channel 16 kHz PCM stream
@@ -157,6 +162,58 @@ wipe-data action):
   Microsoft now work on a fresh install with no local config. Also the first
   release published end-to-end by the V07 auto-update pipeline (CI workflow
   built, signed, and uploaded the installer + `latest.yml` on tag push).
+
+**v0.7.5 — diarization & transcript fidelity (shipped)**
+- **`paragraphs=true` on the Deepgram stream** (block 01). Deepgram's
+  paragraph boundaries are explicitly diarization-aware ("influenced by
+  speaker changes"), giving us a second-order boundary signal V073's
+  auto-merge was re-inventing from word-rate heuristics. Each word now
+  carries a `paragraphIndex` (`-1` sentinel when paragraphs aren't in the
+  message so the legacy / no-paragraphs path stays bit-identical to V073).
+  A new `tests/deepgram-query.test.ts` pins the **full** query-string set so
+  silent param drift — like V05's `detect_language` regression that broke
+  nova-3 streaming with HTTP 400 — surfaces immediately.
+- **Paragraph-aware grouping & remote-fragment merging** (block 02).
+  `autoMergeAdjacentSpeakers` gains a same-paragraph fast-path: two
+  adjacent remote fragments inside the same Deepgram paragraph merge
+  unconditionally (skip the V073 word-rate / 800 ms-gap / ≥3-words
+  heuristic). Long single-speaker monologues that span paragraphs emit one
+  segment with `paragraphBreaks: number[]` (character offsets) so the
+  renderer can show an internal blank-line break for readability. Additive
+  migration v13 adds `paragraph_breaks_json` to `transcript_segments`
+  (shared with block 03's `word_spans_json`). Streaming stays on Deepgram's
+  v1 diarizer — the new `diarize_model=v2` is **pre-recorded only** and
+  returns HTTP 400 on streaming; v1's the only option until Deepgram lifts
+  that restriction.
+- **Filler words capture & subdued UX** (block 03). `filler_words=true`
+  (English-only — gated on `language=en*` or auto/multilingual) preserves
+  the seven canonical fillers (`uh, um, mhmm, mm-mm, uh-uh, uh-huh,
+  nuh-uh`) Deepgram otherwise strips. Each word carries `isFiller`;
+  `attributeWords` runs a new pre-pass so short isolated fillers (≤200 ms)
+  inherit their nearest non-filler neighbour's `isMe` instead of running a
+  noisy per-word dominance check on a 100 ms "uh". `groupAttributedWords`
+  records filler offsets as `wordSpans` so the renderer wraps each filler
+  in `italic text-muted-foreground` — transcript fidelity wins without
+  fillers stealing visual focus. New KV setting
+  `transcript_include_fillers` (default **on**) + Zod-validated IPC channel;
+  Settings → Transcription gets an Include / Strip toggle. When off, fillers
+  are dropped at the parser stage (so the 5 fillers Deepgram returns even
+  without the flag are also stripped).
+- **Opt-in stereo "Best quality" capture mode** (block 04). The
+  pre-V05 2-channel capture path is reinstated behind a new
+  `captureQuality` setting. Cost-saver (default) keeps the V05 mono
+  pipeline unchanged. **Best quality** runs Deepgram's "combine both"
+  recommendation from `docs/multichannel-vs-diarization`:
+  `multichannel=true` + `diarize=true` with mic on channel 0 (always "Me"
+  — no heuristic) and system on channel 1 (Deepgram-diarized for remote
+  speakers). The worklet gains an `outputChannels: 1 | 2` processor option
+  and emits interleaved `[mic0, sys0, mic1, sys1, …]` PCM in stereo mode;
+  the rest of the legacy parser path
+  (`parse.ts:64-75` ch0 → "Me", `splitBySpeaker` → "Speaker N") is
+  unchanged. Trade-off is ~2× billed Deepgram channels — surfaced in
+  Settings → Audio with a clear cost helper, and the V073 "Listening on"
+  row auto-disables (stereo eliminates bleed at the source). Holds §1.1 —
+  stereo audio still never touches disk.
 
 **v0.7.4 — UI polish (shipped)**
 - **Softer AI button accent.** The `variant="ai"` button (Ask-across-notes,
@@ -374,6 +431,7 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 | `roadmap/V072/…` | Minor experience tweaks (shipped): launch splash, unified note-window header, sidebar ask-across-notes, drag-and-drop reorder + move-to-folder (migration v12), compact/extended card density, date on agenda rows, sidebar Tags affordance. |
 | `roadmap/V073/…` | Transcription quality & bullet-proof Windows audio capture (shipped): mic + loopback fallback chains, in-worklet sample-rate decimator, in-meeting silence watchdog, bleed-aware "Me" attribution + Auto/Headphones/Speakers toggle, adjacent-fragment auto-merge. |
 | `roadmap/V074/…` | UI polish (shipped): softer AI button accent, vertical-tab Settings, full-screen Templates workspace, customisable sidebar with hide/reorder + per-section scroll, About cleanup, typed-WIPE double-confirm for the destructive wipe-data action. |
+| `roadmap/V075/…` | Diarization & transcript fidelity (shipped): `paragraphs=true` + `paragraphIndex` on every word, paragraph-aware grouping that collapses fragmented remote-speaker runs (migration v13), `filler_words=true` with subdued rendering + short-filler attribution inheritance, opt-in stereo Best-quality capture mode (`multichannel=true` + `diarize=true` per Deepgram's combine-both guidance). |
 | `scribe/docs/CALENDAR_SETUP.md` | One-time Google / Microsoft OAuth client setup. |
 
 **Ground truth is the code, not the docs.** Where any doc disagrees with the

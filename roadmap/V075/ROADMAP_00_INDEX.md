@@ -1,9 +1,9 @@
 # ROADMAP_00_INDEX.md
 
-> **Status: planned.** Four blocks below are the V075 plan; none have
-> shipped yet. Order matters (see "Suggested order"). On ship, this header
-> moves to "shipped in v0.7.5" and each block's "What changed" becomes
-> the historical reference for future readers.
+> **Status: shipped in v0.7.5.** All four blocks below are merged to
+> `main`. See `README.md` and `CLAUDE.md` for the shipped summary; these
+> per-block files now serve as historical reference for *what* was built
+> and *why*.
 
 The **V075 backlog — Diarization & transcript fidelity (Deepgram
 May-2026 features).** Deepgram refreshed their diarization + transcript

@@ -555,6 +555,66 @@ across updates and uninstalls.
   (`nexus:settings:last-tab`, `nexus:sidebar:layout`) chosen over new
   typed IPC because they're renderer-only preferences with no main-side
   observer.
+- **V075 — Diarization & transcript fidelity (shipped; `roadmap/V075`):**
+  squeezes more diarization quality + transcript fidelity out of Deepgram's
+  May-2026 feature refresh and reinstates the pre-V05 2-channel capture as
+  an opt-in quality tier. Four blocks. (1) **`paragraphs=true` on the
+  Deepgram stream + `paragraphIndex` on every word** (`deepgram.ts`,
+  `parse.ts`). Deepgram's paragraph boundaries are explicitly
+  diarization-aware ("influenced by speaker changes") and give us a
+  second-order boundary signal the V073 auto-merge was re-inventing from
+  word-rate + 800 ms-gap heuristics. `-1` is the sentinel for "no paragraph
+  data on this message" so the legacy multichannel + no-paragraphs paths
+  behave bit-identically to V073. **Streaming is pinned to v1**: Deepgram's
+  newer `diarize_model` parameter is **pre-recorded only** and returns
+  HTTP 400 on streaming — documented in the `buildDeepgramQuery` comment
+  block. New `tests/deepgram-query.test.ts` pins the entire query string
+  against silent drift (would have caught the V05 `detect_language`
+  regression). (2) **Paragraph-aware grouping & remote-fragment merging**
+  (`me-attribution.ts`). `autoMergeAdjacentSpeakers` gains a
+  same-paragraph fast-path: two adjacent remote fragments inside the same
+  Deepgram paragraph merge **unconditionally** — Deepgram itself is
+  asserting they're one thought, a stronger signal than the V073 heuristic.
+  Long single-speaker runs spanning paragraphs emit one segment with
+  `paragraphBreaks: number[]` (character offsets) so `TranscriptPanel`
+  inserts an internal blank-line break for readability. **Additive
+  migration v13** adds two NULLable JSON columns on `transcript_segments`
+  (`paragraph_breaks_json` here; `word_spans_json` for block 03). (3)
+  **Filler words capture & subdued UX** (`parse.ts`, `me-attribution.ts`,
+  Settings → Transcription, `TranscriptPanel.tsx`). `filler_words=true` is
+  English-only per Deepgram — gated on `language=en*` or `auto` (nova-3
+  multilingual mode); preserves the seven canonical fillers (`uh, um,
+  mhmm, mm-mm, uh-uh, uh-huh, nuh-uh`) Deepgram otherwise strips. Each
+  word carries `isFiller: boolean`. New `inheritShortFillerAttribution`
+  pre-pass in `attributeWords` makes short isolated fillers (≤ 200 ms)
+  inherit their nearest non-filler neighbour's `isMe` instead of running a
+  noisy per-word dominance check on a 100 ms "uh" — runs before the V073
+  median filter so it sees a coherent run. `groupAttributedWords` records
+  filler offsets as `wordSpans` (carried across `autoMergeAdjacentSpeakers`
+  with the right offset shift); the renderer wraps each filler in
+  `italic text-muted-foreground`. New KV setting
+  `transcript_include_fillers` (default `true`) + Zod-validated IPC
+  channel; when `false`, fillers are dropped at the parser stage so the 5
+  fillers Deepgram returns even without the flag are also stripped. (4)
+  **Opt-in stereo "Best quality" capture mode**
+  (`pcm-framer.worklet.js`, `capture.ts`, `App.tsx`, Settings → Audio).
+  Reinstates the pre-V05 2-channel capture path behind a new
+  `captureQuality: 'cost-saver' | 'best-quality'` KV setting. Best quality
+  runs Deepgram's "combine both" recommendation from
+  `docs/multichannel-vs-diarization`: `multichannel=true` + `diarize=true`
+  with mic on channel 0 (always "Me" — no heuristic, just a fact) and
+  system on channel 1 (Deepgram-diarized for remote speakers). The
+  worklet gains an `outputChannels: 1 | 2` processor option and emits
+  interleaved `[mic0, sys0, mic1, sys1, …]` PCM in stereo mode. The rest
+  of the legacy parser path (`parse.ts:64-75` ch0 → "Me",
+  `splitBySpeaker` → "Speaker N") was already wired (V05 mono gated it
+  behind `channels === 1` instead of deleting it) — V075 only re-validates
+  it. Trade-off is ~2× billed Deepgram channels (the existing V05 cost
+  accounting handles the per-meeting bump automatically). The V073
+  "Listening on" row auto-disables in Best quality (stereo eliminates
+  bleed at the source). 281 tests pass (was 256). §1.1 holds — stereo
+  audio still never touches disk; §1.7 holds — the `filler_words` gate
+  preserves PT/other-language behaviour exactly.
 - **V0.7.1 — production OAuth credentials for calendar (shipped):** v0.7.0 shipped
   the V07 updater alongside calendar code (V03) that still pointed at a dev Google
   client and an empty Microsoft client, so Connect failed on fresh installs.
