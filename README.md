@@ -25,7 +25,7 @@ install silently — no installer wizard.
 
 ## Status
 
-Shipping at **v0.7.5**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
+Shipping at **v0.7.6**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
 largely built, the product was renamed **Scribe → Nexus** (V04), **V05 — transcription
 quality & cost — has shipped**, **V06 — templates & AI capabilities — has shipped**,
 **V062 — per-word "Me" attribution — has shipped**, **V07 — in-app auto-update
@@ -40,12 +40,17 @@ silence watchdog, adjacent-fragment auto-merge, capture-mode toggle), **V074 —
 UI polish — has shipped** (softer AI button accent, vertical-tab Settings,
 full-screen Templates workspace, customisable sidebar with hide/reorder and
 per-section scroll, About cleanup, typed-WIPE confirm for the destructive
-wipe-data action), and **V075 — diarization & transcript fidelity (Deepgram
+wipe-data action), **V075 — diarization & transcript fidelity (Deepgram
 May-2026 features) — has shipped** (`paragraphs=true` on the stream + paragraph-aware
 auto-merge that collapses fragmented remote-speaker runs, `filler_words=true`
 with subdued rendering and short-filler attribution inheritance, and an opt-in
 **Best quality** stereo capture mode that reinstates 2-channel mic/system
-diarization for bullet-proof "Me" at ~2× Deepgram cost):
+diarization for bullet-proof "Me" at ~2× Deepgram cost), and **V076 — bleed-aware
+mic-priority "Me" attribution — has shipped** (the V073 1.5× zero-bleed baseline
+that flipped quiet-Me-over-normal-remote words into "Speaker N" is now a 1.0×
+lenient baseline interpolating up to 4.0× under full bleed; plus 1.5 s Me-run
+hysteresis so a brief mic-energy dip between syllables doesn't fracture a
+coherent Me utterance):
 
 **v1 — core (shipped)**
 - Mic + Windows loopback system audio captured as a 2-channel 16 kHz PCM stream
@@ -162,6 +167,62 @@ diarization for bullet-proof "Me" at ~2× Deepgram cost):
   Microsoft now work on a fresh install with no local config. Also the first
   release published end-to-end by the V07 auto-update pipeline (CI workflow
   built, signed, and uploaded the installer + `latest.yml` on tag push).
+
+**v0.7.6 — bleed-aware mic-priority "Me" attribution (shipped)**
+- **The fix.** In single-mono (cost-saver, default) capture mode, V073's
+  `mic >= sys * 1.5` baseline routinely flipped a user's normal-volume
+  speech to "Speaker N" when the remote was also at normal volume
+  (mic/sys ratios 1.0–1.4 are common and sat just below the bar). The
+  1-word median filter only rescued isolated <350 ms slips; 2-word
+  clusters made it through `groupAttributedWords` /
+  `autoMergeAdjacentSpeakers`, which treat per-word `isMe` as ground
+  truth and can't recover the misattribution downstream.
+- **Bleed-interpolated dominance** (block 01). `micDominatedWindow` now
+  computes `effDominance = DOMINANCE_AT_ZERO_BLEED + (dominance −
+  DOMINANCE_AT_ZERO_BLEED) × bleed` with `DOMINANCE_AT_ZERO_BLEED = 1.0`
+  and a `dominance`-overridable full-bleed cap (default `4.0`). Numeric
+  trace: bleed=0 → 1.0× (mic just needs to match sys); bleed=0.5 → 2.5×;
+  bleed=1.0 → 4.0×. V073's formula was `dominance × (1 + 2 × bleed)`
+  which started at 1.5× and overshot to 4.5× — over-strict at the
+  zero-bleed common case and over-strict at the worst case. The new
+  formula trusts the user's intuition that audible mic input ≈ Me
+  while keeping the bleed safety net intact (the existing
+  `captureMode='speakers'` clamp still floors bleed at 0.5 → bar stays
+  ≥ 2.5×).
+- **Me-run hysteresis** (block 02). Once a word is classified Me, the
+  next `HYSTERESIS_WINDOW_MS = 1500` ms of borderline words get
+  re-evaluated with a `HYSTERESIS_DOMINANCE_FACTOR = 0.7×` multiplier
+  applied to the final `effDominance` (threaded through a new internal
+  `dominanceMultiplier` option on `MeAttributionOptions` so the
+  relaxation reaches the zero-bleed bar too — at bleed=0 the relaxed bar
+  is 0.7×). The cursor slides forward on each rescue, so a chain of
+  marginal words can be rescued from one Me anchor — but a 2-second
+  remote run breaks the chain. Runs *before* V075's filler-inherit pass
+  and V073's median filter so those passes see the hysteresis-corrected
+  sequence; the V075 ROADMAP_03 invariant (fillers inherit from a
+  coherent non-filler run) holds. The mic floor is **not** relaxed
+  (silence still loses), so true remote runs flip off Me cleanly via
+  the floor check.
+- **Tests + regression guard** (block 03). New
+  `tests/me-attribution-mic-priority.test.ts` (6 cases) pins zero-bleed
+  lenient classification, full-bleed strict rejection under speakers
+  mode, hysteresis stickiness inside the window, hysteresis time-out
+  beyond it, hysteresis non-bridging across true remote runs (mic-floor
+  gates), and the user-visible coalescence into one `"Me"` segment.
+  Existing `me-attribution-bleed.test.ts` median-filter case re-tuned —
+  the burst is concentrated on a single frame inside the borderline
+  word only, so adjacent words don't bleed-flip Me under the new 1.0×
+  baseline. Existing `me-attribution.test.ts` dominance-ratio gate
+  replaced with explicit V076-baseline cases (mic-below-sys rejects;
+  mic-at-sys accepts at zero bleed). The existing
+  `deepgram-parse.test.ts` channel-0 → "Me" cases serve as the V075
+  stereo regression guard — no new file needed.
+- **Stereo "Best quality" (V075/04) unaffected** — channel-0 → "Me"
+  is by construction in `parse.ts` and bypasses all V076 logic.
+- 288 / 288 tests passing (was 281 + 7 new/re-tuned). No DB migration,
+  no IPC contract change, no payload-shape change, no new Settings
+  surface — pure-function delta inside `me-attribution.ts`. Holds
+  §1.1 (energy timeline still scalar RMS); §1.2–§1.7 unchanged.
 
 **v0.7.5 — diarization & transcript fidelity (shipped)**
 - **`paragraphs=true` on the Deepgram stream** (block 01). Deepgram's
@@ -432,6 +493,7 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 | `roadmap/V073/…` | Transcription quality & bullet-proof Windows audio capture (shipped): mic + loopback fallback chains, in-worklet sample-rate decimator, in-meeting silence watchdog, bleed-aware "Me" attribution + Auto/Headphones/Speakers toggle, adjacent-fragment auto-merge. |
 | `roadmap/V074/…` | UI polish (shipped): softer AI button accent, vertical-tab Settings, full-screen Templates workspace, customisable sidebar with hide/reorder + per-section scroll, About cleanup, typed-WIPE double-confirm for the destructive wipe-data action. |
 | `roadmap/V075/…` | Diarization & transcript fidelity (shipped): `paragraphs=true` + `paragraphIndex` on every word, paragraph-aware grouping that collapses fragmented remote-speaker runs (migration v13), `filler_words=true` with subdued rendering + short-filler attribution inheritance, opt-in stereo Best-quality capture mode (`multichannel=true` + `diarize=true` per Deepgram's combine-both guidance). |
+| `roadmap/V076/…` | Bleed-aware mic-priority "Me" attribution (shipped): zero-bleed dominance baseline dropped from V073's 1.5× to a lenient 1.0× interpolating up to a 4.0× full-bleed cap, plus 1.5 s Me-run hysteresis so brief mic-energy dips don't fracture a coherent Me utterance. Pure-function delta in `me-attribution.ts` — no migration, no IPC change, stereo path unaffected. |
 | `scribe/docs/CALENDAR_SETUP.md` | One-time Google / Microsoft OAuth client setup. |
 
 **Ground truth is the code, not the docs.** Where any doc disagrees with the

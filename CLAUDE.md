@@ -615,6 +615,52 @@ across updates and uninstalls.
   bleed at the source). 281 tests pass (was 256). §1.1 holds — stereo
   audio still never touches disk; §1.7 holds — the `filler_words` gate
   preserves PT/other-language behaviour exactly.
+- **V076 — bleed-aware mic-priority "Me" attribution (shipped;
+  `roadmap/V076`):** pure-function delta to
+  `main/transcription/me-attribution.ts` that fixes the long-standing
+  complaint of a quiet user being scattered into `Speaker N` runs during
+  normal-volume conference calls. Three blocks. (1) **Bleed-interpolated
+  dominance.** V073's `effDominance = dominance × (1 + 2 × bleed)`
+  (1.5× → 4.5×) overshot at both ends: too strict at the zero-bleed
+  common case (headphones / clean mic), and over-strict at the worst
+  case. V076 reorients to `effDominance = DOMINANCE_AT_ZERO_BLEED +
+  (dominance − DOMINANCE_AT_ZERO_BLEED) × bleed` with
+  `DOMINANCE_AT_ZERO_BLEED = 1.0` and a `dominance`-overridable full-
+  bleed cap (default `DOMINANCE_AT_FULL_BLEED_DEFAULT = 4.0`). Numeric
+  trace: bleed=0 → 1.0×; bleed=0.5 → 2.5×; bleed=1.0 → 4.0×. The
+  `applyCaptureMode` clamps stay V073's ('headphones' → 0, 'speakers' →
+  ≥ 0.5, 'auto' → observed) so the speakers regime still enforces a
+  ≥ 2.5× bar. The mic-floor `BLEED_FLOOR_GAIN = 1.0` is unchanged.
+  (2) **Me-run hysteresis.** Once a word is classified Me, the next
+  `HYSTERESIS_WINDOW_MS = 1500` ms of borderline non-Me words get
+  re-evaluated with a `HYSTERESIS_DOMINANCE_FACTOR = 0.7×` multiplier
+  applied to the **final** `effDominance` — threaded through a new
+  internal `dominanceMultiplier` option on `MeAttributionOptions` so
+  the relaxation reaches the zero-bleed bar (1.0 × 0.7 = 0.7×) and
+  not just the full-bleed cap. The cursor slides forward on each
+  rescue (a chain of marginal words can be rescued from one Me anchor)
+  but a 2-second remote run breaks the chain. Runs **before**
+  `inheritShortFillerAttribution` and `medianFilterIsMe` so V075
+  ROADMAP_03 + V073 invariants hold; the mic-floor is **not** relaxed
+  so silence still wins and true remote runs flip off Me via the
+  floor check. (3) **Tests + stereo regression guard.** New
+  `tests/me-attribution-mic-priority.test.ts` (6 cases) pins zero-bleed
+  lenient classification, full-bleed strict rejection under speakers
+  mode, hysteresis stickiness, hysteresis time-out, hysteresis non-
+  bridging across true remote, and the end-to-end coalescence into one
+  Me segment. Existing `me-attribution-bleed.test.ts` median-filter
+  case re-tuned — the burst is concentrated on a single frame inside
+  the borderline word only so neighbours don't bleed-flip Me under the
+  new 1.0× baseline. Existing `me-attribution.test.ts` dominance-ratio
+  gate replaced with explicit V076-baseline cases (mic-below-sys
+  rejects at zero bleed; mic-at-sys accepts at zero bleed). The
+  existing `deepgram-parse.test.ts` channel-0 → "Me" cases serve as
+  the V075 stereo regression guard. 288 / 288 passing (was 281; +7
+  net). **Stereo "Best quality" (V075/04) bypasses all V076 logic** —
+  `parse.ts:116-127` maps channel-0 → "Me" by construction. No DB
+  migration, no IPC contract change, no payload-shape change, no new
+  Settings surface. Holds §1.1 (energy timeline still scalar RMS
+  only); §1.2–§1.7 unchanged.
 - **V0.7.1 — production OAuth credentials for calendar (shipped):** v0.7.0 shipped
   the V07 updater alongside calendar code (V03) that still pointed at a dev Google
   client and an empty Microsoft client, so Connect failed on fresh installs.

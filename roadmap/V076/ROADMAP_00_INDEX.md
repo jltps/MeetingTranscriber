@@ -1,9 +1,10 @@
 # ROADMAP_00_INDEX.md
 
-> **Status: planned.** Three blocks below scoped to ship as a single
-> commit to `main` (one logic file + one new test file + one regression
-> test). No DB migration, no IPC contract change, no payload-shape
-> change.
+> **Status: shipped in v0.7.6.** All three blocks below are merged to
+> `main` in one `feat(transcription)` commit. See `README.md` and
+> `CLAUDE.md` for the shipped summary; these per-block files now serve
+> as historical reference for *what* was built and *why*. No DB
+> migration, no IPC contract change, no payload-shape change.
 
 The **V076 backlog — Bleed-aware mic-priority "Me" attribution.** In
 single-mono ("Cost-saver", default) capture mode, the user's own speech
