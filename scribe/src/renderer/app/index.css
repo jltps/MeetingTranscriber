@@ -48,6 +48,8 @@
   --sentiment-positive: #047857;
   --sentiment-neutral: #6b7280;
   --sentiment-negative: #b91c1c;
+  --sentiment-mixed: #b45309;
+  --sentiment-unknown: #6b7280;
   --note-user: #171717;
   --note-ai: #6b7280;
   --source-link: #6b7280;
@@ -88,6 +90,8 @@
     --sentiment-positive: #34d399;
     --sentiment-neutral: #9ca3af;
     --sentiment-negative: #f87171;
+    --sentiment-mixed: #fbbf24;
+    --sentiment-unknown: #9ca3af;
     --note-user: #e5e5e5;
     --note-ai: #8b97a6;
     --source-link: #9ca3af;
@@ -129,6 +133,8 @@
   --color-sentiment-positive: var(--sentiment-positive);
   --color-sentiment-neutral: var(--sentiment-neutral);
   --color-sentiment-negative: var(--sentiment-negative);
+  --color-sentiment-mixed: var(--sentiment-mixed);
+  --color-sentiment-unknown: var(--sentiment-unknown);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

@@ -20,7 +20,8 @@ const EMPTY_SUMMARY: MeetingInsightsSummary = {
   speakers: [],
   entityCounts: [],
   topEntities: [],
-  sentiment: { positive: 0, neutral: 0, negative: 0 },
+  sentiment: {},
+  emotions: {},
 };
 
 function parseSessionIds(json: string | null): string[] {

@@ -34,6 +34,12 @@ export type TranscriptSegment = {
    * non-overlapping. Absent when the segment has no fillers.
    */
   wordSpans?: { start: number; end: number; isFiller: boolean }[];
+  /**
+   * V081 — which recording session produced this segment (1-based). Recording a
+   * second time into a meeting appends a new session; the renderer shows a
+   * "Session N" divider where this increments. Absent/1 on single-session notes.
+   */
+  sessionSeq?: number;
 };
 
 /** A persisted transcript segment (carries its DB id, for source linking §8.4). */
@@ -72,10 +78,14 @@ export type InsightEntity = {
   end?: number;
 };
 
-/** Per-utterance sentiment (V08). */
+/** The five sentiment classes Gladia can return (V081). */
+export type SentimentLabel = 'positive' | 'negative' | 'neutral' | 'mixed' | 'unknown';
+
+/** Per-utterance sentiment (V08; V081 widened to all 5 Gladia sentiments). */
 export type InsightSentiment = {
-  label: 'positive' | 'negative' | 'neutral';
-  /** Gladia emotion label when present (e.g. 'happiness', 'anger'). */
+  label: SentimentLabel;
+  /** Gladia emotion label when present — one of the 25 supported emotions
+   * (e.g. 'amusement', 'anger', 'positive_surprise'); free string. */
   emotion?: string;
 };
 
@@ -95,13 +105,16 @@ export type InsightUtterance = {
   sentiment?: InsightSentiment;
 };
 
-/** Aggregate rollups for the Insights summary card (V08). */
+/** Aggregate rollups for the Insights summary (V08; V081 widened sentiment +
+ * added emotions). `sentiment`/`emotions` are utterance counts keyed by label. */
 export type MeetingInsightsSummary = {
   speakers: { label: string; talkMs: number; utteranceCount: number }[];
   entityCounts: { kind: string; count: number }[];
   topEntities: { text: string; kind: string; count: number }[];
-  /** Utterance counts by sentiment label. */
-  sentiment: { positive: number; neutral: number; negative: number };
+  /** Utterance counts keyed by sentiment label (positive/negative/neutral/mixed/unknown). */
+  sentiment: Record<string, number>;
+  /** Utterance counts keyed by emotion label. */
+  emotions: Record<string, number>;
 };
 
 /**

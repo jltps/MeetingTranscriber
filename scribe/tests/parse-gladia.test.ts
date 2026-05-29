@@ -79,6 +79,20 @@ describe('mapSentiment', () => {
   it('returns undefined for no results', () => {
     expect(mapSentiment([])).toBeUndefined();
   });
+
+  it('preserves the mixed sentiment + its emotion (V081)', () => {
+    const results: LiveV2SentimentAnalysisResult[] = [
+      { sentiment: 'mixed', emotion: 'confusion', text: '', start: 0, end: 0, channel: 0 },
+    ];
+    expect(mapSentiment(results)).toEqual({ label: 'mixed', emotion: 'confusion' });
+  });
+
+  it('maps unrecognized sentiment to "unknown" rather than neutral (V081)', () => {
+    const results: LiveV2SentimentAnalysisResult[] = [
+      { sentiment: 'frobnicate', emotion: 'triumph', text: '', start: 0, end: 0, channel: 0 },
+    ];
+    expect(mapSentiment(results)).toEqual({ label: 'unknown', emotion: 'triumph' });
+  });
 });
 
 describe('normalizeGladia', () => {

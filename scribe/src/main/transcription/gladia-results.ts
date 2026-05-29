@@ -75,12 +75,17 @@ function mapEntities(text: string, results: z.infer<typeof RestEntitySchema>[]):
 function mapSentiment(results: z.infer<typeof RestSentimentSchema>[]): InsightSentiment | undefined {
   if (results.length === 0) return undefined;
   const first = results[0];
-  const s = (first.sentiment ?? 'neutral').toLowerCase();
+  const s = (first.sentiment ?? 'unknown').toLowerCase().trim();
+  // V081: preserve all 5 Gladia sentiments (was collapsed to 3).
   const label: InsightSentiment['label'] = s.startsWith('pos')
     ? 'positive'
     : s.startsWith('neg')
       ? 'negative'
-      : 'neutral';
+      : s.startsWith('neu')
+        ? 'neutral'
+        : s.startsWith('mix')
+          ? 'mixed'
+          : 'unknown';
   const sentiment: InsightSentiment = { label };
   if (first.emotion) sentiment.emotion = first.emotion;
   return sentiment;

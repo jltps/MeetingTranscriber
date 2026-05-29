@@ -186,6 +186,8 @@ export const TranscriptSegmentSchema = z.object({
       }),
     )
     .optional(),
+  // V081 — recording-session index (1-based); renderer shows a "Session N" divider.
+  sessionSeq: z.number().int().positive().optional(),
 }) satisfies z.ZodType<TranscriptSegment>;
 
 export const TranscriptionStatusSchema = z.object({
@@ -293,7 +295,7 @@ const InsightEntitySchema = z.object({
 });
 
 const InsightSentimentSchema = z.object({
-  label: z.enum(['positive', 'negative', 'neutral']),
+  label: z.enum(['positive', 'negative', 'neutral', 'mixed', 'unknown']),
   emotion: z.string().optional(),
 });
 
@@ -318,11 +320,9 @@ const MeetingInsightsSummarySchema = z.object({
   topEntities: z.array(
     z.object({ text: z.string(), kind: z.string(), count: z.number().int() }),
   ),
-  sentiment: z.object({
-    positive: z.number().int(),
-    neutral: z.number().int(),
-    negative: z.number().int(),
-  }),
+  // V081: counts keyed by sentiment label (5 values) / emotion label (free).
+  sentiment: z.record(z.string(), z.number().int()),
+  emotions: z.record(z.string(), z.number().int()),
 });
 
 /** The normalized post-call intelligence for a meeting (V08). */
@@ -583,6 +583,8 @@ const BackupSegmentSchema = z.object({
   text: z.string(),
   startMs: z.number().int(),
   endMs: z.number().int(),
+  // V081 — recording-session index; default keeps pre-V081 bundles valid.
+  sessionSeq: z.number().int().positive().default(1),
 });
 
 const BackupSpeakerNameSchema = z.object({

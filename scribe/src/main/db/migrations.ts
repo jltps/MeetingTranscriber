@@ -501,6 +501,18 @@ Distinguish clearly between what the prospect actually said and what remains unk
       ALTER TABLE meetings ADD COLUMN stt_provider TEXT;
     `,
   },
+  {
+    version: 15,
+    name: 'transcript-session-seq',
+    // V081 — recording a 2nd time into a meeting appends a new "session". Each
+    // segment records which recording session produced it so the renderer can
+    // show a "Session N" divider and the IPC layer can offset new sessions past
+    // the existing transcript. Additive, defaults 1 so existing rows read as the
+    // first session.
+    sql: `
+      ALTER TABLE transcript_segments ADD COLUMN session_seq INTEGER NOT NULL DEFAULT 1;
+    `,
+  },
 ];
 
 export function runMigrations(db: Database): void {

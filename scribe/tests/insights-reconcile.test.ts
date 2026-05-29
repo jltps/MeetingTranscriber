@@ -60,7 +60,8 @@ describe('reconcileInsights', () => {
       },
     ]);
     const out = reconcileInsights(ins, segments);
-    expect(out.summary.sentiment).toEqual({ positive: 1, neutral: 1, negative: 0 });
+    // V081: sentiment is now a record keyed only by labels that occurred.
+    expect(out.summary.sentiment).toEqual({ positive: 1, neutral: 1 });
     expect(out.summary.entityCounts).toEqual([{ kind: 'org', count: 2 }]);
     expect(out.summary.topEntities[0]).toEqual({ text: 'Acme', kind: 'org', count: 2 });
     expect(out.summary.speakers.map((s) => s.label).sort()).toEqual(['Me', 'Speaker 1']);

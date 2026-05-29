@@ -15,7 +15,13 @@ import {
 } from '../transcription/me-attribution';
 import { getAudioCaptureMode, getTranscriptionProvider } from '../db/settings';
 import type { TranscriptionProvider } from '../db/settings';
-import { getTranscript, insertTranscriptSegment, saveDeepgramUsage } from '../db/meetings';
+import {
+  getMaxSegmentEndMs,
+  getMaxSessionSeq,
+  getTranscript,
+  insertTranscriptSegment,
+  saveDeepgramUsage,
+} from '../db/meetings';
 import { saveInsights, setInsightsError, setInsightsProcessing } from '../db/insights';
 import { logger } from '../logger';
 
@@ -63,6 +69,16 @@ let captureMode: ReturnType<typeof getAudioCaptureMode> = 'auto';
 /** Provider snapshot for the current session (V08) — selects the stop/usage path. */
 let activeProvider: TranscriptionProvider = 'deepgram';
 /**
+ * V081 — multi-session append. When recording into a meeting that already has a
+ * transcript, the new session's provider-relative timestamps (which reset to ~0)
+ * are offset past the existing transcript, and its segments are tagged with the
+ * next session index. Snapshotted at start; applied AFTER attribution (which uses
+ * the session-relative energy timeline) when persisting/emitting + when offsetting
+ * Gladia's post-call insights.
+ */
+let sessionBaseMs = 0;
+let sessionSeq = 1;
+/**
  * Gladia sessions kept alive after stop() while they post-process insights
  * (V08). The session removes itself once `onInsights` finalizes; dispose drains
  * any stragglers so app close leaves no dangling sockets.
@@ -73,6 +89,19 @@ const enriching = new Set<TranscriptionSession>();
 function attributeSpeaker(seg: TranscriptSegment): TranscriptSegment {
   if (audioChannels !== 1) return seg;
   return attributeMe(seg, energyTimeline, { captureMode });
+}
+
+/**
+ * V081: shift a (session-relative) segment past the existing transcript and tag
+ * its recording session. Applied AFTER attribution (which needs session-relative
+ * times against the energy timeline). No-op offset for the first session.
+ */
+function applySessionOffset(seg: TranscriptSegment): TranscriptSegment {
+  const shifted =
+    sessionBaseMs > 0
+      ? { ...seg, startMs: seg.startMs + sessionBaseMs, endMs: seg.endMs + sessionBaseMs }
+      : seg;
+  return { ...shifted, sessionSeq };
 }
 
 // ─── In-meeting silence watchdog (V073 block 01.5) ──────────────────────────
@@ -137,10 +166,22 @@ function finalizeInsights(
   forTarget: WebContents | null,
   insights: ProviderInsights,
   ownerSession: TranscriptionSession,
+  baseMs: number,
 ): void {
   try {
     const segments = getTranscript(forMeetingId);
-    const normalized = reconcileInsights(insights, segments);
+    // V081: shift the session-relative Gladia times by the append offset so they
+    // overlap the (offset) persisted transcript during reconciliation.
+    const shifted: ProviderInsights = baseMs
+      ? {
+          utterances: insights.utterances.map((u) => ({
+            ...u,
+            startMs: u.startMs + baseMs,
+            endMs: u.endMs + baseMs,
+          })),
+        }
+      : insights;
+    const normalized = reconcileInsights(shifted, segments);
     const ids = ownerSession.sessionIds?.() ?? [];
     saveInsights(forMeetingId, normalized, ids);
     forTarget?.send(IPC.transcriptionInsightsStatus, { meetingId: forMeetingId, status: 'ready' });
@@ -170,6 +211,9 @@ export function registerTranscriptionIpc(): void {
     energyTimeline = [];
     captureMode = getAudioCaptureMode();
     activeProvider = getTranscriptionProvider();
+    // V081: append a new session past any existing transcript for this meeting.
+    sessionBaseMs = getMaxSegmentEndMs(opts.meetingId);
+    sessionSeq = getMaxSessionSeq(opts.meetingId) + 1;
     resetWatchdog();
     if (session) {
       await session.stop();
@@ -180,13 +224,14 @@ export function registerTranscriptionIpc(): void {
     // later, so bind this session's values here.
     const enrichMeetingId = opts.meetingId;
     const enrichTarget = event.sender;
+    const enrichBaseMs = sessionBaseMs; // V081: this session's append offset
     const next = createTranscriptionSession({
       onSegment: (seg) => {
         // Single-channel mode: recover "Me" from the mic-energy signal before persist.
         // In single-channel mode this path now only sees interim segments — Deepgram
         // routes single-channel finals to onWords (V062 ROADMAP_01).
-        const out = attributeSpeaker(seg);
-        if (out.isFinal && meetingId !== null) insertTranscriptSegment(meetingId, out);
+        const out = applySessionOffset(attributeSpeaker(seg));
+        if (out.isFinal && meetingId !== null) insertTranscriptSegment(meetingId, out, sessionSeq);
         target?.send(IPC.transcriptionSegment, out);
       },
       onWords: (words) => {
@@ -199,8 +244,9 @@ export function registerTranscriptionIpc(): void {
         const attributed = attributeWords(words, energyTimeline, { captureMode });
         const segs = groupAttributedWords(attributed);
         for (const seg of segs) {
-          if (meetingId !== null) insertTranscriptSegment(meetingId, seg);
-          target?.send(IPC.transcriptionSegment, seg);
+          const out = applySessionOffset(seg);
+          if (meetingId !== null) insertTranscriptSegment(meetingId, out, sessionSeq);
+          target?.send(IPC.transcriptionSegment, out);
         }
       },
       onStatus: (status) => target?.send(IPC.transcriptionStatus, status),
@@ -212,7 +258,7 @@ export function registerTranscriptionIpc(): void {
       // Reconcile + persist against the captured meeting (the energy timeline is
       // gone by then). Only wired for providers that emit it (Gladia).
       onInsights: (insights) => {
-        finalizeInsights(enrichMeetingId, enrichTarget, insights, next);
+        finalizeInsights(enrichMeetingId, enrichTarget, insights, next, enrichBaseMs);
       },
     });
     await next.start({ sampleRate: opts.sampleRate, channels: opts.channels });

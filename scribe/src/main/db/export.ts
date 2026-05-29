@@ -35,6 +35,7 @@ type SegmentRow = {
   text: string;
   start_ms: number;
   end_ms: number;
+  session_seq: number;
 };
 
 type SpeakerRow = { raw_label: string; display_name: string };
@@ -66,7 +67,7 @@ function rowToMeeting(row: MeetingRow, meetingId: number): BackupMeeting {
   const db = getDb();
   const segments = db
     .prepare(
-      `SELECT id, channel, speaker_label, text, start_ms, end_ms
+      `SELECT id, channel, speaker_label, text, start_ms, end_ms, session_seq
        FROM transcript_segments WHERE meeting_id = ? ORDER BY start_ms`,
     )
     .all(meetingId) as SegmentRow[];
@@ -105,6 +106,7 @@ function rowToMeeting(row: MeetingRow, meetingId: number): BackupMeeting {
       text: s.text,
       startMs: s.start_ms,
       endMs: s.end_ms,
+      sessionSeq: s.session_seq ?? 1,
     })),
     speakerNames: speakerNames.map((sn) => ({
       rawLabel: sn.raw_label,
@@ -237,8 +239,8 @@ export function restoreFromBackup(bundle: BackupBundle): { meetingCount: number 
     );
     const insertSegment = db.prepare(
       `INSERT INTO transcript_segments
-         (id, meeting_id, channel, speaker_label, text, start_ms, end_ms)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         (id, meeting_id, channel, speaker_label, text, start_ms, end_ms, session_seq)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const insertSpeaker = db.prepare(
       `INSERT INTO speaker_names (meeting_id, raw_label, display_name) VALUES (?, ?, ?)`,
@@ -257,7 +259,7 @@ export function restoreFromBackup(bundle: BackupBundle): { meetingCount: number 
       // not preserved (the live sessions are long gone).
       if (m.insights && m.insights.status === 'ready') saveInsights(m.id, m.insights, []);
       for (const seg of m.segments) {
-        insertSegment.run(seg.id, m.id, seg.channel, seg.speakerLabel, seg.text, seg.startMs, seg.endMs);
+        insertSegment.run(seg.id, m.id, seg.channel, seg.speakerLabel, seg.text, seg.startMs, seg.endMs, seg.sessionSeq);
       }
       for (const sn of m.speakerNames) {
         insertSpeaker.run(m.id, sn.rawLabel, sn.displayName);

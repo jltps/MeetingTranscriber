@@ -39,6 +39,7 @@ const MIC_SYSTEM_DEFAULT = '__system__';
 // no main-side observer, so we keep it out of the IPC contract).
 const TABS = [
   { id: 'general', label: 'General' },
+  { id: 'apiKeys', label: 'API Keys' },
   { id: 'ai', label: 'AI' },
   { id: 'audio', label: 'Audio' },
   { id: 'transcription', label: 'Transcription' },
@@ -286,18 +287,21 @@ export function SettingsModal({
     </>
   );
 
+  const renderApiKeys = (): ReactNode => (
+    <section className="space-y-3">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">API keys</h3>
+      <KeyRow label="Gladia (recommended)" provider="gladia" isSet={settings.gladiaKeySet} onSaved={onChanged} />
+      <KeyRow label="Deepgram" provider="deepgram" isSet={settings.deepgramKeySet} onSaved={onChanged} />
+      <KeyRow label="Anthropic" provider="anthropic" isSet={settings.anthropicKeySet} onSaved={onChanged} />
+      <p className="text-[11px] text-muted-foreground">
+        Gladia and Deepgram power transcription; Anthropic (Claude) powers note enhancement and
+        chat. Keys are encrypted with your OS secure storage and never leave this machine.
+      </p>
+    </section>
+  );
+
   const renderAi = (): ReactNode => (
     <>
-      <section className="space-y-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">API keys</h3>
-        <KeyRow label="Deepgram" provider="deepgram" isSet={settings.deepgramKeySet} onSaved={onChanged} />
-        <KeyRow label="Gladia" provider="gladia" isSet={settings.gladiaKeySet} onSaved={onChanged} />
-        <KeyRow label="Anthropic" provider="anthropic" isSet={settings.anthropicKeySet} onSaved={onChanged} />
-        <p className="text-[11px] text-muted-foreground">
-          Keys are encrypted with your OS secure storage and never leave this machine.
-        </p>
-      </section>
-
       <section className="space-y-3">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           AI provider
@@ -419,6 +423,7 @@ export function SettingsModal({
           variant="outline"
           size="sm"
           value={settings.captureQuality}
+          disabled={provider !== 'deepgram'}
           onValueChange={(v) => {
             if (v) void window.api.settings
               .setCaptureQuality(v as 'cost-saver' | 'best-quality')
@@ -429,11 +434,9 @@ export function SettingsModal({
           <ToggleGroupItem value="best-quality">Best quality (~2× cost)</ToggleGroupItem>
         </ToggleGroup>
         <p className="text-[11px] text-muted-foreground">
-          Cost-saver downmixes mic + system into one mono channel and recovers
-          &ldquo;Me&rdquo; from a bleed-aware heuristic. Best quality keeps mic and system
-          as two separate Deepgram channels so &ldquo;Me&rdquo; is always correct (mic =
-          channel 0); the trade-off is roughly double the Deepgram bill. Changes apply on
-          the next recording.
+          {provider !== 'deepgram'
+            ? 'Available with Deepgram only. Gladia and local Whisper use their own capture path.'
+            : 'Cost-saver downmixes mic + system into one mono channel and recovers “Me” from a bleed-aware heuristic. Best quality keeps mic and system as two separate Deepgram channels so “Me” is always correct (mic = channel 0); the trade-off is roughly double the Deepgram bill. Changes apply on the next recording.'}
         </p>
       </div>
       <div className="space-y-1.5">
@@ -443,7 +446,7 @@ export function SettingsModal({
           variant="outline"
           size="sm"
           value={settings.audioCaptureMode}
-          disabled={settings.captureQuality === 'best-quality'}
+          disabled={provider !== 'deepgram' || settings.captureQuality === 'best-quality'}
           onValueChange={(v) => {
             if (v) void window.api.settings
               .setAudioCaptureMode(v as 'auto' | 'headphones' | 'speakers')
@@ -455,7 +458,9 @@ export function SettingsModal({
           <ToggleGroupItem value="speakers">Speakers</ToggleGroupItem>
         </ToggleGroup>
         <p className="text-[11px] text-muted-foreground">
-          {settings.captureQuality === 'best-quality'
+          {provider !== 'deepgram'
+            ? 'Available with Deepgram only. The “Me” bleed heuristic runs on Deepgram’s mono capture path.'
+            : settings.captureQuality === 'best-quality'
             ? 'Not used in Best quality — stereo capture eliminates bleed at the source, so no heuristic is needed.'
             : 'Auto-detect measures whether your speakers are leaking into the mic and tightens the “Me” threshold accordingly. Pick “Headphones” if remote speakers ever get mis-tagged as you, or “Speakers” if your own voice keeps getting split across speakers.'}
         </p>
@@ -475,15 +480,38 @@ export function SettingsModal({
         <ToggleGroup
           type="single"
           variant="outline"
-          size="sm"
           value={provider}
+          className="grid w-full grid-cols-3 gap-2"
           onValueChange={(v) => {
             if (v) handleSetProvider(v as 'deepgram' | 'whisper' | 'gladia');
           }}
         >
-          <ToggleGroupItem value="deepgram">Deepgram (cloud)</ToggleGroupItem>
-          <ToggleGroupItem value="gladia">Gladia (cloud)</ToggleGroupItem>
-          <ToggleGroupItem value="whisper">Local (Whisper)</ToggleGroupItem>
+          <ToggleGroupItem
+            value="gladia"
+            className="h-auto flex-col items-start gap-0.5 px-3 py-2 text-left"
+          >
+            <span className="flex items-center gap-1.5 text-sm font-medium">
+              Gladia
+              <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                Recommended
+              </span>
+            </span>
+            <span className="text-[11px] text-muted-foreground">Cloud · adds insights</span>
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="deepgram"
+            className="h-auto flex-col items-start gap-0.5 px-3 py-2 text-left"
+          >
+            <span className="text-sm font-medium">Deepgram</span>
+            <span className="text-[11px] text-muted-foreground">Cloud</span>
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="whisper"
+            className="h-auto flex-col items-start gap-0.5 px-3 py-2 text-left"
+          >
+            <span className="text-sm font-medium">Local</span>
+            <span className="text-[11px] text-muted-foreground">Whisper · offline</span>
+          </ToggleGroupItem>
         </ToggleGroup>
         {provider === 'deepgram' && (
           <p className="text-[11px] text-muted-foreground">
@@ -503,29 +531,6 @@ export function SettingsModal({
             your machine. Latency ≈ 5 s per chunk.
           </p>
         )}
-      </div>
-
-      {/* V075 ROADMAP_03 — filler-words capture */}
-      <div className="space-y-1.5">
-        <label className="text-sm text-muted-foreground">Filler words</label>
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          value={settings.transcriptIncludeFillers ? 'on' : 'off'}
-          onValueChange={(v) => {
-            if (v) void window.api.settings
-              .setTranscriptIncludeFillers(v === 'on')
-              .then(onChanged);
-          }}
-        >
-          <ToggleGroupItem value="on">Include (uh, um, mm…)</ToggleGroupItem>
-          <ToggleGroupItem value="off">Strip</ToggleGroupItem>
-        </ToggleGroup>
-        <p className="text-[11px] text-muted-foreground">
-          When on, the transcript preserves the seven canonical fillers and renders them
-          subdued. English-only on the Deepgram side. Changes apply on the next recording.
-        </p>
       </div>
 
       {/* Local Whisper model manager */}
@@ -785,6 +790,7 @@ export function SettingsModal({
   const renderTab = (id: TabId): ReactNode => {
     switch (id) {
       case 'general': return renderGeneral();
+      case 'apiKeys': return renderApiKeys();
       case 'ai': return renderAi();
       case 'audio': return renderAudio();
       case 'transcription': return renderTranscription();

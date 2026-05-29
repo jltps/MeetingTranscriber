@@ -24,7 +24,7 @@ function insights(utterances: MeetingInsights['utterances']): MeetingInsights {
     provider: 'gladia',
     status: 'ready',
     utterances,
-    summary: { speakers: [], entityCounts: [], topEntities: [], sentiment: { positive: 0, neutral: 0, negative: 0 } },
+    summary: { speakers: [], entityCounts: [], topEntities: [], sentiment: {}, emotions: {} },
   };
 }
 

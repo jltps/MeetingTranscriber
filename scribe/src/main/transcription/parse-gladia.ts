@@ -77,12 +77,18 @@ export function recordSentiment(
   acc.sentiment.set(id, existing.concat(data.results ?? []));
 }
 
-/** Map a Gladia sentiment string onto our 3-way label. */
+/**
+ * Map a Gladia sentiment string onto our label (V081: all 5 Gladia sentiments —
+ * positive, negative, neutral, mixed, unknown — instead of collapsing to 3).
+ * Unrecognized strings fall back to 'unknown' rather than silently 'neutral'.
+ */
 function toSentimentLabel(raw: string): InsightSentiment['label'] {
-  const s = raw.toLowerCase();
+  const s = raw.toLowerCase().trim();
   if (s.startsWith('pos')) return 'positive';
   if (s.startsWith('neg')) return 'negative';
-  return 'neutral';
+  if (s.startsWith('neu')) return 'neutral';
+  if (s.startsWith('mix')) return 'mixed';
+  return 'unknown';
 }
 
 /**
@@ -116,17 +122,20 @@ export function mapSentiment(
   results: readonly LiveV2SentimentAnalysisResult[],
 ): InsightSentiment | undefined {
   if (!results || results.length === 0) return undefined;
-  const counts: Record<InsightSentiment['label'], number> = { positive: 0, negative: 0, neutral: 0 };
-  for (const r of results) counts[toSentimentLabel(r.sentiment ?? 'neutral')]++;
-  let label: InsightSentiment['label'] = 'neutral';
+  const counts = new Map<InsightSentiment['label'], number>();
+  for (const r of results) {
+    const l = toSentimentLabel(r.sentiment ?? 'unknown');
+    counts.set(l, (counts.get(l) ?? 0) + 1);
+  }
+  let label: InsightSentiment['label'] = 'unknown';
   let best = -1;
-  for (const key of ['positive', 'negative', 'neutral'] as const) {
-    if (counts[key] > best) {
-      best = counts[key];
-      label = key;
+  for (const [l, c] of counts) {
+    if (c > best) {
+      best = c;
+      label = l;
     }
   }
-  const match = results.find((r) => toSentimentLabel(r.sentiment ?? 'neutral') === label);
+  const match = results.find((r) => toSentimentLabel(r.sentiment ?? 'unknown') === label);
   const sentiment: InsightSentiment = { label };
   if (match?.emotion) sentiment.emotion = match.emotion;
   return sentiment;

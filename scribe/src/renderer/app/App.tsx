@@ -10,7 +10,6 @@ import { NotesEditor } from '../features/notes/NotesEditor';
 import { EnhancedPane } from '../features/notes/EnhancedPane';
 import { NoteWindowHeader } from '../features/notes/NoteWindowHeader';
 import { useInsights } from '../features/insights/use-insights';
-import { InsightsView } from '../features/insights/InsightsView';
 import { mergeInsightsIntoSegments } from '../features/insights/insights-merge';
 import { useSettings } from '../features/settings/use-settings';
 import { SettingsModal } from '../features/settings/SettingsModal';
@@ -44,15 +43,6 @@ import { Mic, NotebookPen, PanelRightClose, PanelRightOpen, Sparkles, Square } f
 import { EmptyState } from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-
-const NO_TEMPLATE = 'none';
 
 function parseEnhanced(json: string | null): EnhancedNotes | null {
   if (!json) return null;
@@ -96,7 +86,7 @@ export function App() {
 
   const [enhanced, setEnhanced] = useState<EnhancedNotes | null>(null);
   const [degraded, setDegraded] = useState(false);
-  const [view, setView] = useState<'original' | 'enhanced' | 'insights'>('original');
+  const [view, setView] = useState<'original' | 'enhanced'>('original');
   // V072 block 02: the note window's primary surface — notes (Original/Enhanced)
   // or per-meeting chat. Chat used to live as a tab in the right column; it now
   // takes over the notes pane when active.
@@ -111,6 +101,8 @@ export function App() {
   // V08 — surface a failed start (e.g. selected provider has no key) instead of
   // the previous silent rollback.
   const [startError, setStartError] = useState<string | null>(null);
+  // V081 — friendly notice shown while appending to an existing transcript.
+  const [appendNotice, setAppendNotice] = useState<string | null>(null);
 
   const [showSettings, setShowSettings] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
@@ -264,18 +256,30 @@ export function App() {
 
   // The notes pane (enhanced or raw), reused by the wide split, the wide full-width
   // (transcript hidden), and the narrow layout so the three never diverge.
+  // V081: jump the live transcript to an Insights occurrence (reuses the
+  // source-link highlight). Maps a Gladia time to the overlapping persisted
+  // segment; in narrow layout also flips to the transcript tab.
+  const seekTranscript = (startMs: number): void => {
+    const seg =
+      loadedSegments.find((s) => startMs >= s.startMs && startMs < s.endMs) ??
+      loadedSegments.find((s) => Math.abs(s.startMs - startMs) <= 1500);
+    if (seg) setHighlight({ ids: [seg.id], nonce: Date.now() });
+    if (layoutMode !== 'wide') setMainTab('transcript');
+  };
+
   const renderNotes = () => {
     if (!detail) return null;
-    if (view === 'insights') {
-      return <InsightsView insights={insightsCtl.insights} speakerNames={speakerNames} />;
-    }
-    return view === 'enhanced' && enhanced ? (
+    const insightsAvailable = insightsCtl.insights !== null;
+    return view === 'enhanced' && (enhanced || insightsAvailable) ? (
       <EnhancedPane
         key={`enhanced-${detail.id}`}
         meetingId={detail.id}
         notes={enhanced}
+        insights={insightsCtl.insights}
+        speakerNames={speakerNames}
         onSaveEnhanced={(id, notes) => void window.api.meetings.saveEnhanced(id, notes)}
         onJump={(ids) => setHighlight({ ids, nonce: Date.now() })}
+        onSeek={seekTranscript}
       />
     ) : (
       <NotesEditor
@@ -302,6 +306,9 @@ export function App() {
           tagNames={detail.tags}
           folders={org.folders}
           tags={org.tags}
+          templates={templates}
+          templateId={detail.templateId}
+          onSetTemplate={handleSetTemplate}
           hasEnhanced={hasEnhanced}
           hasInsights={insightsCtl.insights !== null}
           view={view}
@@ -371,6 +378,14 @@ export function App() {
   const setMeetingFolder = (meetingId: number, folderId: number | null): void => {
     void window.api.organization.setMeetingFolder(meetingId, folderId).then(() => refreshAfterOrg(meetingId));
   };
+  // V081: template selector lives in the note header now; reuse the prior inline logic.
+  const handleSetTemplate = (mId: number, templateId: number | null): void => {
+    void window.api.meetings.setTemplate(mId, templateId).then(() => {
+      void window.api.meetings.get(mId).then((d) => {
+        if (d) setDetail(d);
+      });
+    });
+  };
   const addMeetingTag = (meetingId: number, tagId: number): void => {
     void window.api.organization.addMeetingTag(meetingId, tagId).then(() => refreshAfterOrg(meetingId));
   };
@@ -394,6 +409,15 @@ export function App() {
     setBusy(true);
     setStartError(null);
     setDetectedLang(null); // reset for new session
+    // V081: appending to a note that already has a transcript — tell the user.
+    if (targetId === selectedId && loadedSegments.length > 0) {
+      const nextSeq = Math.max(1, ...loadedSegments.map((s) => s.sessionSeq ?? 1)) + 1;
+      setAppendNotice(
+        `Continuing this note — your new recording is being added to the existing transcript as session ${nextSeq}. Enhancement will treat them as one.`,
+      );
+    } else {
+      setAppendNotice(null);
+    }
     try {
       transcription.reset();
       await window.api.meetings.start(targetId);
@@ -442,6 +466,7 @@ export function App() {
 
   const stop = async (): Promise<void> => {
     setBusy(true);
+    setAppendNotice(null);
     const endedId = activeId;
     let endedSegments: PersistedSegment[] = [];
     try {
@@ -531,7 +556,11 @@ export function App() {
   // ─────────────────────────────────────────────────────────────────────────
 
   const list = meetings.results ?? meetings.meetings;
-  const finals = showingActive ? transcription.finals : loadedSegments;
+  // V081: while recording into a note that already has a transcript, show the
+  // existing segments above the new live ones so the user sees it grow (the new
+  // session's times are offset past the old by the main process). loadedSegments
+  // isn't reloaded mid-recording, so it still holds the prior transcript here.
+  const finals = showingActive ? [...loadedSegments, ...transcription.finals] : loadedSegments;
   const interims = showingActive ? transcription.interims : [];
   const hasEnhanced = enhanced !== null;
   // V08 — overlay Gladia entities/sentiment onto the displayed (ended-meeting)
@@ -676,6 +705,20 @@ export function App() {
 
       <UpdateBanner />
       <AudioWarningBanner />
+      {running && appendNotice && (
+        <div className="flex items-center gap-2 border-b border-border bg-primary/10 px-4 py-2 text-xs text-foreground">
+          <NotebookPen className="size-3.5 shrink-0 text-primary" />
+          <span>{appendNotice}</span>
+          <button
+            type="button"
+            onClick={() => setAppendNotice(null)}
+            className="ml-auto shrink-0 text-muted-foreground hover:text-foreground"
+            aria-label="Dismiss"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <AboutDialog open={showAbout} onClose={() => setShowAbout(false)} />
 
@@ -777,31 +820,9 @@ export function App() {
                   className="min-w-0 flex-1 rounded bg-transparent text-base font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   placeholder="Untitled meeting"
                 />
-                <Select
-                  value={detail.templateId == null ? NO_TEMPLATE : String(detail.templateId)}
-                  onValueChange={(v) => {
-                    const newId = v === NO_TEMPLATE ? null : Number(v);
-                    void window.api.meetings.setTemplate(detail.id, newId).then(() => {
-                      void window.api.meetings.get(detail.id).then((d) => {
-                        if (d) setDetail(d);
-                      });
-                    });
-                  }}
-                >
-                  <SelectTrigger size="sm" className="shrink-0 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_TEMPLATE}>No template</SelectItem>
-                    {templates.map((t) => (
-                      <SelectItem key={t.id} value={String(t.id)}>
-                        {t.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {/* Folder picker + Tags dropdown moved into the note window's
-                    unified header (V072 block 02 — NoteWindowHeader). */}
+                {/* Template selector + Folder picker + Tags moved into the note
+                    window's unified header (V072 block 02; V081 added the
+                    template selector there). */}
                 {running && (
                   <span role="status" className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-destructive">
                     <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-destructive" />

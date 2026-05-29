@@ -36,8 +36,8 @@ function makeMeeting(overrides: Partial<BackupMeeting> = {}): BackupMeeting {
     insights: null,
     usage: { deepgramAudioMs: 2_550_000, deepgramChannels: 2, claudeInputTokens: 3200, claudeOutputTokens: 1100 },
     segments: [
-      { id: 10, channel: 1, speakerLabel: 'Speaker 1', text: 'Hello everyone', startMs: 1000, endMs: 3000 },
-      { id: 11, channel: 1, speakerLabel: 'Speaker 2', text: 'Hi there', startMs: 3500, endMs: 5000 },
+      { id: 10, channel: 1, speakerLabel: 'Speaker 1', text: 'Hello everyone', startMs: 1000, endMs: 3000, sessionSeq: 1 },
+      { id: 11, channel: 1, speakerLabel: 'Speaker 2', text: 'Hi there', startMs: 3500, endMs: 5000, sessionSeq: 1 },
     ],
     speakerNames: [{ rawLabel: 'Speaker 1', displayName: 'Ana' }],
     ...overrides,

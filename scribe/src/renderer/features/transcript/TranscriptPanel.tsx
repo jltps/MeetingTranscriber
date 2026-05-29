@@ -350,6 +350,10 @@ export function TranscriptPanel({
                 const seg = finals[item.index];
                 const displayLabel = speakerNames?.get(seg.speakerLabel) ?? seg.speakerLabel;
                 const insight = seg.id !== undefined ? segmentInsights?.get(seg.id) : undefined;
+                // V081: "Session N" divider where the recording session increments.
+                const segSeq = seg.sessionSeq ?? 1;
+                const prevSeq = item.index > 0 ? (finals[item.index - 1].sessionSeq ?? 1) : 1;
+                const showSessionDivider = segSeq > 1 && segSeq !== prevSeq;
                 return (
                   <div
                     key={item.key}
@@ -364,6 +368,13 @@ export function TranscriptPanel({
                     }}
                     className="pb-2.5"
                   >
+                    {showSessionDivider && (
+                      <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <span className="h-px flex-1 bg-border" />
+                        Session {segSeq}
+                        <span className="h-px flex-1 bg-border" />
+                      </div>
+                    )}
                     <Line
                       seg={seg}
                       displayLabel={displayLabel}

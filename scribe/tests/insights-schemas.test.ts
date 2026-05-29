@@ -30,7 +30,8 @@ describe('MeetingInsightsSchema', () => {
       speakers: [{ label: 'Me', talkMs: 1000, utteranceCount: 1 }],
       entityCounts: [{ kind: 'person', count: 1 }],
       topEntities: [{ text: 'Ana', kind: 'person', count: 1 }],
-      sentiment: { positive: 1, neutral: 0, negative: 0 },
+      sentiment: { positive: 1 },
+      emotions: { amusement: 1 },
     },
   };
 

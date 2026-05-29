@@ -46,14 +46,67 @@ export const SENTIMENT_GLYPH: Record<InsightSentiment['label'], string> = {
   positive: '😊',
   neutral: '😐',
   negative: '😟',
+  mixed: '🤔',
+  unknown: '❔',
+};
+
+/** Human-readable label per sentiment (for sentences/headings). */
+export const SENTIMENT_LABEL: Record<InsightSentiment['label'], string> = {
+  positive: 'Positive',
+  neutral: 'Neutral',
+  negative: 'Negative',
+  mixed: 'Mixed',
+  unknown: 'Unknown',
 };
 
 const SENTIMENT_TEXT: Record<InsightSentiment['label'], string> = {
   positive: 'text-sentiment-positive',
   neutral: 'text-sentiment-neutral',
   negative: 'text-sentiment-negative',
+  mixed: 'text-sentiment-mixed',
+  unknown: 'text-sentiment-unknown',
 };
 
 export function sentimentClass(label: InsightSentiment['label']): string {
-  return SENTIMENT_TEXT[label];
+  return SENTIMENT_TEXT[label] ?? SENTIMENT_TEXT.unknown;
+}
+
+// V081 — Gladia's 25 emotions → emoji. Unknown/missing falls back to a neutral
+// face so the UI degrades gracefully if Gladia adds new emotions.
+const EMOTION_GLYPH: Record<string, string> = {
+  adoration: '🥰',
+  amusement: '😄',
+  anger: '😠',
+  awe: '😮',
+  confusion: '😕',
+  contempt: '😒',
+  contentment: '😌',
+  desire: '😍',
+  disappointment: '😞',
+  disgust: '🤢',
+  distress: '😣',
+  ecstatic: '🤩',
+  elation: '😁',
+  embarrassment: '😳',
+  fear: '😨',
+  interest: '🤔',
+  pain: '😖',
+  realization: '💡',
+  relief: '😅',
+  sadness: '😢',
+  negative_surprise: '😧',
+  positive_surprise: '😲',
+  sympathy: '🤝',
+  triumph: '🏆',
+  neutral: '😐',
+};
+
+export function emotionGlyph(emotion: string): string {
+  return EMOTION_GLYPH[emotion.toLowerCase()] ?? '💬';
+}
+
+/** Title-case a Gladia emotion key for display (e.g. positive_surprise → "Positive surprise"). */
+export function emotionLabel(emotion: string): string {
+  const s = emotion.replace(/_/g, ' ').trim();
+  return s.length ? s[0].toUpperCase() + s.slice(1) : emotion;
 }

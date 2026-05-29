@@ -43,6 +43,8 @@ type SegmentRow = {
   // paragraph break offsets; block 03 writes per-word filler spans.
   paragraph_breaks_json?: string | null;
   word_spans_json?: string | null;
+  // V081 — recording-session index (1-based).
+  session_seq?: number;
 };
 
 // Tags default to [] here; list/detail callers attach them (one batched query for
@@ -263,10 +265,15 @@ export function deleteMeeting(id: number): void {
   db.prepare(`DELETE FROM search_fts WHERE rowid = ?`).run(id);
 }
 
-export function insertTranscriptSegment(meetingId: number, seg: TranscriptSegment): void {
+export function insertTranscriptSegment(
+  meetingId: number,
+  seg: TranscriptSegment,
+  sessionSeq = 1,
+): void {
   // V075 ROADMAP_02 + ROADMAP_03: persist the optional paragraph break offsets
   // and (block 03) word spans as nullable JSON columns. NULL when empty/absent
-  // so the vast majority of rows stay slim.
+  // so the vast majority of rows stay slim. V081: `session_seq` tags which
+  // recording session produced the segment.
   const paragraphBreaksJson =
     seg.paragraphBreaks && seg.paragraphBreaks.length > 0
       ? JSON.stringify(seg.paragraphBreaks)
@@ -277,8 +284,8 @@ export function insertTranscriptSegment(meetingId: number, seg: TranscriptSegmen
     .prepare(
       `INSERT INTO transcript_segments
          (meeting_id, channel, speaker_label, text, start_ms, end_ms,
-          paragraph_breaks_json, word_spans_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          paragraph_breaks_json, word_spans_json, session_seq)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       meetingId,
@@ -289,7 +296,24 @@ export function insertTranscriptSegment(meetingId: number, seg: TranscriptSegmen
       Math.round(seg.endMs),
       paragraphBreaksJson,
       wordSpansJson,
+      sessionSeq,
     );
+}
+
+/** Largest end_ms across a meeting's segments (0 when none) — V081 append offset. */
+export function getMaxSegmentEndMs(meetingId: number): number {
+  const row = getDb()
+    .prepare(`SELECT COALESCE(MAX(end_ms), 0) AS maxEnd FROM transcript_segments WHERE meeting_id = ?`)
+    .get(meetingId) as { maxEnd: number };
+  return row.maxEnd;
+}
+
+/** Highest session_seq across a meeting's segments (0 when none) — V081. */
+export function getMaxSessionSeq(meetingId: number): number {
+  const row = getDb()
+    .prepare(`SELECT COALESCE(MAX(session_seq), 0) AS maxSeq FROM transcript_segments WHERE meeting_id = ?`)
+    .get(meetingId) as { maxSeq: number };
+  return row.maxSeq;
 }
 
 /**
@@ -329,7 +353,7 @@ export function getTranscript(meetingId: number): PersistedSegment[] {
   const rows = getDb()
     .prepare(
       `SELECT id, channel, speaker_label, text, start_ms, end_ms,
-              paragraph_breaks_json, word_spans_json
+              paragraph_breaks_json, word_spans_json, session_seq
        FROM transcript_segments WHERE meeting_id = ? ORDER BY start_ms, id`,
     )
     .all(meetingId) as Array<SegmentRow & { id: number }>;
@@ -342,6 +366,7 @@ export function getTranscript(meetingId: number): PersistedSegment[] {
       startMs: r.start_ms,
       endMs: r.end_ms,
       isFinal: true,
+      sessionSeq: r.session_seq ?? 1,
     };
     // V075 ROADMAP_02 — paragraph breaks live in their own optional column.
     if (r.paragraph_breaks_json) {

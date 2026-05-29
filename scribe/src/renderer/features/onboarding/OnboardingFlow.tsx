@@ -39,6 +39,12 @@ export function OnboardingFlow({ settings, onChanged, onComplete }: OnboardingFl
     onComplete();
   };
 
+  // Adding a Gladia key during onboarding also makes it the active provider
+  // (the recommended option). Deepgram stays the fallback if no Gladia key.
+  const onGladiaSaved = (): void => {
+    void window.api.settings.setTranscriptionProvider('gladia').then(onChanged);
+  };
+
   return (
     <Dialog open>
       <DialogContent
@@ -76,8 +82,9 @@ export function OnboardingFlow({ settings, onChanged, onComplete }: OnboardingFl
             </DialogHeader>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
-                • <b className="text-foreground">Audio is sent to Deepgram</b> for live transcription
-                and never stored — frames are dropped the moment they’re transcribed.
+                • <b className="text-foreground">Audio is sent to your transcription provider</b>{' '}
+                (Gladia or Deepgram) for live transcription and never stored — frames are dropped
+                the moment they’re transcribed.
               </li>
               <li>
                 • <b className="text-foreground">Transcript text and your notes go to Anthropic</b>{' '}
@@ -103,12 +110,14 @@ export function OnboardingFlow({ settings, onChanged, onComplete }: OnboardingFl
             <DialogHeader>
               <DialogTitle>Connect your API keys</DialogTitle>
               <DialogDescription>
-                Deepgram powers transcription; Anthropic (Claude) powers note enhancement and chat.
-                Keys are encrypted by your OS and never leave this machine. You can add them later in
-                Settings.
+                <b>Gladia</b> (recommended) or Deepgram powers transcription — Gladia also adds
+                post-call insights (speaker breakdown, entities, sentiment). Anthropic (Claude)
+                powers note enhancement and chat. Keys are encrypted by your OS and never leave this
+                machine. You can add them later in Settings.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
+              <KeyRow label="Gladia (recommended)" provider="gladia" isSet={settings.gladiaKeySet} onSaved={onGladiaSaved} />
               <KeyRow label="Deepgram" provider="deepgram" isSet={settings.deepgramKeySet} onSaved={onChanged} />
               <KeyRow label="Anthropic" provider="anthropic" isSet={settings.anthropicKeySet} onSaved={onChanged} />
             </div>

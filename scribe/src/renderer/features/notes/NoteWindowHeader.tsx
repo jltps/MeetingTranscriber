@@ -1,5 +1,5 @@
 import { Download, MessageSquare } from 'lucide-react';
-import type { Folder, Tag } from '../../../shared/types';
+import type { Folder, Tag, Template } from '../../../shared/types';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { MeetingOrgControls } from '../organization/MeetingOrgControls';
@@ -10,7 +10,7 @@ import { MeetingOrgControls } from '../organization/MeetingOrgControls';
 // every notes-affecting control sits with the notes pane it governs. The
 // Original/Enhanced toggle is disabled while chat is the active surface.
 export type NoteSurface = 'notes' | 'chat';
-export type NotesView = 'original' | 'enhanced' | 'insights';
+export type NotesView = 'original' | 'enhanced';
 
 type Props = {
   meetingId: number;
@@ -18,6 +18,9 @@ type Props = {
   tagNames: string[];
   folders: Folder[];
   tags: Tag[];
+  templates: Template[];
+  templateId: number | null;
+  onSetTemplate: (meetingId: number, templateId: number | null) => void;
   hasEnhanced: boolean;
   /** V08 — a Gladia meeting has post-call insights (ready or processing). */
   hasInsights: boolean;
@@ -40,6 +43,9 @@ export function NoteWindowHeader({
   tagNames,
   folders,
   tags,
+  templates,
+  templateId,
+  onSetTemplate,
   hasEnhanced,
   hasInsights,
   view,
@@ -64,6 +70,9 @@ export function NoteWindowHeader({
           tagNames={tagNames}
           folders={folders}
           tags={tags}
+          templates={templates}
+          templateId={templateId}
+          onSetTemplate={onSetTemplate}
           onSetFolder={onSetFolder}
           onAddTag={onAddTag}
           onRemoveTag={onRemoveTag}
@@ -81,8 +90,8 @@ export function NoteWindowHeader({
             }}
           >
             <ToggleGroupItem value="original">Original</ToggleGroupItem>
-            {hasEnhanced && <ToggleGroupItem value="enhanced">Enhanced</ToggleGroupItem>}
-            {hasInsights && <ToggleGroupItem value="insights">Insights</ToggleGroupItem>}
+            {/* Enhanced hosts the in-note Extended / Key points / Insights sub-tabs (V081). */}
+            <ToggleGroupItem value="enhanced">Enhanced</ToggleGroupItem>
           </ToggleGroup>
         )}
       </div>

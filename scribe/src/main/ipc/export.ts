@@ -124,9 +124,16 @@ export function meetingToMarkdown(data: BackupMeeting): string {
         `**Entities:** ${ins.summary.topEntities.map((e) => `${e.text} (${e.kind})`).join(', ')}`,
       );
     }
-    parts.push(
-      `**Sentiment:** ${ins.summary.sentiment.positive} positive · ${ins.summary.sentiment.neutral} neutral · ${ins.summary.sentiment.negative} negative`,
-    );
+    const sentimentParts = Object.entries(ins.summary.sentiment)
+      .filter(([, n]) => n > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, n]) => `${n} ${label}`);
+    if (sentimentParts.length > 0) parts.push(`**Sentiment:** ${sentimentParts.join(' · ')}`);
+    const emotionParts = Object.entries(ins.summary.emotions ?? {})
+      .filter(([, n]) => n > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([emotion, n]) => `${emotion.replace(/_/g, ' ')} (${n})`);
+    if (emotionParts.length > 0) parts.push(`**Emotions:** ${emotionParts.join(', ')}`);
     parts.push('');
     for (const u of ins.utterances) {
       const sentiment = u.sentiment ? ` _[${u.sentiment.label}]_` : '';
