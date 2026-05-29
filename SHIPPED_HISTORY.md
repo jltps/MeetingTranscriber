@@ -390,6 +390,47 @@ export + backup, **offline Whisper**, **calendar auto-start** (Google + Microsof
   post-call result is server-side), §1.2 (key + the tokenized `wss://` URL stay
   main-side and unlogged), §1.5/§1.6 (insights are a separate table + view,
   never touching notes or the enhancer contract).
+- **V081 — quality-of-life updates (shipped):** see `roadmap/V081/`. A polish
+  pass on top of V08 across six blocks. **Settings/onboarding:** Gladia is now
+  surfaced as the *recommended* transcription provider — onboarding offers a
+  Gladia key row and auto-selects the provider when it's saved; Settings gains a
+  dedicated **API Keys** tab below General (the three KeyRows moved out of the AI
+  tab), large two-line provider buttons with Gladia badged *Recommended*, the
+  Deepgram-only **Capture quality** + **Listening on** controls greyed out when
+  another provider is active, and the filler-words toggle removed (it stays on by
+  default for Deepgram via `getTranscriptIncludeFillers`). **In-note controls:**
+  the per-meeting template `<Select>` moved out of the app header into
+  `MeetingOrgControls` (first, before folders); the tags affordance became a
+  searchable **combobox** (new `components/ui/popover.tsx` + cmdk) that
+  filters/toggles existing tags or creates one inline; and **Insights** moved
+  from a note-header view into a sub-tab inside `EnhancedPane` beside
+  Extended/Key points (header is back to Original/Enhanced). **Multi-session
+  append:** recording again into a note that already has a transcript now appends
+  as a new session instead of interleaving — `ipc/transcription.ts` snapshots the
+  meeting's max `end_ms` as a `sessionBaseMs` offset (applied *after* the energy-
+  timeline attribution, and to Gladia's post-call insight times before reconcile)
+  and the next `session_seq` (additive migration **v15**); the renderer shows a
+  friendly banner, renders the prior transcript above the live one while
+  recording, and draws a "Session N" divider where `session_seq` increments.
+  Enhancement is unchanged — `getEnhancerSegments` already reads the union, so all
+  sessions enhance as one; backup/restore carries `session_seq` (default 1).
+  **Richer Insights + full taxonomy:** `InsightSentiment.label` widened from the
+  V08 3-label collapse to all five Gladia sentiments
+  (`positive/negative/neutral/mixed/unknown`) and `MeetingInsightsSummary` gained
+  per-label `sentiment` + `emotions` count records; `parse-gladia`/`gladia-results`
+  preserve the real sentiment + emotion (25 values) instead of collapsing. The
+  `InsightsView` is redesigned into a dashboard (a new pure
+  `insights-aggregate.ts`): it no longer repeats the transcript (that lives in the
+  live transcript window) and instead shows per-speaker talk time + percentage
+  ("José spoke for 1m42s, 43% of the talk time"), every sentiment and emotion with
+  an emoji + share + **expandable occurrence times that jump the live transcript**
+  (reusing the source-link `setHighlight`), and top entities the same way; the
+  Markdown export mirrors the new shape. 322/322 tests pass (new
+  `insights-aggregate` + migration-v15 suites; parse-gladia sentiment cases). All
+  renderer-only except blocks 05 (DB + IPC append) and 06 (shared type widening);
+  §1 invariants unchanged (no audio on disk, keys main-side, renderer untrusted,
+  notes sacred, never default to English — Gladia language still mapped from the
+  app setting).
 
 ---
 

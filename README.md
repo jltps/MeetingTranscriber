@@ -25,7 +25,7 @@ install silently — no installer wizard.
 
 ## Status
 
-Shipping at **v0.8.0**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
+Shipping at **v0.8.1**. v1 (milestones M0–M6) is complete, the post-v1 backlog is
 largely built, the product was renamed **Scribe → Nexus** (V04), **V05 — transcription
 quality & cost — has shipped**, **V06 — templates & AI capabilities — has shipped**,
 **V062 — per-word "Me" attribution — has shipped**, **V07 — in-app auto-update
@@ -56,7 +56,13 @@ beside Deepgram and Whisper; Gladia's `solaria-1` streams the live transcript
 and, after the call ends, delivers speaker **diarization**, **named-entity
 recognition**, and **sentiment** — surfaced in a dedicated **Insights** view and
 woven inline into the transcript, with a seamless ~2.5 h session handoff for
-long calls):
+long calls), and **V081 — quality-of-life polish — has shipped** (Gladia
+surfaced as the recommended provider in onboarding + Settings; a dedicated
+**API Keys** settings tab; multi-session recording that **appends** to a note's
+transcript instead of overwriting it, with a "Session N" divider; the template
+selector moved into the note header and Insights into a sub-tab beside
+Extended/Key points; a select-or-create tags combobox; and a far richer post-call
+**Insights** dashboard using Gladia's full sentiment + emotion taxonomy):
 
 **v1 — core (shipped)**
 - Mic + Windows loopback system audio captured as a 2-channel 16 kHz PCM stream
@@ -173,6 +179,31 @@ long calls):
   Microsoft now work on a fresh install with no local config. Also the first
   release published end-to-end by the V07 auto-update pipeline (CI workflow
   built, signed, and uploaded the installer + `latest.yml` on tag push).
+
+**v0.8.1 — quality-of-life polish (shipped)**
+- **Gladia front-and-centre.** Onboarding now offers a Gladia key marked
+  *recommended*, and saving it auto-selects Gladia as the transcription provider.
+  Settings gets a dedicated **API Keys** tab (below General) and large two-line
+  provider buttons with Gladia badged *Recommended*.
+- **Settings tidy-up.** The Deepgram-only **Capture quality** + **Listening on**
+  controls are greyed out when Gladia/Whisper is active; the filler-words toggle
+  is removed (it's on by default for Deepgram).
+- **Multi-session recording.** Recording again into a note that already has a
+  transcript now **appends** as a new session (timestamps offset past the
+  existing transcript) instead of interleaving — with a friendly banner, a
+  "Session N" divider, and the prior transcript visible while you record.
+  Enhancement still treats every session as one continuous transcript
+  (additive migration v15 adds `session_seq`).
+- **In-note controls.** The template selector moved into the note header (first,
+  before folders); the per-meeting **tags** affordance is now a searchable
+  combobox that filters/picks an existing tag or creates one inline.
+- **Insights, reworked.** The Insights button moved into the Enhanced view as a
+  sub-tab beside Extended / Key points. The view no longer repeats the transcript
+  — instead it's a dashboard: who spoke and for how long ("José spoke for 1m42s,
+  43% of the talk time"), the full spread of Gladia's **five sentiments**
+  (positive/negative/neutral/**mixed**/**unknown**) and **25 emotions** — the V08
+  3-label collapse is gone — each with emoji, share, and expandable occurrence
+  times that jump the live transcript, plus top entities the same way.
 
 **v0.8.0 — Gladia live STT + post-call audio intelligence (shipped)**
 - **Third STT provider.** Gladia (`solaria-1`) joins Deepgram (default) and local
@@ -522,7 +553,7 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 |---|---|
 | `PRODUCT_SPEC.md` | What v1 was — product vision, flows, audio/transcription design. Historical reference now that v1 ships. |
 | `CLAUDE.md` | **How** the code should look and behave: the §1 invariants, stack, structure, IPC/DB/LLM rules. Auto-loaded by Claude Code. |
-| `SHIPPED_HISTORY.md` | Per-roadmap changelog (V04 → V08 + V0.7.1) — what was built post-v1 and why. Moved out of CLAUDE.md when it crossed the 40 KB soft limit; the "Already shipped beyond v1" runbook step now appends here. |
+| `SHIPPED_HISTORY.md` | Per-roadmap changelog (V04 → V081 + V0.7.1) — what was built post-v1 and why. Moved out of CLAUDE.md when it crossed the 40 KB soft limit; the "Already shipped beyond v1" runbook step now appends here. |
 | `BUILD_GUIDE.md` | The build *process* — milestone discipline for v1 and the roadmap-driven flow for extensions. |
 | `roadmap/v02/…` | Language, enhancement-prompt control, and templates (shipped). |
 | `roadmap/v03/…` | Reliability, speaker naming, quality, data, Whisper, calendar, cross-meeting (see `ROADMAP_00_INDEX.md`). |
@@ -537,6 +568,7 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 | `roadmap/V075/…` | Diarization & transcript fidelity (shipped): `paragraphs=true` + `paragraphIndex` on every word, paragraph-aware grouping that collapses fragmented remote-speaker runs (migration v13), `filler_words=true` with subdued rendering + short-filler attribution inheritance, opt-in stereo Best-quality capture mode (`multichannel=true` + `diarize=true` per Deepgram's combine-both guidance). |
 | `roadmap/V076/…` | Bleed-aware mic-priority "Me" attribution (shipped): zero-bleed dominance baseline dropped from V073's 1.5× to a lenient 1.0× interpolating up to a 4.0× full-bleed cap, plus 1.5 s Me-run hysteresis so brief mic-energy dips don't fracture a coherent Me utterance. Pure-function delta in `me-attribution.ts` — no migration, no IPC change, stereo path unaffected. |
 | `roadmap/V08/…` | Gladia live STT + post-call audio intelligence (shipped): a third opt-in cloud provider (`solaria-1`) behind the `TranscriptionSession` interface, producing post-call diarization, NER, and sentiment surfaced in a dedicated **Insights** view and woven inline into the transcript. Additive migration v14 (`meeting_insights` + `meetings.stt_provider`), ~2.5 h session handoff, boot-resume, backup v3, provider-aware cost. SDK confined to `gladia.ts` + `parse-gladia.ts`. |
+| `roadmap/V081/…` | Quality-of-life polish (shipped): Gladia recommended in onboarding/Settings, an API Keys tab, Deepgram-only audio controls gated, filler toggle removed; multi-session transcript append with a "Session N" divider (migration v15 `session_seq`); template selector + Insights moved into the note; select-or-create tags combobox; richer Insights dashboard using Gladia's full 5-sentiment + 25-emotion taxonomy with expandable, click-to-jump occurrences. |
 | `scribe/docs/CALENDAR_SETUP.md` | One-time Google / Microsoft OAuth client setup. |
 
 **Ground truth is the code, not the docs.** Where any doc disagrees with the
