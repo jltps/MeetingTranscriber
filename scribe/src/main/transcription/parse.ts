@@ -25,9 +25,15 @@ type DeepgramWord = {
  * mapping stays in one place.
  *
  * V075 ROADMAP_01: `paragraphIndex` carries Deepgram's paragraph-boundary
- * signal through to grouping. Always present; defaults to 0 when the response
- * has no `paragraphs` block, so consumers can treat "0 vs >0" uniformly
- * without `undefined` checks.
+ * signal through to grouping. Always present:
+ *   -  0..N : the paragraph this word fell inside, when Deepgram returned a
+ *             `paragraphs` block. Used by V075 ROADMAP_02 as a strong
+ *             same-paragraph merge signal for adjacent remote fragments.
+ *   - `-1`  : sentinel — no paragraph data on this message. Block 02 skips
+ *             the same-paragraph fast-path so V073 behaviour is preserved
+ *             exactly on responses without paragraphs (and on the legacy
+ *             multichannel path).
+ * Always-present field (not optional) so consumers don't need `undefined` checks.
  */
 export type DeepgramWordView = {
   text: string;
@@ -144,7 +150,8 @@ export function parseDeepgramWords(message: unknown): {
  * V075 ROADMAP_01: bucket a word into a paragraph by its `start` timestamp.
  *
  * Most messages carry ≤ 3 paragraphs so a linear scan is fine. Rules:
- *   - If `paragraphs` is empty, every word is paragraph 0.
+ *   - If `paragraphs` is empty, every word gets the sentinel `-1` (no paragraph
+ *     data) so block 02 falls back to V073 behaviour exactly.
  *   - A word whose `start` falls inside `[paragraphs[i].start, paragraphs[i].end)`
  *     gets index `i`.
  *   - A word whose `start` falls in the gap between paragraphs `i` and `i+1`
@@ -156,7 +163,7 @@ function assignParagraphIndex(
   startSec: number,
   paragraphs: readonly DeepgramParagraph[],
 ): number {
-  if (paragraphs.length === 0) return 0;
+  if (paragraphs.length === 0) return -1;
   let lastFinishedIndex = -1;
   for (let i = 0; i < paragraphs.length; i++) {
     const p = paragraphs[i];

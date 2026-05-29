@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import React, { memo, useEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowRightLeft, Mic } from 'lucide-react';
 import type { TranscriptSegment } from '../../../shared/types';
@@ -20,6 +20,32 @@ function formatTime(ms: number): string {
   const minutes = Math.floor(total / 60);
   const seconds = total % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+/**
+ * V075 ROADMAP_02: render `seg.text` with internal paragraph breaks at
+ * `seg.paragraphBreaks` (character offsets, ascending). Each break inserts a
+ * blank-line gap inside the segment so long single-speaker monologues are
+ * readable. When `paragraphBreaks` is absent or empty, returns the plain text.
+ */
+function renderSegmentText(seg: DisplaySegment): React.ReactNode {
+  const breaks = seg.paragraphBreaks;
+  if (!breaks || breaks.length === 0) return seg.text;
+  const parts: string[] = [];
+  let start = 0;
+  for (const offset of breaks) {
+    if (offset > start && offset <= seg.text.length) {
+      parts.push(seg.text.slice(start, offset).trimEnd());
+      start = offset;
+    }
+  }
+  parts.push(seg.text.slice(start));
+  return parts.map((p, i) => (
+    <span key={i}>
+      {i > 0 && <span className="mt-2 block" aria-hidden="true" />}
+      {p}
+    </span>
+  ));
 }
 
 // Memoized so React skips re-rendering unchanged rows during rapid segment arrival.
@@ -124,7 +150,7 @@ const Line = memo(function Line({
       )}
 
       <span className="mr-2 text-[11px] tabular-nums text-muted-foreground">{formatTime(seg.startMs)}</span>
-      <span className="text-sm leading-relaxed text-foreground">{seg.text}</span>
+      <span className="text-sm leading-relaxed text-foreground">{renderSegmentText(seg)}</span>
 
       {/* Reassign menu — visible on hover for finalized segments with multiple speakers */}
       {canReassign && otherLabels.length > 0 && (

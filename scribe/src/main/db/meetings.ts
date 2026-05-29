@@ -38,6 +38,10 @@ type SegmentRow = {
   text: string;
   start_ms: number;
   end_ms: number;
+  // V075 ROADMAP_02 + ROADMAP_03 — nullable JSON columns. Block 02 writes
+  // paragraph break offsets; block 03 writes per-word filler spans.
+  paragraph_breaks_json?: string | null;
+  word_spans_json?: string | null;
 };
 
 // Tags default to [] here; list/detail callers attach them (one batched query for
@@ -242,10 +246,18 @@ export function deleteMeeting(id: number): void {
 }
 
 export function insertTranscriptSegment(meetingId: number, seg: TranscriptSegment): void {
+  // V075 ROADMAP_02 + ROADMAP_03: persist the optional paragraph break offsets
+  // and (block 03) word spans as nullable JSON columns. NULL when empty/absent
+  // so the vast majority of rows stay slim.
+  const paragraphBreaksJson =
+    seg.paragraphBreaks && seg.paragraphBreaks.length > 0
+      ? JSON.stringify(seg.paragraphBreaks)
+      : null;
   getDb()
     .prepare(
-      `INSERT INTO transcript_segments (meeting_id, channel, speaker_label, text, start_ms, end_ms)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO transcript_segments
+         (meeting_id, channel, speaker_label, text, start_ms, end_ms, paragraph_breaks_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       meetingId,
@@ -254,6 +266,7 @@ export function insertTranscriptSegment(meetingId: number, seg: TranscriptSegmen
       seg.text,
       Math.round(seg.startMs),
       Math.round(seg.endMs),
+      paragraphBreaksJson,
     );
 }
 
@@ -293,19 +306,33 @@ export function getEnhancerSegments(meetingId: number): EnhancerSegment[] {
 export function getTranscript(meetingId: number): PersistedSegment[] {
   const rows = getDb()
     .prepare(
-      `SELECT id, channel, speaker_label, text, start_ms, end_ms
+      `SELECT id, channel, speaker_label, text, start_ms, end_ms, paragraph_breaks_json
        FROM transcript_segments WHERE meeting_id = ? ORDER BY start_ms, id`,
     )
     .all(meetingId) as Array<SegmentRow & { id: number }>;
-  return rows.map((r) => ({
-    id: r.id,
-    text: r.text,
-    channel: r.channel === 0 ? 0 : 1,
-    speakerLabel: r.speaker_label,
-    startMs: r.start_ms,
-    endMs: r.end_ms,
-    isFinal: true,
-  }));
+  return rows.map((r) => {
+    const base: PersistedSegment = {
+      id: r.id,
+      text: r.text,
+      channel: r.channel === 0 ? 0 : 1,
+      speakerLabel: r.speaker_label,
+      startMs: r.start_ms,
+      endMs: r.end_ms,
+      isFinal: true,
+    };
+    // V075 ROADMAP_02 — paragraph breaks live in their own optional column.
+    if (r.paragraph_breaks_json) {
+      try {
+        const parsed = JSON.parse(r.paragraph_breaks_json);
+        if (Array.isArray(parsed) && parsed.every((n) => typeof n === 'number')) {
+          base.paragraphBreaks = parsed;
+        }
+      } catch {
+        // Corrupt JSON shouldn't break a transcript read — fall through.
+      }
+    }
+    return base;
+  });
 }
 
 export function searchMeetings(query: string): MeetingSummary[] {

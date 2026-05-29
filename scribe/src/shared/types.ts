@@ -18,6 +18,14 @@ export type TranscriptSegment = {
   startMs: number;
   endMs: number;
   isFinal: boolean;
+  /**
+   * V075 ROADMAP_02: optional character offsets into `text` where Deepgram's
+   * paragraph boundaries land within this single-speaker segment. Renderer
+   * inserts a blank-line break at each offset. Present only when a long
+   * single-speaker run spans multiple paragraphs; absent otherwise (so the
+   * DB column stays NULL on the vast majority of rows).
+   */
+  paragraphBreaks?: number[];
 };
 
 /** A persisted transcript segment (carries its DB id, for source linking §8.4). */

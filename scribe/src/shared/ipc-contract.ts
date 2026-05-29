@@ -166,6 +166,10 @@ export const TranscriptSegmentSchema = z.object({
   startMs: z.number(),
   endMs: z.number(),
   isFinal: z.boolean(),
+  // V075 ROADMAP_02 — character offsets where Deepgram paragraph boundaries
+  // fall inside a single-speaker segment. Optional + ascending; the renderer
+  // shows a blank-line break at each offset.
+  paragraphBreaks: z.array(z.number().int().nonnegative()).optional(),
 }) satisfies z.ZodType<TranscriptSegment>;
 
 export const TranscriptionStatusSchema = z.object({

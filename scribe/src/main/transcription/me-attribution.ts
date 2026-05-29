@@ -246,40 +246,66 @@ function medianFilterIsMe(words: AttributedWord[]): AttributedWord[] {
  * across Deepgram speaker boundaries (the fragmentation case). Consecutive
  * non-Me words still split on Deepgram-speaker change, preserving remote-speaker
  * separation exactly as the segment-level path does. Empty input → `[]`.
+ *
+ * V075 ROADMAP_02: paragraph index is a **soft** hint here — a paragraph change
+ * between two same-attribution adjacent words still keeps them in one segment
+ * (Deepgram's paragraph breaks are noisier than the isMe boundaries we already
+ * validate). The change is recorded as a `paragraphBreaks: number[]` (character
+ * offsets into the segment's `text` where the paragraph index increased) so the
+ * renderer can show an internal break on long single-speaker monologues.
+ * `paragraphBreaks` is omitted (not `[]`) when no internal breaks exist, so
+ * the persistence layer can leave the column NULL.
+ *
+ * paragraphIndex also feeds `autoMergeAdjacentSpeakers` downstream as a strong
+ * merge signal for adjacent remote fragments inside the same Deepgram paragraph.
  */
 export function groupAttributedWords(
   words: readonly AttributedWord[],
 ): TranscriptSegment[] {
+  // Parallel arrays: segments[i] and meta[i] describe the same run.
+  // meta carries the segment's paragraph range so autoMergeAdjacentSpeakers can
+  // merge same-paragraph remote fragments unconditionally without re-walking
+  // words.
   const segments: TranscriptSegment[] = [];
+  const meta: SegmentMeta[] = [];
+
   type Run = {
     isMe: boolean;
     deepgramSpeaker: number;
+    /** First and last paragraph indices seen in this run. */
+    firstParagraph: number;
+    lastParagraph: number;
     parts: string[];
+    /** Character offsets into the joined text where paragraphIndex increased. */
+    paragraphBreaks: number[];
+    /** Running character length of `parts.join(' ')` — kept in sync as parts grows. */
+    joinedLength: number;
     startMs: number;
     endMs: number;
   };
   let run: Run | null = null;
 
   const flush = (r: Run): void => {
-    segments.push(
-      r.isMe
-        ? {
-            text: r.parts.join(' '),
-            channel: 0,
-            speakerLabel: 'Me',
-            startMs: r.startMs,
-            endMs: r.endMs,
-            isFinal: true,
-          }
-        : {
-            text: r.parts.join(' '),
-            channel: 1,
-            speakerLabel: `Speaker ${r.deepgramSpeaker + 1}`,
-            startMs: r.startMs,
-            endMs: r.endMs,
-            isFinal: true,
-          },
-    );
+    const base: TranscriptSegment = r.isMe
+      ? {
+          text: r.parts.join(' '),
+          channel: 0,
+          speakerLabel: 'Me',
+          startMs: r.startMs,
+          endMs: r.endMs,
+          isFinal: true,
+        }
+      : {
+          text: r.parts.join(' '),
+          channel: 1,
+          speakerLabel: `Speaker ${r.deepgramSpeaker + 1}`,
+          startMs: r.startMs,
+          endMs: r.endMs,
+          isFinal: true,
+        };
+    if (r.paragraphBreaks.length > 0) base.paragraphBreaks = r.paragraphBreaks;
+    segments.push(base);
+    meta.push({ firstParagraph: r.firstParagraph, lastParagraph: r.lastParagraph });
   };
 
   for (const w of words) {
@@ -287,7 +313,11 @@ export function groupAttributedWords(
       run = {
         isMe: w.isMe,
         deepgramSpeaker: w.deepgramSpeaker,
+        firstParagraph: w.paragraphIndex,
+        lastParagraph: w.paragraphIndex,
         parts: [w.text],
+        paragraphBreaks: [],
+        joinedLength: w.text.length,
         startMs: w.startMs,
         endMs: w.endMs,
       };
@@ -301,18 +331,34 @@ export function groupAttributedWords(
       run = {
         isMe: w.isMe,
         deepgramSpeaker: w.deepgramSpeaker,
+        firstParagraph: w.paragraphIndex,
+        lastParagraph: w.paragraphIndex,
         parts: [w.text],
+        paragraphBreaks: [],
+        joinedLength: w.text.length,
         startMs: w.startMs,
         endMs: w.endMs,
       };
     } else {
+      // Inside the run. Before appending the word, record a paragraph break at
+      // the current joinedLength + 1 (the space separator) iff the word's
+      // paragraph index moved past the run's current paragraph index. Char
+      // offset points at the first character of the new paragraph's first word.
+      if (w.paragraphIndex > run.lastParagraph) {
+        run.paragraphBreaks.push(run.joinedLength + 1);
+        run.lastParagraph = w.paragraphIndex;
+      }
       run.parts.push(w.text);
+      run.joinedLength += 1 + w.text.length; // space + word
       run.endMs = w.endMs;
     }
   }
   if (run) flush(run);
-  return autoMergeAdjacentSpeakers(segments);
+  return autoMergeAdjacentSpeakers(segments, meta);
 }
+
+/** Internal: paragraph range for one emitted segment, used by autoMerge only. */
+type SegmentMeta = { firstParagraph: number; lastParagraph: number };
 
 // ─── Auto-merge adjacent remote-speaker fragments (V073 block 03.3) ──────────
 //
@@ -330,32 +376,78 @@ const AUTO_MERGE_MIN_WORDS = 3; // each fragment must look like real speech, not
 
 function autoMergeAdjacentSpeakers(
   segments: TranscriptSegment[],
+  meta?: readonly SegmentMeta[],
 ): TranscriptSegment[] {
   if (segments.length < 2) return segments;
   const out: TranscriptSegment[] = [];
-  for (const seg of segments) {
+  const outMeta: SegmentMeta[] = [];
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const segMeta = meta?.[i];
     const prev = out[out.length - 1];
+    const prevMeta = outMeta[outMeta.length - 1];
     if (
       prev &&
       prev.channel === 1 &&
       seg.channel === 1 &&
       prev.speakerLabel !== seg.speakerLabel &&
-      seg.startMs - prev.endMs >= 0 &&
-      seg.startMs - prev.endMs <= AUTO_MERGE_MAX_GAP_MS &&
-      wordCount(prev) >= AUTO_MERGE_MIN_WORDS &&
-      wordCount(seg) >= AUTO_MERGE_MIN_WORDS &&
-      similarWordRate(prev, seg)
+      seg.startMs - prev.endMs >= 0
     ) {
-      // Treat as the same speaker — extend prev's span/text rather than adding
-      // a new fragmented segment. Keep prev's `speakerLabel` (the earlier one).
-      out[out.length - 1] = {
-        ...prev,
-        text: `${prev.text} ${seg.text}`.trim(),
-        endMs: seg.endMs,
-      };
-      continue;
+      // V075 ROADMAP_02 fast-path: two adjacent remote fragments inside the
+      // same Deepgram paragraph are almost certainly one speaker that Deepgram
+      // fragmented — Deepgram's own paragraph boundaries are diarization-aware.
+      // Skip the V073 word-rate / gap / ≥3-words heuristic when paragraphs match.
+      // `-1` is the V075 ROADMAP_01 sentinel for "no paragraph data on this
+      // message" — gate the fast-path on a non-negative match so the legacy
+      // multichannel + no-paragraphs paths behave exactly as V073 did.
+      const samePara =
+        !!segMeta &&
+        !!prevMeta &&
+        segMeta.firstParagraph >= 0 &&
+        prevMeta.lastParagraph >= 0 &&
+        segMeta.firstParagraph === prevMeta.lastParagraph;
+      const heuristicMerge =
+        seg.startMs - prev.endMs <= AUTO_MERGE_MAX_GAP_MS &&
+        wordCount(prev) >= AUTO_MERGE_MIN_WORDS &&
+        wordCount(seg) >= AUTO_MERGE_MIN_WORDS &&
+        similarWordRate(prev, seg);
+      if (samePara || heuristicMerge) {
+        // Treat as the same speaker — extend prev's span/text rather than adding
+        // a new fragmented segment. Keep prev's `speakerLabel` (the earlier one).
+        // paragraphBreaks: keep prev's; if the seg crosses a paragraph boundary
+        // relative to prev's end, record a break at the join offset (where seg's
+        // text starts inside the merged text).
+        const mergedText = `${prev.text} ${seg.text}`.trim();
+        const breaks = prev.paragraphBreaks ? [...prev.paragraphBreaks] : [];
+        if (
+          segMeta &&
+          prevMeta &&
+          segMeta.firstParagraph > prevMeta.lastParagraph
+        ) {
+          breaks.push(prev.text.length + 1);
+        }
+        if (seg.paragraphBreaks) {
+          const offset = prev.text.length + 1;
+          for (const b of seg.paragraphBreaks) breaks.push(b + offset);
+        }
+        const merged: TranscriptSegment = {
+          ...prev,
+          text: mergedText,
+          endMs: seg.endMs,
+        };
+        if (breaks.length > 0) merged.paragraphBreaks = breaks;
+        out[out.length - 1] = merged;
+        if (segMeta) {
+          outMeta[outMeta.length - 1] = {
+            firstParagraph: prevMeta?.firstParagraph ?? segMeta.firstParagraph,
+            lastParagraph: segMeta.lastParagraph,
+          };
+        }
+        continue;
+      }
     }
     out.push(seg);
+    if (segMeta) outMeta.push(segMeta);
   }
   return out;
 }

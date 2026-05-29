@@ -54,10 +54,13 @@ describe('parseDeepgramWords', () => {
       },
     });
     expect(out.isFinal).toBe(true);
+    // No `paragraphs` block in the message → all words get the -1 sentinel
+    // (V075 ROADMAP_01) so the V075 grouping/auto-merge fast-path is skipped
+    // and V073 behaviour is preserved on responses without paragraphs.
     expect(out.words).toEqual([
-      { text: 'Hi', startMs: 100, endMs: 200, deepgramSpeaker: 3, paragraphIndex: 0 },
-      { text: 'there', startMs: 200, endMs: 400, deepgramSpeaker: 3, paragraphIndex: 0 },
-      { text: 'friend.', startMs: 400, endMs: 700, deepgramSpeaker: 4, paragraphIndex: 0 },
+      { text: 'Hi', startMs: 100, endMs: 200, deepgramSpeaker: 3, paragraphIndex: -1 },
+      { text: 'there', startMs: 200, endMs: 400, deepgramSpeaker: 3, paragraphIndex: -1 },
+      { text: 'friend.', startMs: 400, endMs: 700, deepgramSpeaker: 4, paragraphIndex: -1 },
     ]);
   });
 
@@ -79,7 +82,7 @@ describe('parseDeepgramWords', () => {
 
   // ─── V075 ROADMAP_01: paragraph bucketing ────────────────────────────────
 
-  it('paragraphs absent → every word gets paragraphIndex=0', () => {
+  it('paragraphs absent → every word gets paragraphIndex=-1 (sentinel for "no paragraph data")', () => {
     const out = parseDeepgramWords({
       type: 'Results',
       is_final: true,
@@ -96,7 +99,7 @@ describe('parseDeepgramWords', () => {
         ],
       },
     });
-    expect(out.words.map((w) => w.paragraphIndex)).toEqual([0, 0, 0]);
+    expect(out.words.map((w) => w.paragraphIndex)).toEqual([-1, -1, -1]);
   });
 
   it('paragraphs present → words bucket by start time into the right index', () => {

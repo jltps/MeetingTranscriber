@@ -459,6 +459,23 @@ Distinguish clearly between what the prospect actually said and what remains unk
         ON meeting_sort_overrides (sort_mode, position);
     `,
   },
+  {
+    version: 13,
+    name: 'transcript-segment-spans',
+    // V075 ROADMAP_02 + ROADMAP_03. Two additive nullable JSON columns on
+    // transcript_segments:
+    //   - paragraph_breaks_json: ascending int[] of character offsets where
+    //     Deepgram's paragraph boundaries land within a single-speaker segment
+    //     (block 02).
+    //   - word_spans_json: { start, end, isFiller }[] character offsets used
+    //     by the renderer to render filler tokens with subdued styling
+    //     (block 03).
+    // Both NULLable; existing rows stay readable and render as before.
+    sql: `
+      ALTER TABLE transcript_segments ADD COLUMN paragraph_breaks_json TEXT;
+      ALTER TABLE transcript_segments ADD COLUMN word_spans_json       TEXT;
+    `,
+  },
 ];
 
 export function runMigrations(db: Database): void {
