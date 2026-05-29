@@ -19,8 +19,9 @@ function word(
   startMs: number,
   endMs: number,
   deepgramSpeaker: number,
+  paragraphIndex: number = 0,
 ): DeepgramWordView {
-  return { text, startMs, endMs, deepgramSpeaker };
+  return { text, startMs, endMs, deepgramSpeaker, paragraphIndex };
 }
 
 describe('attributeWords', () => {
@@ -54,7 +55,8 @@ describe('groupAttributedWords', () => {
     endMs: number,
     deepgramSpeaker: number,
     isMe: boolean,
-  ): AttributedWord => ({ text, startMs, endMs, deepgramSpeaker, isMe });
+    paragraphIndex: number = 0,
+  ): AttributedWord => ({ text, startMs, endMs, deepgramSpeaker, isMe, paragraphIndex });
 
   it('returns [] for empty input', () => {
     expect(groupAttributedWords([])).toEqual([]);

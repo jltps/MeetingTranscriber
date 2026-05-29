@@ -36,6 +36,20 @@ export type DeepgramConfig = {
 // be unit-tested without opening a socket (they are easy to get subtly wrong — see
 // V05, where detect_language silently broke nova-3 streaming with HTTP 400).
 //
+// V075 invariants (don't churn without a real reason):
+//   - `diarize=true` (v1 streaming diarizer). Deepgram's newer `diarize_model`
+//     parameter is **pre-recorded only** — sending it on streaming returns
+//     HTTP 400. When Deepgram adds `diarize_model` to streaming this is the
+//     single line that flips; the V062/V073 heuristics layer is happy to be
+//     replaced by a better upstream signal.
+//   - `punctuate=true` + `smart_format=true` — the enhancer prompt (§1.6)
+//     assumes punctuated input; `smart_format` is also what makes Deepgram's
+//     paragraph breaks meaningful in EN/ES.
+//   - `paragraphs=true` (V075 ROADMAP_01) — Deepgram returns a paragraphs
+//     block whose boundaries are influenced by speaker changes; the per-word
+//     attribution + grouping layer (V075 ROADMAP_02) uses it to collapse
+//     fragmented remote-speaker runs.
+//
 // nova-3 streaming language rules (developers.deepgram.com/docs):
 //   - `detect_language` is NOT supported on streaming — using it returns HTTP 400.
 //   - auto → `language=multi` (nova-3's multilingual / code-switching mode).
@@ -53,6 +67,11 @@ export function buildDeepgramQuery(
     // smart_format adds number/date/entity formatting on top of punctuation.
     smart_format: 'true',
     punctuate: 'true',
+    // V075 ROADMAP_01: Deepgram returns a paragraphs block in each alternative,
+    // with boundaries influenced by speaker/channel changes. The per-word
+    // attribution + grouping layer uses paragraph indices to collapse
+    // fragmented remote-speaker runs into one segment.
+    paragraphs: 'true',
     interim_results: 'true',
     encoding: 'linear16',
     sample_rate: String(opts.sampleRate),

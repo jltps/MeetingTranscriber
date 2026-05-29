@@ -34,7 +34,7 @@ describe('parseDeepgramWords', () => {
     ).toEqual({ words: [], isFinal: true });
   });
 
-  it('projects each word to {text, startMs, endMs, deepgramSpeaker}', () => {
+  it('projects each word to {text, startMs, endMs, deepgramSpeaker, paragraphIndex}', () => {
     const out = parseDeepgramWords({
       type: 'Results',
       is_final: true,
@@ -55,9 +55,9 @@ describe('parseDeepgramWords', () => {
     });
     expect(out.isFinal).toBe(true);
     expect(out.words).toEqual([
-      { text: 'Hi', startMs: 100, endMs: 200, deepgramSpeaker: 3 },
-      { text: 'there', startMs: 200, endMs: 400, deepgramSpeaker: 3 },
-      { text: 'friend.', startMs: 400, endMs: 700, deepgramSpeaker: 4 },
+      { text: 'Hi', startMs: 100, endMs: 200, deepgramSpeaker: 3, paragraphIndex: 0 },
+      { text: 'there', startMs: 200, endMs: 400, deepgramSpeaker: 3, paragraphIndex: 0 },
+      { text: 'friend.', startMs: 400, endMs: 700, deepgramSpeaker: 4, paragraphIndex: 0 },
     ]);
   });
 
@@ -75,5 +75,120 @@ describe('parseDeepgramWords', () => {
       },
     });
     expect(out.words[0].deepgramSpeaker).toBe(0);
+  });
+
+  // ─── V075 ROADMAP_01: paragraph bucketing ────────────────────────────────
+
+  it('paragraphs absent → every word gets paragraphIndex=0', () => {
+    const out = parseDeepgramWords({
+      type: 'Results',
+      is_final: true,
+      channel: {
+        alternatives: [
+          {
+            transcript: 'a b c',
+            words: [
+              { word: 'a', start: 0.0, end: 0.1 },
+              { word: 'b', start: 0.1, end: 0.2 },
+              { word: 'c', start: 0.2, end: 0.3 },
+            ],
+          },
+        ],
+      },
+    });
+    expect(out.words.map((w) => w.paragraphIndex)).toEqual([0, 0, 0]);
+  });
+
+  it('paragraphs present → words bucket by start time into the right index', () => {
+    const out = parseDeepgramWords({
+      type: 'Results',
+      is_final: true,
+      channel: {
+        alternatives: [
+          {
+            transcript: 'one two three four five six',
+            words: [
+              { word: 'one', start: 0.0, end: 0.4 },
+              { word: 'two', start: 0.4, end: 0.9 },
+              { word: 'three', start: 1.2, end: 1.6 },
+              { word: 'four', start: 1.6, end: 2.0 },
+              { word: 'five', start: 2.6, end: 3.0 },
+              { word: 'six', start: 3.0, end: 3.5 },
+            ],
+            paragraphs: {
+              paragraphs: [
+                { start: 0.0, end: 1.0 },
+                { start: 1.2, end: 2.0 },
+                { start: 2.5, end: 3.5 },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    expect(out.words.map((w) => w.paragraphIndex)).toEqual([0, 0, 1, 1, 2, 2]);
+  });
+
+  it('word in a gap between paragraphs N and N+1 inherits paragraph N (trailing-silence rule)', () => {
+    const out = parseDeepgramWords({
+      type: 'Results',
+      is_final: true,
+      channel: {
+        alternatives: [
+          {
+            transcript: 'gap',
+            words: [{ word: 'gap', start: 1.05, end: 1.15 }],
+            paragraphs: {
+              paragraphs: [
+                { start: 0.0, end: 1.0 },
+                { start: 1.2, end: 2.0 },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    expect(out.words[0].paragraphIndex).toBe(0);
+  });
+
+  it('word preceding the first paragraph (interim edge) → paragraph 0', () => {
+    const out = parseDeepgramWords({
+      type: 'Results',
+      is_final: true,
+      channel: {
+        alternatives: [
+          {
+            transcript: 'early',
+            words: [{ word: 'early', start: 0.0, end: 0.05 }],
+            paragraphs: {
+              paragraphs: [{ start: 0.5, end: 1.0 }],
+            },
+          },
+        ],
+      },
+    });
+    expect(out.words[0].paragraphIndex).toBe(0);
+  });
+
+  it('word past the last paragraph end → last paragraph index', () => {
+    const out = parseDeepgramWords({
+      type: 'Results',
+      is_final: true,
+      channel: {
+        alternatives: [
+          {
+            transcript: 'tail',
+            words: [{ word: 'tail', start: 5.0, end: 5.2 }],
+            paragraphs: {
+              paragraphs: [
+                { start: 0.0, end: 1.0 },
+                { start: 1.2, end: 2.0 },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    expect(out.words[0].paragraphIndex).toBe(1);
   });
 });

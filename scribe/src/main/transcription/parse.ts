@@ -23,15 +23,32 @@ type DeepgramWord = {
  * Minimal projection of a Deepgram word into the shape downstream per-word "Me"
  * attribution needs (V062 ROADMAP_01). Kept here next to `DeepgramWord` so the
  * mapping stays in one place.
+ *
+ * V075 ROADMAP_01: `paragraphIndex` carries Deepgram's paragraph-boundary
+ * signal through to grouping. Always present; defaults to 0 when the response
+ * has no `paragraphs` block, so consumers can treat "0 vs >0" uniformly
+ * without `undefined` checks.
  */
 export type DeepgramWordView = {
   text: string;
   startMs: number;
   endMs: number;
   deepgramSpeaker: number;
+  paragraphIndex: number;
 };
 
-type DeepgramAlternative = { transcript?: string; words?: DeepgramWord[] };
+/**
+ * V075 ROADMAP_01: shape of one entry inside `alternative.paragraphs.paragraphs`
+ * that we care about. Sentence-level data is unused by V075 so we project only
+ * the time range.
+ */
+type DeepgramParagraph = { start: number; end: number };
+
+type DeepgramAlternative = {
+  transcript?: string;
+  words?: DeepgramWord[];
+  paragraphs?: { paragraphs?: DeepgramParagraph[] };
+};
 
 type DeepgramResult = {
   type?: string;
@@ -110,13 +127,48 @@ export function parseDeepgramWords(message: unknown): {
   if (!alternative || !transcript) return { words: [], isFinal };
 
   const rawWords = alternative.words ?? [];
+  // V075 ROADMAP_01: extract paragraph boundaries (start/end in seconds, same
+  // origin as `word.start`). When absent, every word gets `paragraphIndex=0`.
+  const paragraphs: DeepgramParagraph[] = alternative.paragraphs?.paragraphs ?? [];
   const words: DeepgramWordView[] = rawWords.map((w) => ({
     text: w.punctuated_word ?? w.word,
     startMs: w.start * 1000,
     endMs: w.end * 1000,
     deepgramSpeaker: w.speaker ?? 0,
+    paragraphIndex: assignParagraphIndex(w.start, paragraphs),
   }));
   return { words, isFinal };
+}
+
+/**
+ * V075 ROADMAP_01: bucket a word into a paragraph by its `start` timestamp.
+ *
+ * Most messages carry ≤ 3 paragraphs so a linear scan is fine. Rules:
+ *   - If `paragraphs` is empty, every word is paragraph 0.
+ *   - A word whose `start` falls inside `[paragraphs[i].start, paragraphs[i].end)`
+ *     gets index `i`.
+ *   - A word whose `start` falls in the gap between paragraphs `i` and `i+1`
+ *     inherits paragraph `i` (treat trailing silence as the same thought).
+ *   - A word whose `start` precedes the first paragraph (interim edge) → 0.
+ *   - A word whose `start` is past the last paragraph's end → last index.
+ */
+function assignParagraphIndex(
+  startSec: number,
+  paragraphs: readonly DeepgramParagraph[],
+): number {
+  if (paragraphs.length === 0) return 0;
+  let lastFinishedIndex = -1;
+  for (let i = 0; i < paragraphs.length; i++) {
+    const p = paragraphs[i];
+    if (startSec < p.start) {
+      // Word starts before paragraph i. If a paragraph already closed,
+      // attribute to the most recent one (the "gap" rule); otherwise 0.
+      return lastFinishedIndex >= 0 ? lastFinishedIndex : 0;
+    }
+    if (startSec < p.end) return i;
+    lastFinishedIndex = i;
+  }
+  return paragraphs.length - 1;
 }
 
 function splitBySpeaker(words: DeepgramWord[]): TranscriptSegment[] {

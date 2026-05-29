@@ -19,8 +19,9 @@ function word(
   startMs: number,
   endMs: number,
   deepgramSpeaker: number,
+  paragraphIndex: number = 0,
 ): DeepgramWordView {
-  return { text, startMs, endMs, deepgramSpeaker };
+  return { text, startMs, endMs, deepgramSpeaker, paragraphIndex };
 }
 
 describe('computeBleedScore', () => {
