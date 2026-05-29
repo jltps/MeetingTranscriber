@@ -2,17 +2,22 @@
 // gymnastics). The AudioContext is created at the OS-preferred sample rate
 // (V073 block 01.3 — used to be hard-pinned to 16 kHz, which some WASAPI
 // endpoints silently refused). The processor reads `processorOptions`
-// `{ sourceRate, targetRate }` and decimates to `targetRate` (16 kHz) before
-// framing. Decimation is linear interpolation: voice is band-limited around
-// 4 kHz so the artefacts are imperceptible to a speech recognizer.
+// `{ sourceRate, targetRate, outputChannels }` and decimates to `targetRate`
+// (16 kHz) before framing. Decimation is linear interpolation: voice is
+// band-limited around 4 kHz so the artefacts are imperceptible to a speech
+// recognizer.
 //
 // Pipeline per quantum:
 //   - reads input 0 (microphone)  and input 1 (system audio)
 //   - if sourceRate != targetRate, linearly resamples mic + sys to targetRate
-//   - DOWNMIXES them into a single mono 16-bit PCM channel  [s0, s1, s2, ...]
-//     (V05 ROADMAP_02: Deepgram bills per channel, so one mono channel halves
-//     the cost; speaker separation comes from diarization, and "Me" is recovered
-//     in main from the per-frame mic/system RMS levels posted below)
+//   - emits PCM in one of two modes (V075 ROADMAP_04):
+//       outputChannels=1 (default, V05 cost-saver): DOWNMIXED mono
+//         [s0, s1, s2, ...] — Deepgram bills per channel, so this halves cost.
+//         Speakers come from diarization; "Me" is recovered in main from the
+//         per-frame mic/system RMS levels posted below.
+//       outputChannels=2 (V075 best-quality):  INTERLEAVED stereo
+//         [mic0, sys0, mic1, sys1, ...] — Deepgram diarizes each channel
+//         independently. ch0 = always "Me"; ch1 = remote speakers. ~2× cost.
 //   - frames to ~100 ms and posts each frame + per-channel RMS to the renderer
 //
 // The mic and system RMS levels drive the VU meters AND the main-process "Me"
@@ -30,6 +35,8 @@ class PcmFramer extends AudioWorkletProcessor {
     this._sourceRate = o.sourceRate || sampleRate; // AudioWorkletGlobalScope global
     this._ratio = this._sourceRate / this._targetRate; // source samples per output sample
     this._frameSamples = Math.round((this._targetRate * FRAME_MS) / 1000); // 1600 @ 16 kHz
+    // V075 ROADMAP_04 — 1 (mono downmix) or 2 (interleaved stereo).
+    this._outputChannels = o.outputChannels === 2 ? 2 : 1;
     this._mic = new Float32Array(this._frameSamples);
     this._sys = new Float32Array(this._frameSamples);
     this._fill = 0;
@@ -95,17 +102,33 @@ class PcmFramer extends AudioWorkletProcessor {
 
   _emit() {
     const N = this._frameSamples;
-    const out = new Int16Array(N); // single mono channel
     let micSum = 0;
     let sysSum = 0;
-    for (let i = 0; i < N; i++) {
-      const m = this._mic[i];
-      const s = this._sys[i];
-      // Downmix: sum mic + system, clamped to [-1, 1].
-      const mix = Math.max(-1, Math.min(1, m + s));
-      out[i] = mix < 0 ? mix * 0x8000 : mix * 0x7fff;
-      micSum += m * m;
-      sysSum += s * s;
+    let out;
+    if (this._outputChannels === 2) {
+      // V075 ROADMAP_04 — interleaved stereo [mic0, sys0, mic1, sys1, …].
+      out = new Int16Array(N * 2);
+      for (let i = 0; i < N; i++) {
+        const m = this._mic[i];
+        const s = this._sys[i];
+        const cm = Math.max(-1, Math.min(1, m));
+        const cs = Math.max(-1, Math.min(1, s));
+        out[2 * i] = cm < 0 ? cm * 0x8000 : cm * 0x7fff;
+        out[2 * i + 1] = cs < 0 ? cs * 0x8000 : cs * 0x7fff;
+        micSum += m * m;
+        sysSum += s * s;
+      }
+    } else {
+      // V05 cost-saver — downmixed mono.
+      out = new Int16Array(N);
+      for (let i = 0; i < N; i++) {
+        const m = this._mic[i];
+        const s = this._sys[i];
+        const mix = Math.max(-1, Math.min(1, m + s));
+        out[i] = mix < 0 ? mix * 0x8000 : mix * 0x7fff;
+        micSum += m * m;
+        sysSum += s * s;
+      }
     }
     this.port.postMessage(
       {

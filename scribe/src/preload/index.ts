@@ -118,6 +118,8 @@ const api: ScribeApi = {
       ipcRenderer.invoke(IPC.settingsSetAudioCaptureMode, mode),
     setTranscriptIncludeFillers: (include) =>
       ipcRenderer.invoke(IPC.settingsSetTranscriptIncludeFillers, include),
+    setCaptureQuality: (quality) =>
+      ipcRenderer.invoke(IPC.settingsSetCaptureQuality, quality),
     test: (provider, key) => ipcRenderer.invoke(IPC.settingsTest, { provider, key }),
     acceptPrivacy: () => ipcRenderer.invoke(IPC.settingsAcceptPrivacy),
     completeOnboarding: () => ipcRenderer.invoke(IPC.settingsCompleteOnboarding),

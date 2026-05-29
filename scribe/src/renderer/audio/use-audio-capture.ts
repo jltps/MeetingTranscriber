@@ -18,7 +18,9 @@ export type AudioCaptureController = {
   /** Which mic-device fallback step succeeded (V073). null until capture starts. */
   micFallbackStep: MicFallbackStep | null;
   error: string | null;
-  start: () => Promise<void>;
+  /** V075 ROADMAP_04 — when outputChannels=2, the worklet emits interleaved
+   *  stereo (mic ch0, sys ch1) instead of a downmixed mono. */
+  start: (opts?: { outputChannels?: 1 | 2 }) => Promise<void>;
   stop: () => Promise<void>;
 };
 
@@ -85,7 +87,7 @@ export function useAudioCapture(options: UseAudioCaptureOptions = {}): AudioCapt
     };
   }, [onFrame]);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (opts: { outputChannels?: 1 | 2 } = {}) => {
     setError(null);
     setFrames(0);
     setBytes(0);
@@ -93,7 +95,10 @@ export function useAudioCapture(options: UseAudioCaptureOptions = {}): AudioCapt
     setSysTrack(null);
     setMicFallbackStep(null);
     try {
-      await captureRef.current?.start({ micDeviceId: micDeviceIdRef.current ?? undefined });
+      await captureRef.current?.start({
+        micDeviceId: micDeviceIdRef.current ?? undefined,
+        outputChannels: opts.outputChannels,
+      });
     } catch {
       /* surfaced via onError */
     }

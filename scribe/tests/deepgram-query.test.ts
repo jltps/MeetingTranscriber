@@ -78,4 +78,23 @@ describe('buildDeepgramQuery', () => {
     expect(buildDeepgramQuery({ ...base, channels: 1 }).has('multichannel')).toBe(false);
     expect(buildDeepgramQuery({ ...base, channels: 2 }).get('multichannel')).toBe('true');
   });
+
+  // V075 ROADMAP_04 — stereo capture mode pins the multichannel + diarize
+  // combine-both pattern Deepgram recommends in
+  // docs/multichannel-vs-diarization. Each channel runs an independent
+  // diarizer; for our shape (mic ch0, sys ch1) ch0 returns speaker: 0 for the
+  // user, ch1 returns speaker: 0,1,2… for the remote speakers.
+  it('stereo capture (channels=2) keeps diarize=true alongside multichannel=true', () => {
+    const p = buildDeepgramQuery({ sampleRate: 16000, channels: 2 });
+    expect(p.get('multichannel')).toBe('true');
+    expect(p.get('diarize')).toBe('true');
+    expect(p.get('channels')).toBe('2');
+  });
+
+  it('stereo capture preserves the V075 paragraphs + smart_format invariants', () => {
+    const p = buildDeepgramQuery({ sampleRate: 16000, channels: 2 });
+    expect(p.get('paragraphs')).toBe('true');
+    expect(p.get('smart_format')).toBe('true');
+    expect(p.get('punctuate')).toBe('true');
+  });
 });

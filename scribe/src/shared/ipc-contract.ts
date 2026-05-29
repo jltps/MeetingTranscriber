@@ -95,6 +95,7 @@ export const IPC = {
   settingsSetNotesCardView:         'settings:setNotesCardView', // sidebar meeting-card density (V072 block 05)
   settingsSetAudioCaptureMode:      'settings:setAudioCaptureMode', // V073 — headphones/speakers/auto bias for "Me" attribution
   settingsSetTranscriptIncludeFillers: 'settings:setTranscriptIncludeFillers', // V075 ROADMAP_03 — preserve uh/um/etc.
+  settingsSetCaptureQuality:        'settings:setCaptureQuality', // V075 ROADMAP_04 — cost-saver vs stereo Best quality
   whisperModelsGet:             'whisper:modelsGet',             // → WhisperModelStatus[]
   whisperModelDownload:         'whisper:modelDownload',         // name → void (async)
   whisperModelCancel:           'whisper:modelCancel',           // → void
@@ -257,6 +258,16 @@ export type NotesCardView = z.infer<typeof NotesCardViewSchema>;
 export const AudioCaptureModeSchema = z.enum(['auto', 'headphones', 'speakers']);
 export type AudioCaptureMode = z.infer<typeof AudioCaptureModeSchema>;
 
+// V075 ROADMAP_04 — opt-in capture-quality tier. 'cost-saver' keeps the V05
+// single-channel mono path (~1× Deepgram bill, "Me" recovered via the V073
+// bleed-aware heuristic). 'best-quality' reinstates the pre-V05 2-channel
+// path (mic on ch0 = always "Me"; system on ch1 diarized for remotes via
+// `multichannel=true` + `diarize=true` per Deepgram's combine-both guidance)
+// at ~2× Deepgram bill. The 'best-quality' branch makes the V073
+// `audioCaptureMode` row a no-op (stereo eliminates bleed at the source).
+export const CaptureQualitySchema = z.enum(['cost-saver', 'best-quality']);
+export type CaptureQuality = z.infer<typeof CaptureQualitySchema>;
+
 /** Push payload when main can't grant the loopback (V073 block 01.2). */
 export const AudioLoopbackDeniedSchema = z.object({ reason: z.string() });
 export type AudioLoopbackDenied = z.infer<typeof AudioLoopbackDeniedSchema>;
@@ -372,6 +383,12 @@ export type SettingsView = {
    * the Deepgram side. Defaults to true; toggle in Settings → Transcription.
    */
   transcriptIncludeFillers: boolean;
+  /**
+   * V075 ROADMAP_04 — capture-quality tier. 'cost-saver' (default) keeps
+   * the V05 mono pipeline; 'best-quality' uses 2-channel capture so "Me" is
+   * a fact rather than a heuristic, at ~2× Deepgram cost.
+   */
+  captureQuality: CaptureQuality;
 };
 export type TestResult = { ok: boolean; message?: string };
 
@@ -484,6 +501,7 @@ export interface SettingsApi {
   setNotesCardView(view: NotesCardView): Promise<void>;
   setAudioCaptureMode(mode: AudioCaptureMode): Promise<void>;
   setTranscriptIncludeFillers(include: boolean): Promise<void>;
+  setCaptureQuality(quality: CaptureQuality): Promise<void>;
   test(provider: TestProvider, key?: string): Promise<TestResult>;
   acceptPrivacy(): Promise<void>;
   completeOnboarding(): Promise<void>;

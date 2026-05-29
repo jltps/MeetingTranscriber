@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { z } from 'zod';
 import {
   AudioCaptureModeSchema,
+  CaptureQualitySchema,
   IPC,
   LlmProviderSchema,
   NotesCardViewSchema,
@@ -18,6 +19,7 @@ import type { SettingsView, TestResult } from '../../shared/ipc-contract';
 import {
   deleteSetting,
   getAudioCaptureMode,
+  getCaptureQuality,
   getGlobalInstructions,
   getLanguage,
   getLlmProvider,
@@ -31,6 +33,7 @@ import {
   getTranscriptionProvider,
   getWhisperModel,
   setAudioCaptureMode,
+  setCaptureQuality,
   setLlmProvider,
   setNotesCardView,
   setOnboardingDone,
@@ -85,6 +88,7 @@ export function registerSettingsIpc(): void {
     notesCardView: getNotesCardView(),
     audioCaptureMode: getAudioCaptureMode(),
     transcriptIncludeFillers: getTranscriptIncludeFillers(),
+    captureQuality: getCaptureQuality(),
   }));
 
   ipcMain.handle(IPC.settingsSetKeys, (_event, raw) => {
@@ -157,6 +161,10 @@ export function registerSettingsIpc(): void {
 
   ipcMain.handle(IPC.settingsSetTranscriptIncludeFillers, (_event, raw) => {
     setTranscriptIncludeFillers(z.boolean().parse(raw));
+  });
+
+  ipcMain.handle(IPC.settingsSetCaptureQuality, (_event, raw) => {
+    setCaptureQuality(CaptureQualitySchema.parse(raw));
   });
 
   ipcMain.handle(IPC.settingsAcceptPrivacy, () => {

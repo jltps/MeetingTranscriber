@@ -375,11 +375,15 @@ export function App() {
     try {
       transcription.reset();
       await window.api.meetings.start(targetId);
-      // One mono channel: Deepgram bills per channel, so this halves the cost vs the
-      // old 2-channel capture. Speakers are split by diarization; "Me" is recovered
-      // from the mic-energy signal in the main process (V05 ROADMAP_02).
-      await transcription.start({ meetingId: targetId, sampleRate: 16000, channels: 1 });
-      await capture.start();
+      // V075 ROADMAP_04 — capture quality tier.
+      //  - 'cost-saver' (default): one downmixed mono channel; "Me" recovered
+      //    via the V073 bleed-aware heuristic. ~1× Deepgram cost.
+      //  - 'best-quality': 2-channel interleaved (mic = ch0 always "Me",
+      //    sys = ch1 diarized for remotes via multichannel=true + diarize=true).
+      //    ~2× Deepgram cost; eliminates own-voice bleed at the source.
+      const channels: 1 | 2 = settings?.captureQuality === 'best-quality' ? 2 : 1;
+      await transcription.start({ meetingId: targetId, sampleRate: 16000, channels });
+      await capture.start({ outputChannels: channels });
       setActiveId(targetId);
       await meetings.refresh();
     } catch {

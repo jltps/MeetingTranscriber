@@ -408,6 +408,31 @@ export function SettingsModal({
           matches the one your call plays through, or remote audio (CH1) won't be captured.
         </p>
       </div>
+      {/* V075 ROADMAP_04 — Capture quality tier */}
+      <div className="space-y-1.5">
+        <label className="text-sm text-muted-foreground">Capture quality</label>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          value={settings.captureQuality}
+          onValueChange={(v) => {
+            if (v) void window.api.settings
+              .setCaptureQuality(v as 'cost-saver' | 'best-quality')
+              .then(onChanged);
+          }}
+        >
+          <ToggleGroupItem value="cost-saver">Cost-saver</ToggleGroupItem>
+          <ToggleGroupItem value="best-quality">Best quality (~2× cost)</ToggleGroupItem>
+        </ToggleGroup>
+        <p className="text-[11px] text-muted-foreground">
+          Cost-saver downmixes mic + system into one mono channel and recovers
+          &ldquo;Me&rdquo; from a bleed-aware heuristic. Best quality keeps mic and system
+          as two separate Deepgram channels so &ldquo;Me&rdquo; is always correct (mic =
+          channel 0); the trade-off is roughly double the Deepgram bill. Changes apply on
+          the next recording.
+        </p>
+      </div>
       <div className="space-y-1.5">
         <label className="text-sm text-muted-foreground">Listening on</label>
         <ToggleGroup
@@ -415,6 +440,7 @@ export function SettingsModal({
           variant="outline"
           size="sm"
           value={settings.audioCaptureMode}
+          disabled={settings.captureQuality === 'best-quality'}
           onValueChange={(v) => {
             if (v) void window.api.settings
               .setAudioCaptureMode(v as 'auto' | 'headphones' | 'speakers')
@@ -426,10 +452,9 @@ export function SettingsModal({
           <ToggleGroupItem value="speakers">Speakers</ToggleGroupItem>
         </ToggleGroup>
         <p className="text-[11px] text-muted-foreground">
-          Auto-detect measures whether your speakers are leaking into the mic and tightens
-          the &ldquo;Me&rdquo; threshold accordingly. Pick &ldquo;Headphones&rdquo; if
-          remote speakers ever get mis-tagged as you, or &ldquo;Speakers&rdquo; if your own
-          voice keeps getting split across speakers.
+          {settings.captureQuality === 'best-quality'
+            ? 'Not used in Best quality — stereo capture eliminates bleed at the source, so no heuristic is needed.'
+            : 'Auto-detect measures whether your speakers are leaking into the mic and tightens the “Me” threshold accordingly. Pick “Headphones” if remote speakers ever get mis-tagged as you, or “Speakers” if your own voice keeps getting split across speakers.'}
         </p>
       </div>
     </section>

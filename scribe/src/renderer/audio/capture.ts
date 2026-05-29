@@ -130,7 +130,7 @@ export class AudioCapture {
     this.handlers.onState?.(state);
   }
 
-  async start(opts: { micDeviceId?: string } = {}): Promise<void> {
+  async start(opts: { micDeviceId?: string; outputChannels?: 1 | 2 } = {}): Promise<void> {
     if (this.state !== 'idle') return;
     this.setState('starting');
     try {
@@ -187,13 +187,17 @@ export class AudioCapture {
       await this.ctx.audioWorklet.addModule(WORKLET_URL);
 
       // 4) Two-input, zero-output worklet. channelCount:1 forces each input mono.
+      // V075 ROADMAP_04: outputChannels=2 makes the worklet emit interleaved
+      // [mic, sys] frames instead of a downmixed mono so Deepgram can diarize
+      // each channel independently (Best quality mode).
+      const outputChannels: 1 | 2 = opts.outputChannels === 2 ? 2 : 1;
       this.node = new AudioWorkletNode(this.ctx, 'pcm-framer', {
         numberOfInputs: 2,
         numberOfOutputs: 0,
         channelCount: 1,
         channelCountMode: 'explicit',
         channelInterpretation: 'discrete',
-        processorOptions: { sourceRate: ctxRate, targetRate: 16000 },
+        processorOptions: { sourceRate: ctxRate, targetRate: 16000, outputChannels },
       });
       this.node.port.onmessage = (ev: MessageEvent) => {
         const msg = ev.data as WorkletFrameMessage;

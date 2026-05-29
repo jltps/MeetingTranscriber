@@ -1,5 +1,6 @@
 import {
   AudioCaptureModeSchema,
+  CaptureQualitySchema,
   LlmProviderSchema,
   NotesCardViewSchema,
   QualityModeSchema,
@@ -8,6 +9,7 @@ import {
 } from '../../shared/ipc-contract';
 import type {
   AudioCaptureMode,
+  CaptureQuality,
   LlmProvider,
   NotesCardView,
   QualityMode,
@@ -222,6 +224,23 @@ export function getTranscriptIncludeFillers(): boolean {
 
 export function setTranscriptIncludeFillers(include: boolean): void {
   setSetting('transcript_include_fillers', include ? '1' : '0');
+}
+
+// ── Capture quality tier (V075 ROADMAP_04) ─────────────────────────────────
+
+/**
+ * V075 ROADMAP_04 — 'cost-saver' (default) uses the V05 mono pipeline;
+ * 'best-quality' reinstates 2-channel capture so mic = ch0 always "Me"
+ * and ch1 carries diarized remote speakers (≈2× Deepgram cost). Persisted
+ * in KV settings.
+ */
+export function getCaptureQuality(): CaptureQuality {
+  const parsed = CaptureQualitySchema.safeParse(getSetting('capture_quality'));
+  return parsed.success ? parsed.data : 'cost-saver';
+}
+
+export function setCaptureQuality(q: CaptureQuality): void {
+  setSetting('capture_quality', CaptureQualitySchema.parse(q));
 }
 
 // Leaves nothing behind (PRODUCT_SPEC.md §7): meetings + children + FTS + every
