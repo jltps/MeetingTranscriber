@@ -2,6 +2,8 @@ import React, { memo, useEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowRightLeft, Mic } from 'lucide-react';
 import type { TranscriptSegment } from '../../../shared/types';
+import type { SegmentEntitySpan, SegmentInsight } from '../insights/insights-merge';
+import { entityUnderlineClass, SENTIMENT_GLYPH, sentimentClass } from '../insights/insight-style';
 import { EmptyState } from '../../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import {
@@ -32,10 +34,31 @@ function formatTime(ms: number): string {
  *     visual focus.
  * When neither is present, returns the plain text.
  */
-function renderSegmentText(seg: DisplaySegment): React.ReactNode {
+type StyledSpan = { start: number; end: number; className: string };
+
+/**
+ * Build the styled spans to weave into a segment: filler tokens (muted/italic,
+ * V075) plus, when insights exist (V08), NER entity underlines. Entities win on
+ * overlap; the result is sorted + non-overlapping.
+ */
+function buildStyledSpans(seg: DisplaySegment, entitySpans: SegmentEntitySpan[]): StyledSpan[] {
+  const spans: StyledSpan[] = entitySpans.map((e) => ({
+    start: e.start,
+    end: e.end,
+    className: entityUnderlineClass(e.kind),
+  }));
+  for (const f of seg.wordSpans ?? []) {
+    if (!f.isFiller) continue;
+    if (spans.some((s) => f.start < s.end && s.start < f.end)) continue; // overlaps an entity
+    spans.push({ start: f.start, end: f.end, className: 'italic text-muted-foreground' });
+  }
+  return spans.sort((a, b) => a.start - b.start);
+}
+
+function renderSegmentText(seg: DisplaySegment, entitySpans: SegmentEntitySpan[] = []): React.ReactNode {
   const breaks = seg.paragraphBreaks ?? [];
-  const fillerSpans = (seg.wordSpans ?? []).filter((s) => s.isFiller);
-  if (breaks.length === 0 && fillerSpans.length === 0) return seg.text;
+  const styled = buildStyledSpans(seg, entitySpans);
+  if (breaks.length === 0 && styled.length === 0) return seg.text;
   // Split text into paragraph chunks first.
   const chunks: { start: number; end: number }[] = [];
   let cursor = 0;
@@ -46,22 +69,22 @@ function renderSegmentText(seg: DisplaySegment): React.ReactNode {
     }
   }
   chunks.push({ start: cursor, end: seg.text.length });
-  // Within each chunk, weave non-filler + filler runs from fillerSpans.
+  // Within each chunk, weave plain text + styled (filler/entity) runs.
   return chunks.map((chunk, i) => {
     const nodes: React.ReactNode[] = [];
     let pos = chunk.start;
-    for (const span of fillerSpans) {
+    for (const span of styled) {
       if (span.end <= chunk.start) continue;
       if (span.start >= chunk.end) break;
-      const fillerStart = Math.max(span.start, chunk.start);
-      const fillerEnd = Math.min(span.end, chunk.end);
-      if (fillerStart > pos) nodes.push(seg.text.slice(pos, fillerStart));
+      const start = Math.max(span.start, chunk.start);
+      const end = Math.min(span.end, chunk.end);
+      if (start > pos) nodes.push(seg.text.slice(pos, start));
       nodes.push(
-        <span key={`f-${i}-${fillerStart}`} className="italic text-muted-foreground">
-          {seg.text.slice(fillerStart, fillerEnd)}
+        <span key={`s-${i}-${start}`} className={span.className}>
+          {seg.text.slice(start, end)}
         </span>,
       );
-      pos = fillerEnd;
+      pos = end;
     }
     if (pos < chunk.end) nodes.push(seg.text.slice(pos, chunk.end));
     return (
@@ -83,6 +106,7 @@ const Line = memo(function Line({
   onRenameSpeaker,
   onReassignSegment,
   distinctRawLabels,
+  insight,
 }: {
   seg: DisplaySegment;
   /** Resolved display name (speakerNames.get(rawLabel) ?? rawLabel) — pre-computed by parent. */
@@ -94,6 +118,8 @@ const Line = memo(function Line({
   onRenameSpeaker?: (rawLabel: string, displayName: string) => void;
   onReassignSegment?: (segmentId: number, newRawLabel: string) => void;
   distinctRawLabels?: string[];
+  /** V08 — Gladia post-call overlay for this segment (entity spans + sentiment). */
+  insight?: SegmentInsight;
 }) {
   const isMe = seg.channel === 0;
 
@@ -175,7 +201,21 @@ const Line = memo(function Line({
       )}
 
       <span className="mr-2 text-[11px] tabular-nums text-muted-foreground">{formatTime(seg.startMs)}</span>
-      <span className="text-sm leading-relaxed text-foreground">{renderSegmentText(seg)}</span>
+      {insight?.sentiment && (
+        <span
+          className={`mr-2 text-xs ${sentimentClass(insight.sentiment.label)}`}
+          title={
+            insight.sentiment.emotion
+              ? `${insight.sentiment.label} · ${insight.sentiment.emotion}`
+              : insight.sentiment.label
+          }
+        >
+          {SENTIMENT_GLYPH[insight.sentiment.label]}
+        </span>
+      )}
+      <span className="text-sm leading-relaxed text-foreground">
+        {renderSegmentText(seg, insight?.entitySpans)}
+      </span>
 
       {/* Reassign menu — visible on hover for finalized segments with multiple speakers */}
       {canReassign && otherLabels.length > 0 && (
@@ -213,6 +253,7 @@ export function TranscriptPanel({
   onRenameSpeaker,
   onReassignSegment,
   distinctRawLabels,
+  segmentInsights,
 }: {
   finals: DisplaySegment[];
   interims: TranscriptSegment[];
@@ -222,6 +263,8 @@ export function TranscriptPanel({
   onRenameSpeaker?: (rawLabel: string, displayName: string) => void;
   onReassignSegment?: (segmentId: number, newRawLabel: string) => void;
   distinctRawLabels?: string[];
+  /** V08 — per-segment-id Gladia overlay (entity spans + sentiment) for the weave. */
+  segmentInsights?: Map<number, SegmentInsight>;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
@@ -306,6 +349,7 @@ export function TranscriptPanel({
               {virtualizer.getVirtualItems().map((item) => {
                 const seg = finals[item.index];
                 const displayLabel = speakerNames?.get(seg.speakerLabel) ?? seg.speakerLabel;
+                const insight = seg.id !== undefined ? segmentInsights?.get(seg.id) : undefined;
                 return (
                   <div
                     key={item.key}
@@ -328,6 +372,7 @@ export function TranscriptPanel({
                       onRenameSpeaker={onRenameSpeaker}
                       onReassignSegment={onReassignSegment}
                       distinctRawLabels={distinctRawLabels}
+                      insight={insight}
                     />
                   </div>
                 );

@@ -4,6 +4,7 @@ import {
   AgendaListSchema,
   AudioLoopbackDeniedSchema,
   ChatTokenSchema,
+  InsightsStatusSchema,
   IPC,
   TranscriptSegmentSchema,
   TranscriptionLanguageSchema,
@@ -58,11 +59,19 @@ const api: ScribeApi = {
     ipcRenderer.on(IPC.transcriptionWarning, listener);
     return () => ipcRenderer.removeListener(IPC.transcriptionWarning, listener);
   },
+  onTranscriptionInsightsStatus: (cb) => {
+    const listener = (_event: IpcRendererEvent, payload: unknown): void => {
+      cb(InsightsStatusSchema.parse(payload));
+    };
+    ipcRenderer.on(IPC.transcriptionInsightsStatus, listener);
+    return () => ipcRenderer.removeListener(IPC.transcriptionInsightsStatus, listener);
+  },
   meetings: {
     list: () => ipcRenderer.invoke(IPC.meetingsList),
     create: () => ipcRenderer.invoke(IPC.meetingsCreate),
     get: (id) => ipcRenderer.invoke(IPC.meetingsGet, id),
     getTranscript: (id) => ipcRenderer.invoke(IPC.meetingsGetTranscript, id),
+    getInsights: (id) => ipcRenderer.invoke(IPC.meetingsGetInsights, id),
     saveNotes: (id, markdown) => ipcRenderer.invoke(IPC.meetingsSaveNotes, { id, markdown }),
     updateTitle: (id, title) => ipcRenderer.invoke(IPC.meetingsUpdateTitle, { id, title }),
     start: (id) => ipcRenderer.invoke(IPC.meetingsStart, id),

@@ -1,5 +1,6 @@
 import type { TranscriptSegment } from '../../shared/types';
 import type { DeepgramWordView } from './parse';
+import type { ProviderInsights } from './parse-gladia';
 
 // Provider-agnostic streaming transcription (PRODUCT_SPEC.md §6.2). v1 ships only
 // Deepgram behind this interface; v2 can drop in local Whisper without touching
@@ -19,5 +20,23 @@ export interface TranscriptionSession {
    * also firing `onFinal` with the same content, to avoid double-emit.
    */
   onWords?(cb: (words: DeepgramWordView[]) => void): void;
+  /**
+   * V08 — fires once after the session ends with the normalized post-call
+   * intelligence (diarization + NER + sentiment). Optional: only the Gladia
+   * session implements it. The IPC layer reconciles "Me"/speaker labels against
+   * the persisted transcript and stores the result. Because it fires *after*
+   * stop(), the owning session must stay alive until then (the IPC layer keeps a
+   * reference); see `abort()` for the app-quit teardown path.
+   */
+  onInsights?(cb: (insights: ProviderInsights) => void): void;
+  /** V08 — provider session id(s) (multiple across a handoff), for persisting
+   * with the insights row + boot-resume. Optional: only Gladia has them. */
+  sessionIds?(): string[];
   stop(): Promise<void>;
+  /**
+   * V08 — hard teardown without emitting `onInsights`, for app quit. Optional:
+   * only sessions with post-stop work (Gladia) need it; others are fully torn
+   * down by stop().
+   */
+  abort?(): void;
 }

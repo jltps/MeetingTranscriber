@@ -32,6 +32,8 @@ function makeMeeting(overrides: Partial<BackupMeeting> = {}): BackupMeeting {
     templateName: null,
     folderId: null,
     tags: [],
+    sttProvider: null,
+    insights: null,
     usage: { deepgramAudioMs: 2_550_000, deepgramChannels: 2, claudeInputTokens: 3200, claudeOutputTokens: 1100 },
     segments: [
       { id: 10, channel: 1, speakerLabel: 'Speaker 1', text: 'Hello everyone', startMs: 1000, endMs: 3000 },
@@ -151,13 +153,15 @@ describe('BackupBundleSchema', () => {
     expect(() => BackupBundleSchema.parse(makeBundle())).not.toThrow();
   });
 
-  it('accepts both v1 and v2 versions', () => {
+  it('accepts v1, v2, and v3 versions', () => {
     expect(() => BackupBundleSchema.parse(makeBundle({ version: 1 }))).not.toThrow();
     expect(() => BackupBundleSchema.parse(makeBundle({ version: 2 }))).not.toThrow();
+    // V08: v3 adds per-meeting insights + sttProvider (both default-null).
+    expect(() => BackupBundleSchema.parse(makeBundle({ version: 3 }))).not.toThrow();
   });
 
   it('rejects an unsupported version', () => {
-    expect(() => BackupBundleSchema.parse(makeBundle({ version: 3 }))).toThrow();
+    expect(() => BackupBundleSchema.parse(makeBundle({ version: 4 }))).toThrow();
   });
 
   it('defaults folders/tags to empty for a v1 bundle (back-compat)', () => {

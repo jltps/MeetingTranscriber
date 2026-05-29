@@ -9,6 +9,7 @@ import {
   UpdateTitleSchema,
 } from '../../shared/ipc-contract';
 import * as meetings from '../db/meetings';
+import { getInsights } from '../db/insights';
 import { suggestMeetingTitle } from '../enhancer/title';
 
 // Meeting/notes/transcript CRUD over IPC. Every inbound argument is Zod-validated
@@ -20,6 +21,9 @@ export function registerMeetingsIpc(): void {
   ipcMain.handle(IPC.meetingsGet, (_event, raw) => meetings.getMeeting(MeetingIdSchema.parse(raw)));
   ipcMain.handle(IPC.meetingsGetTranscript, (_event, raw) =>
     meetings.getTranscript(MeetingIdSchema.parse(raw)),
+  );
+  ipcMain.handle(IPC.meetingsGetInsights, (_event, raw) =>
+    getInsights(MeetingIdSchema.parse(raw)),
   );
   ipcMain.handle(IPC.meetingsSaveNotes, (_event, raw) => {
     const input = SaveNotesSchema.parse(raw);

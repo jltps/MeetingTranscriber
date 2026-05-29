@@ -39,12 +39,12 @@ export type ActionContext = {
   enhanceMeeting: () => void;
   startRecording: () => void;
   stopRecording: () => void;
-  setView: (v: 'original' | 'enhanced') => void;
+  setView: (v: 'original' | 'enhanced' | 'insights') => void;
   setNoteSurface: (s: 'notes' | 'chat') => void;
   hasMeeting: boolean;
   running: boolean;
   hasEnhanced: boolean;
-  view: 'original' | 'enhanced';
+  view: 'original' | 'enhanced' | 'insights';
   noteSurface: 'notes' | 'chat';
 };
 

@@ -10,7 +10,7 @@ import { MeetingOrgControls } from '../organization/MeetingOrgControls';
 // every notes-affecting control sits with the notes pane it governs. The
 // Original/Enhanced toggle is disabled while chat is the active surface.
 export type NoteSurface = 'notes' | 'chat';
-export type NotesView = 'original' | 'enhanced';
+export type NotesView = 'original' | 'enhanced' | 'insights';
 
 type Props = {
   meetingId: number;
@@ -19,6 +19,8 @@ type Props = {
   folders: Folder[];
   tags: Tag[];
   hasEnhanced: boolean;
+  /** V08 — a Gladia meeting has post-call insights (ready or processing). */
+  hasInsights: boolean;
   view: NotesView;
   surface: NoteSurface;
   exporting: boolean;
@@ -39,6 +41,7 @@ export function NoteWindowHeader({
   folders,
   tags,
   hasEnhanced,
+  hasInsights,
   view,
   surface,
   exporting,
@@ -66,7 +69,7 @@ export function NoteWindowHeader({
           onRemoveTag={onRemoveTag}
           onCreateTag={onCreateTag}
         />
-        {hasEnhanced && (
+        {(hasEnhanced || hasInsights) && (
           <ToggleGroup
             type="single"
             variant="outline"
@@ -78,7 +81,8 @@ export function NoteWindowHeader({
             }}
           >
             <ToggleGroupItem value="original">Original</ToggleGroupItem>
-            <ToggleGroupItem value="enhanced">Enhanced</ToggleGroupItem>
+            {hasEnhanced && <ToggleGroupItem value="enhanced">Enhanced</ToggleGroupItem>}
+            {hasInsights && <ToggleGroupItem value="insights">Insights</ToggleGroupItem>}
           </ToggleGroup>
         )}
       </div>

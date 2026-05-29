@@ -158,11 +158,13 @@ export function setUpdateLastChecked(iso: string): void {
 
 // ── Local Whisper settings (ROADMAP_05) ────────────────────────────────────
 
-export type TranscriptionProvider = 'deepgram' | 'whisper';
+export type TranscriptionProvider = 'deepgram' | 'whisper' | 'gladia';
 
 export function getTranscriptionProvider(): TranscriptionProvider {
   const raw = getSetting('transcription_provider');
-  return raw === 'whisper' ? 'whisper' : 'deepgram'; // default: deepgram
+  if (raw === 'whisper') return 'whisper';
+  if (raw === 'gladia') return 'gladia'; // V08
+  return 'deepgram'; // default
 }
 
 export function setTranscriptionProvider(p: TranscriptionProvider): void {
@@ -249,6 +251,7 @@ export function wipeAllData(): void {
   const db = getDb();
   const wipe = db.transaction(() => {
     db.prepare('DELETE FROM transcript_segments').run();
+    db.prepare('DELETE FROM meeting_insights').run();
     db.prepare('DELETE FROM notes').run();
     db.prepare('DELETE FROM calendar_events').run();
     db.prepare('DELETE FROM meeting_tags').run();

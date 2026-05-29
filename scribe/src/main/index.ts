@@ -5,6 +5,7 @@ import { stopCalendarSync } from './calendar';
 import { initDb, closeDb } from './db';
 import { registerIpcHandlers } from './ipc';
 import { disposeTranscription } from './ipc/transcription';
+import { resumePendingInsights } from './transcription/resume-insights';
 import { logger } from './logger';
 import { disposeUpdater, initUpdater } from './updater';
 import { closeSplash, createSplash } from './splash';
@@ -116,6 +117,9 @@ app
     // Start the in-app auto-updater (V07). No-op in dev; in packaged builds it
     // schedules a check 60 s after boot and every 6 h after.
     initUpdater();
+    // V08 — finish any Gladia insights interrupted by a prior app close. Detached
+    // + best-effort so it never delays startup.
+    void resumePendingInsights();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

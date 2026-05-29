@@ -1,6 +1,7 @@
 import { DeepgramSession } from './deepgram';
 import { WhisperSession } from './whisper';
-import { getDeepgramKey } from '../secrets/api-keys';
+import { GladiaSession } from './gladia';
+import { getDeepgramKey, getGladiaKey } from '../secrets/api-keys';
 import {
   getLanguage,
   getTranscriptIncludeFillers,
@@ -9,6 +10,7 @@ import {
 } from '../db/settings';
 import type { TranscriptionSession } from './session';
 import type { DeepgramWordView } from './parse';
+import type { ProviderInsights } from './parse-gladia';
 import type { TranscriptSegment } from '../../shared/types';
 import type { TranscriptionStatus } from '../../shared/ipc-contract';
 
@@ -24,6 +26,11 @@ export type TranscriptionSessionConfig = {
    * per-word "Me" attribution + regrouping itself.
    */
   onWords?: (words: DeepgramWordView[]) => void;
+  /**
+   * V08: fires once after a Gladia session ends with the normalized post-call
+   * intelligence. Only wired when the active provider supports it (Gladia).
+   */
+  onInsights?: (insights: ProviderInsights) => void;
 };
 
 // Callers depend only on this factory + the TranscriptionSession interface, never
@@ -43,6 +50,22 @@ export function createTranscriptionSession(
     );
     session.onPartial(config.onSegment);
     session.onFinal(config.onSegment);
+    return session;
+  }
+
+  if (provider === 'gladia') {
+    // V08: Gladia emits utterance-level finals (no per-word `onWords` path) +
+    // post-call insights via `onInsights`. "Me" is recovered by the same
+    // single-channel energy heuristic the IPC layer applies to `onSegment`.
+    const session = new GladiaSession({
+      apiKey: getGladiaKey() ?? '',
+      languageSetting: getLanguage(),
+      onLanguageDetected: config.onLanguageDetected,
+      onStatus: config.onStatus,
+    });
+    session.onPartial(config.onSegment);
+    session.onFinal(config.onSegment);
+    if (config.onInsights) session.onInsights(config.onInsights);
     return session;
   }
 

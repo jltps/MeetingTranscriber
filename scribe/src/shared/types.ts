@@ -54,6 +54,69 @@ export type EnhancedNotes = {
   keyPoints?: string[];
 };
 
+// ─── Post-call audio intelligence (V08 — Gladia) ────────────────────────────
+// Diarization + Named Entity Recognition + sentiment, produced by the Gladia
+// provider and surfaced after a call ends (a separate layer from notes §1.5 and
+// the transcript). The shapes are provider-agnostic so a future provider could
+// populate them too. NER/sentiment from Gladia carry no confidence score, so
+// those fields are intentionally absent; entity char offsets are computed by
+// substring-matching the entity text within the utterance text.
+
+/** One detected entity within an utterance (V08). */
+export type InsightEntity = {
+  /** Gladia `entity_type`, e.g. 'person' | 'organization' | 'location' | 'date'. */
+  kind: string;
+  text: string;
+  /** Character offsets into the utterance text (computed by substring match). */
+  start?: number;
+  end?: number;
+};
+
+/** Per-utterance sentiment (V08). */
+export type InsightSentiment = {
+  label: 'positive' | 'negative' | 'neutral';
+  /** Gladia emotion label when present (e.g. 'happiness', 'anger'). */
+  emotion?: string;
+};
+
+/** A single enriched utterance in the post-call Insights view (V08). */
+export type InsightUtterance = {
+  text: string;
+  /** Gladia diarization speaker id (0-indexed); -1 when diarization gave none. */
+  speaker: number;
+  /** Reconciled display label: 'Me' (mic-dominant) or 'Speaker N'. */
+  speakerLabel: string;
+  isMe: boolean;
+  startMs: number;
+  endMs: number;
+  channel: 0 | 1;
+  language?: string;
+  entities: InsightEntity[];
+  sentiment?: InsightSentiment;
+};
+
+/** Aggregate rollups for the Insights summary card (V08). */
+export type MeetingInsightsSummary = {
+  speakers: { label: string; talkMs: number; utteranceCount: number }[];
+  entityCounts: { kind: string; count: number }[];
+  topEntities: { text: string; kind: string; count: number }[];
+  /** Utterance counts by sentiment label. */
+  sentiment: { positive: number; neutral: number; negative: number };
+};
+
+/**
+ * Post-call intelligence for one meeting (V08). `status` mirrors the
+ * `meeting_insights` job state: 'processing' while Gladia post-processes,
+ * 'ready' once `utterances`/`summary` are populated, 'error' on failure.
+ */
+export type MeetingInsights = {
+  provider: 'gladia';
+  status: 'processing' | 'ready' | 'error';
+  error?: string;
+  utterances: InsightUtterance[];
+  summary: MeetingInsightsSummary;
+};
+
 export type MeetingStatus = 'draft' | 'transcribing' | 'ended';
 
 /** Row-level meeting metadata for the sidebar list (PRODUCT_SPEC.md §11). */

@@ -2,6 +2,7 @@
 // Pattern mirrors db/speakers.ts and db/meetings.ts.
 import { getDb } from './index';
 import { listFolders, listTags, tagsForMeeting } from './organization';
+import { getInsights, saveInsights } from './insights';
 import type { BackupBundle, BackupMeeting } from '../../shared/ipc-contract';
 
 // ── Raw SQLite row types ───────────────────────────────────────────────────
@@ -15,6 +16,7 @@ type MeetingRow = {
   ended_at: number | null;
   template_id: number | null;
   folder_id: number | null;
+  stt_provider: string | null;
   deepgram_audio_ms: number;
   deepgram_channels: number;
   claude_input_tokens: number;
@@ -52,7 +54,7 @@ type TemplateRow = {
 const MEETING_SELECT = `
   SELECT
     m.id, m.title, m.status, m.created_at, m.started_at, m.ended_at,
-    m.template_id, m.folder_id, m.deepgram_audio_ms, m.deepgram_channels, m.claude_input_tokens, m.claude_output_tokens,
+    m.template_id, m.folder_id, m.stt_provider, m.deepgram_audio_ms, m.deepgram_channels, m.claude_input_tokens, m.claude_output_tokens,
     t.name  AS template_name,
     n.raw_user_md, n.enhanced_json, n.enhanced_at, n.enhanced_lang
   FROM meetings m
@@ -82,6 +84,8 @@ function rowToMeeting(row: MeetingRow, meetingId: number): BackupMeeting {
     endedAt: row.ended_at,
     templateId: row.template_id,
     folderId: row.folder_id,
+    sttProvider: row.stt_provider,
+    insights: getInsights(meetingId),
     tags: tagsForMeeting(meetingId),
     rawUserMd: row.raw_user_md ?? '',
     enhancedJson: row.enhanced_json,
@@ -156,7 +160,7 @@ export function getAllExportData(): BackupBundle {
   }));
 
   return {
-    version: 2,
+    version: 3,
     app: 'scribe',
     exportedAt: new Date().toISOString(),
     meetings,
@@ -220,9 +224,9 @@ export function restoreFromBackup(bundle: BackupBundle): { meetingCount: number 
     // 3. Restore meetings + their children.
     const insertMeeting = db.prepare(
       `INSERT INTO meetings
-         (id, title, status, created_at, started_at, ended_at, template_id, folder_id,
+         (id, title, status, created_at, started_at, ended_at, template_id, folder_id, stt_provider,
           deepgram_audio_ms, deepgram_channels, claude_input_tokens, claude_output_tokens)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const insertMeetingTag = db.prepare(
       `INSERT OR IGNORE INTO meeting_tags (meeting_id, tag_id) VALUES (?, ?)`,
@@ -245,10 +249,13 @@ export function restoreFromBackup(bundle: BackupBundle): { meetingCount: number 
         m.templateId !== null && validTemplateIds.has(m.templateId) ? m.templateId : null;
       const folderId = m.folderId !== null && validFolderIds.has(m.folderId) ? m.folderId : null;
       insertMeeting.run(
-        m.id, m.title, m.status, m.createdAt, m.startedAt, m.endedAt, templateId, folderId,
+        m.id, m.title, m.status, m.createdAt, m.startedAt, m.endedAt, templateId, folderId, m.sttProvider ?? null,
         m.usage.deepgramAudioMs, m.usage.deepgramChannels, m.usage.claudeInputTokens, m.usage.claudeOutputTokens,
       );
       insertNotes.run(m.id, m.rawUserMd, m.enhancedJson, m.enhancedAt, m.enhancedLang);
+      // V08: restore post-call insights when present + finished. Session ids are
+      // not preserved (the live sessions are long gone).
+      if (m.insights && m.insights.status === 'ready') saveInsights(m.id, m.insights, []);
       for (const seg of m.segments) {
         insertSegment.run(seg.id, m.id, seg.channel, seg.speakerLabel, seg.text, seg.startMs, seg.endMs);
       }

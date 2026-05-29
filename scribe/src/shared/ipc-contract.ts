@@ -14,6 +14,7 @@ import type {
   Folder,
   LanguageSetting,
   MeetingDetail,
+  MeetingInsights,
   MeetingSummary,
   PersistedSegment,
   RetrievalScope,
@@ -34,6 +35,7 @@ export const IPC = {
   transcriptionSegment: 'transcription:segment', // main -> renderer
   transcriptionStatus: 'transcription:status', // main -> renderer
   transcriptionLanguageDetected: 'transcription:languageDetected', // main -> renderer
+  transcriptionInsightsStatus: 'transcription:insightsStatus', // main -> renderer (V08 Gladia)
   // V073 — capture diagnostics. Pushed when the main loopback handler can't
   // grant system audio, or when the in-meeting watchdog spots prolonged silence.
   audioLoopbackDenied: 'audio:loopbackDenied', // main -> renderer
@@ -43,6 +45,7 @@ export const IPC = {
   meetingsCreate: 'meetings:create',
   meetingsGet: 'meetings:get',
   meetingsGetTranscript: 'meetings:getTranscript',
+  meetingsGetInsights: 'meetings:getInsights', // V08 — Gladia post-call intelligence
   meetingsSaveNotes: 'meetings:saveNotes',
   meetingsUpdateTitle: 'meetings:updateTitle',
   meetingsStart: 'meetings:start',
@@ -219,6 +222,7 @@ export type EnhanceResult = { notes: EnhancedNotes; degraded: boolean };
 export const SetKeysSchema = z.object({
   deepgram: z.string().optional(),
   anthropic: z.string().optional(),
+  gladia: z.string().optional(), // V08
 });
 export type SetKeysInput = z.infer<typeof SetKeysSchema>;
 export const SetMicDeviceSchema = z.string().nullable();
@@ -279,6 +283,64 @@ export const TranscriptionWarningSchema = z.object({
 });
 export type TranscriptionWarning = z.infer<typeof TranscriptionWarningSchema>;
 
+// ─── Post-call audio intelligence (V08 — Gladia) ────────────────────────────
+
+const InsightEntitySchema = z.object({
+  kind: z.string(),
+  text: z.string(),
+  start: z.number().int().nonnegative().optional(),
+  end: z.number().int().nonnegative().optional(),
+});
+
+const InsightSentimentSchema = z.object({
+  label: z.enum(['positive', 'negative', 'neutral']),
+  emotion: z.string().optional(),
+});
+
+const InsightUtteranceSchema = z.object({
+  text: z.string(),
+  speaker: z.number().int(),
+  speakerLabel: z.string(),
+  isMe: z.boolean(),
+  startMs: z.number(),
+  endMs: z.number(),
+  channel: z.union([z.literal(0), z.literal(1)]),
+  language: z.string().optional(),
+  entities: z.array(InsightEntitySchema),
+  sentiment: InsightSentimentSchema.optional(),
+});
+
+const MeetingInsightsSummarySchema = z.object({
+  speakers: z.array(
+    z.object({ label: z.string(), talkMs: z.number(), utteranceCount: z.number().int() }),
+  ),
+  entityCounts: z.array(z.object({ kind: z.string(), count: z.number().int() })),
+  topEntities: z.array(
+    z.object({ text: z.string(), kind: z.string(), count: z.number().int() }),
+  ),
+  sentiment: z.object({
+    positive: z.number().int(),
+    neutral: z.number().int(),
+    negative: z.number().int(),
+  }),
+});
+
+/** The normalized post-call intelligence for a meeting (V08). */
+export const MeetingInsightsSchema = z.object({
+  provider: z.literal('gladia'),
+  status: z.enum(['processing', 'ready', 'error']),
+  error: z.string().optional(),
+  utterances: z.array(InsightUtteranceSchema),
+  summary: MeetingInsightsSummarySchema,
+}) satisfies z.ZodType<MeetingInsights>;
+
+/** Push payload when a meeting's insights job changes state (V08). */
+export const InsightsStatusSchema = z.object({
+  meetingId: z.number().int().positive(),
+  status: z.enum(['processing', 'ready', 'error']),
+});
+export type InsightsStatus = z.infer<typeof InsightsStatusSchema>;
+
 /**
  * Which LLM backend serves enhancement, chat, titles, and prompt-optimization (V06
  * block 05). 'anthropic' is the default and the one the app is tuned for;
@@ -299,7 +361,7 @@ export const OpenAiConfigSchema = z.object({
 });
 export type OpenAiConfig = z.infer<typeof OpenAiConfigSchema>;
 
-export const TestProviderSchema = z.enum(['deepgram', 'anthropic']);
+export const TestProviderSchema = z.enum(['deepgram', 'anthropic', 'gladia']);
 export type TestProvider = z.infer<typeof TestProviderSchema>;
 // `key` lets the UI test the just-typed (unsaved) key; when omitted, the stored
 // key is tested instead.
@@ -340,6 +402,8 @@ export interface ThemeApi {
 export type SettingsView = {
   deepgramKeySet: boolean;
   anthropicKeySet: boolean;
+  /** Whether a Gladia key is saved (V08). Never the key itself (§1.2). */
+  gladiaKeySet: boolean;
   micDeviceId: string | null;
   language: LanguageSetting;
   /** Free-text instructions appended to every enhancement (FEATURES §B1). */
@@ -359,8 +423,8 @@ export type SettingsView = {
   onboardingDone: boolean;
   /** Aggregate usage totals across all meetings (ROADMAP_01 §3). */
   usageTotals: UsageTotals;
-  /** 'deepgram' (default) or 'whisper' (local, ROADMAP_05). */
-  transcriptionProvider: 'deepgram' | 'whisper';
+  /** 'deepgram' (default), 'whisper' (local, ROADMAP_05), or 'gladia' (V08). */
+  transcriptionProvider: 'deepgram' | 'whisper' | 'gladia';
   /** Active Whisper model size key (ROADMAP_05). */
   whisperModel: string;
   /** Whether a Google Calendar account is connected (ROADMAP_06). Never the token. */
@@ -475,6 +539,8 @@ export interface MeetingsApi {
   create(): Promise<MeetingSummary>;
   get(id: number): Promise<MeetingDetail | null>;
   getTranscript(id: number): Promise<PersistedSegment[]>;
+  /** Post-call audio intelligence (V08 — Gladia). null when none exists. */
+  getInsights(id: number): Promise<MeetingInsights | null>;
   saveNotes(id: number, markdown: string): Promise<void>;
   updateTitle(id: number, title: string): Promise<void>;
   start(id: number): Promise<MeetingSummary>;
@@ -496,7 +562,7 @@ export interface SettingsApi {
   setLlmProvider(provider: LlmProvider): Promise<void>;
   setOpenAiConfig(config: OpenAiConfig): Promise<void>;
   testOpenAi(config: OpenAiConfig): Promise<TestResult>;
-  setTranscriptionProvider(provider: 'deepgram' | 'whisper'): Promise<void>;
+  setTranscriptionProvider(provider: 'deepgram' | 'whisper' | 'gladia'): Promise<void>;
   setWhisperModel(model: string): Promise<void>;
   setNotesCardView(view: NotesCardView): Promise<void>;
   setAudioCaptureMode(mode: AudioCaptureMode): Promise<void>;
@@ -540,6 +606,10 @@ const BackupMeetingSchema = z.object({
   // Organization (backup v2). Default keeps v1 bundles (without these) valid.
   folderId: z.number().int().positive().nullable().default(null),
   tags: z.array(z.string()).default([]),
+  // V08 (backup v3). Which STT provider billed this meeting + its post-call
+  // insights. Defaults keep v1/v2 bundles valid.
+  sttProvider: z.string().nullable().default(null),
+  insights: MeetingInsightsSchema.nullable().default(null),
   usage: z.object({
     deepgramAudioMs: z.number().int(),
     claudeInputTokens: z.number().int(),
@@ -583,7 +653,7 @@ const BackupTagSchema = z.object({
  * stays the literal 'scribe' so older backups keep validating.
  */
 export const BackupBundleSchema = z.object({
-  version: z.union([z.literal(1), z.literal(2)]),
+  version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   app: z.literal('scribe'),
   exportedAt: z.string(),
   meetings: z.array(BackupMeetingSchema),
@@ -897,6 +967,8 @@ export interface ScribeApi {
   onAudioLoopbackDenied(cb: (info: AudioLoopbackDenied) => void): () => void;
   /** V073 — silence watchdog (or its clearance) during an active session. */
   onTranscriptionWarning(cb: (w: TranscriptionWarning) => void): () => void;
+  /** V08 — Gladia post-call insights job changed state (processing/ready/error). */
+  onTranscriptionInsightsStatus(cb: (s: InsightsStatus) => void): () => void;
   meetings: MeetingsApi;
   templates: TemplatesApi;
   speakers: SpeakersApi;

@@ -5,14 +5,18 @@ import type { TranscriptionWarning } from '../../shared/ipc-contract';
 import type { TranscriptSegment } from '../../shared/types';
 import { createTranscriptionSession } from '../transcription';
 import type { TranscriptionSession } from '../transcription/session';
+import type { ProviderInsights } from '../transcription/parse-gladia';
+import { reconcileInsights } from '../transcription/insights-reconcile';
 import {
   attributeMe,
   attributeWords,
   groupAttributedWords,
   type EnergySample,
 } from '../transcription/me-attribution';
-import { getAudioCaptureMode } from '../db/settings';
-import { insertTranscriptSegment, saveDeepgramUsage } from '../db/meetings';
+import { getAudioCaptureMode, getTranscriptionProvider } from '../db/settings';
+import type { TranscriptionProvider } from '../db/settings';
+import { getTranscript, insertTranscriptSegment, saveDeepgramUsage } from '../db/meetings';
+import { saveInsights, setInsightsError, setInsightsProcessing } from '../db/insights';
 import { logger } from '../logger';
 
 // One active session at a time. Control messages (start/stop) are Zod-validated;
@@ -56,6 +60,14 @@ let energyTimeline: EnergySample[] = [];
 const ENERGY_TIMELINE_CAP = 200_000;
 /** Capture mode (V073) snapshot for the current session. */
 let captureMode: ReturnType<typeof getAudioCaptureMode> = 'auto';
+/** Provider snapshot for the current session (V08) — selects the stop/usage path. */
+let activeProvider: TranscriptionProvider = 'deepgram';
+/**
+ * Gladia sessions kept alive after stop() while they post-process insights
+ * (V08). The session removes itself once `onInsights` finalizes; dispose drains
+ * any stragglers so app close leaves no dangling sockets.
+ */
+const enriching = new Set<TranscriptionSession>();
 
 /** Apply "Me" attribution, but only in single-channel mode. */
 function attributeSpeaker(seg: TranscriptSegment): TranscriptSegment {
@@ -115,6 +127,37 @@ function resetWatchdog(): void {
   watchdogFiredKind = null;
 }
 
+/**
+ * V08: reconcile Gladia's post-call insights against the persisted transcript
+ * (the authoritative "Me"/speaker source — the energy timeline is cleared on
+ * stop), persist, and notify the renderer. Always releases the retained session.
+ */
+function finalizeInsights(
+  forMeetingId: number,
+  forTarget: WebContents | null,
+  insights: ProviderInsights,
+  ownerSession: TranscriptionSession,
+): void {
+  try {
+    const segments = getTranscript(forMeetingId);
+    const normalized = reconcileInsights(insights, segments);
+    const ids = ownerSession.sessionIds?.() ?? [];
+    saveInsights(forMeetingId, normalized, ids);
+    forTarget?.send(IPC.transcriptionInsightsStatus, { meetingId: forMeetingId, status: 'ready' });
+    logger.info('gladia insights ready', `meeting=${forMeetingId}`);
+  } catch (e) {
+    logger.info('failed to finalize gladia insights', String(e));
+    try {
+      setInsightsError(forMeetingId, e instanceof Error ? e.message : String(e));
+    } catch {
+      /* best effort */
+    }
+    forTarget?.send(IPC.transcriptionInsightsStatus, { meetingId: forMeetingId, status: 'error' });
+  } finally {
+    enriching.delete(ownerSession);
+  }
+}
+
 export function registerTranscriptionIpc(): void {
   ipcMain.handle(IPC.transcriptionStart, async (event, raw) => {
     const opts = TranscriptionStartSchema.parse(raw);
@@ -126,11 +169,17 @@ export function registerTranscriptionIpc(): void {
     audioMs = 0;
     energyTimeline = [];
     captureMode = getAudioCaptureMode();
+    activeProvider = getTranscriptionProvider();
     resetWatchdog();
     if (session) {
       await session.stop();
       session = null;
     }
+    // Captured for the post-stop insights callback (V08): the module-level
+    // `meetingId`/`target` are nulled on stop, but Gladia's onInsights fires
+    // later, so bind this session's values here.
+    const enrichMeetingId = opts.meetingId;
+    const enrichTarget = event.sender;
     const next = createTranscriptionSession({
       onSegment: (seg) => {
         // Single-channel mode: recover "Me" from the mic-energy signal before persist.
@@ -159,6 +208,12 @@ export function registerTranscriptionIpc(): void {
         detectedLanguage = bcp47;
         target?.send(IPC.transcriptionLanguageDetected, { bcp47 });
       },
+      // V08: Gladia delivers diarization/NER/sentiment after the call ends.
+      // Reconcile + persist against the captured meeting (the energy timeline is
+      // gone by then). Only wired for providers that emit it (Gladia).
+      onInsights: (insights) => {
+        finalizeInsights(enrichMeetingId, enrichTarget, insights, next);
+      },
     });
     await next.start({ sampleRate: opts.sampleRate, channels: opts.channels });
     session = next;
@@ -166,15 +221,36 @@ export function registerTranscriptionIpc(): void {
   });
 
   ipcMain.handle(IPC.transcriptionStop, async () => {
-    await session?.stop();
+    const stopping = session;
+    const stopProvider = activeProvider;
+    const stopMeetingId = meetingId;
+    const stopTarget = target;
+    await stopping?.stop();
     session = null;
-    // Save accumulated Deepgram audio duration + billed channel count for cost tracking.
-    if (meetingId !== null && audioMs > 0) {
+    // Save accumulated STT audio duration + billed channel count for cost tracking.
+    if (stopMeetingId !== null && audioMs > 0) {
       try {
-        saveDeepgramUsage(meetingId, audioMs, audioChannels);
+        saveDeepgramUsage(stopMeetingId, audioMs, audioChannels, stopProvider);
       } catch (e) {
-        logger.info('failed to save deepgram usage', String(e));
+        logger.info('failed to save stt usage', String(e));
       }
+    }
+    // V08: Gladia keeps post-processing after stop() — its socket stays alive
+    // internally until insights are ready. Retain the session, mark the meeting
+    // "analysing", and let onInsights finalize later. Other providers are fully
+    // torn down by stop().
+    if (stopProvider === 'gladia' && stopping && stopMeetingId !== null) {
+      enriching.add(stopping);
+      const ids = stopping.sessionIds?.() ?? [];
+      try {
+        setInsightsProcessing(stopMeetingId, 'gladia', ids);
+      } catch (e) {
+        logger.info('failed to mark insights processing', String(e));
+      }
+      stopTarget?.send(IPC.transcriptionInsightsStatus, {
+        meetingId: stopMeetingId,
+        status: 'processing',
+      });
     }
     meetingId = null;
     audioMs = 0;
@@ -207,15 +283,27 @@ export function registerTranscriptionIpc(): void {
 }
 
 export async function disposeTranscription(): Promise<void> {
-  await session?.stop();
+  const active = session;
+  await active?.stop();
   session = null;
   if (meetingId !== null && audioMs > 0) {
     try {
-      saveDeepgramUsage(meetingId, audioMs, audioChannels);
+      saveDeepgramUsage(meetingId, audioMs, audioChannels, activeProvider);
     } catch {
       /* best effort */
     }
   }
+  // V08: hard-tear-down any retained Gladia sessions (and the just-stopped one)
+  // so app close leaves no dangling sockets; boot-resume recovers their insights.
+  active?.abort?.();
+  for (const s of enriching) {
+    try {
+      s.abort?.();
+    } catch {
+      /* best effort */
+    }
+  }
+  enriching.clear();
   meetingId = null;
   audioMs = 0;
   energyTimeline = [];

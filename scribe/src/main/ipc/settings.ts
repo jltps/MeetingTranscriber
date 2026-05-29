@@ -50,9 +50,11 @@ import { getUsageTotals } from '../db/meetings';
 import {
   getAnthropicKey,
   getDeepgramKey,
+  getGladiaKey,
   getOpenAiKey,
   setAnthropicKey,
   setDeepgramKey,
+  setGladiaKey,
   setOpenAiKey,
 } from '../secrets/api-keys';
 import { testOpenAiConnection } from '../llm/openai-compatible';
@@ -60,6 +62,7 @@ import { isGoogleConnected, isMicrosoftConnected } from '../secrets/calendar-tok
 import { resetCalendar } from '../calendar';
 import { themeView } from '../theme';
 import { testDeepgramKey } from '../transcription/deepgram';
+import { testGladiaKey } from '../transcription/gladia';
 import { testAnthropicKey } from '../enhancer/anthropic';
 import { logger } from '../logger';
 
@@ -69,6 +72,7 @@ export function registerSettingsIpc(): void {
   ipcMain.handle(IPC.settingsGet, (): SettingsView => ({
     deepgramKeySet: getDeepgramKey() !== null,
     anthropicKeySet: getAnthropicKey() !== null,
+    gladiaKeySet: getGladiaKey() !== null,
     micDeviceId: getSetting('mic_device_id'),
     language: getLanguage(),
     globalInstructions: getGlobalInstructions(),
@@ -95,6 +99,7 @@ export function registerSettingsIpc(): void {
     const input = SetKeysSchema.parse(raw);
     if (input.deepgram !== undefined) setDeepgramKey(input.deepgram);
     if (input.anthropic !== undefined) setAnthropicKey(input.anthropic);
+    if (input.gladia !== undefined) setGladiaKey(input.gladia);
   });
 
   ipcMain.handle(IPC.settingsSetMicDevice, (_event, raw) => {
@@ -142,7 +147,7 @@ export function registerSettingsIpc(): void {
   });
 
   ipcMain.handle(IPC.settingsSetTranscriptionProvider, (_event, raw) => {
-    const provider = z.enum(['deepgram', 'whisper']).parse(raw);
+    const provider = z.enum(['deepgram', 'whisper', 'gladia']).parse(raw);
     setTranscriptionProvider(provider);
   });
 
@@ -193,6 +198,10 @@ export function registerSettingsIpc(): void {
         const effective = typed || getDeepgramKey();
         if (!effective) return { ok: false, message: 'No Deepgram key to test.' };
         await testDeepgramKey(effective);
+      } else if (provider === 'gladia') {
+        const effective = typed || getGladiaKey();
+        if (!effective) return { ok: false, message: 'No Gladia key to test.' };
+        await testGladiaKey(effective);
       } else {
         const effective = typed || getAnthropicKey();
         if (!effective) return { ok: false, message: 'No Anthropic key to test.' };

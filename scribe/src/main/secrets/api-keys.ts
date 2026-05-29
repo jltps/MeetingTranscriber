@@ -12,6 +12,7 @@ import { decryptSecret, encryptSecret } from './safe-store';
 const DEEPGRAM_SETTING = 'deepgram_key_enc';
 const ANTHROPIC_SETTING = 'anthropic_key_enc';
 const OPENAI_COMPAT_SETTING = 'openai_compat_key_enc';
+const GLADIA_SETTING = 'gladia_key_enc';
 
 let envLoaded = false;
 
@@ -69,4 +70,12 @@ export function getOpenAiKey(): string | null {
 
 export function setOpenAiKey(key: string | null): void {
   storeKey(OPENAI_COMPAT_SETTING, key);
+}
+
+export function getGladiaKey(): string | null {
+  return readKey(GLADIA_SETTING, 'GLADIA_API_KEY');
+}
+
+export function setGladiaKey(key: string | null): void {
+  storeKey(GLADIA_SETTING, key);
 }

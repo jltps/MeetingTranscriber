@@ -39,6 +39,15 @@
   --info: #0369a1;
   --speaker-self: #047857;
   --speaker-other: #0369a1;
+  /* V08 — Gladia insights: NER kind colours + sentiment (light). */
+  --entity-person: #1d4ed8;
+  --entity-org: #0f766e;
+  --entity-location: #b45309;
+  --entity-date: #7c3aed;
+  --entity-other: #525252;
+  --sentiment-positive: #047857;
+  --sentiment-neutral: #6b7280;
+  --sentiment-negative: #b91c1c;
   --note-user: #171717;
   --note-ai: #6b7280;
   --source-link: #6b7280;
@@ -70,6 +79,15 @@
     --info: #38bdf8;
     --speaker-self: #34d399;
     --speaker-other: #38bdf8;
+    /* V08 — Gladia insights (dark). */
+    --entity-person: #60a5fa;
+    --entity-org: #2dd4bf;
+    --entity-location: #fbbf24;
+    --entity-date: #a78bfa;
+    --entity-other: #a3a3a3;
+    --sentiment-positive: #34d399;
+    --sentiment-neutral: #9ca3af;
+    --sentiment-negative: #f87171;
     --note-user: #e5e5e5;
     --note-ai: #8b97a6;
     --source-link: #9ca3af;
@@ -103,6 +121,14 @@
   --color-info: var(--info);
   --color-speaker-self: var(--speaker-self);
   --color-speaker-other: var(--speaker-other);
+  --color-entity-person: var(--entity-person);
+  --color-entity-org: var(--entity-org);
+  --color-entity-location: var(--entity-location);
+  --color-entity-date: var(--entity-date);
+  --color-entity-other: var(--entity-other);
+  --color-sentiment-positive: var(--sentiment-positive);
+  --color-sentiment-neutral: var(--sentiment-neutral);
+  --color-sentiment-negative: var(--sentiment-negative);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

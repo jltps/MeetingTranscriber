@@ -9,6 +9,9 @@ import { MeetingSidebar } from '../features/meetings/MeetingSidebar';
 import { NotesEditor } from '../features/notes/NotesEditor';
 import { EnhancedPane } from '../features/notes/EnhancedPane';
 import { NoteWindowHeader } from '../features/notes/NoteWindowHeader';
+import { useInsights } from '../features/insights/use-insights';
+import { InsightsView } from '../features/insights/InsightsView';
+import { mergeInsightsIntoSegments } from '../features/insights/insights-merge';
 import { useSettings } from '../features/settings/use-settings';
 import { SettingsModal } from '../features/settings/SettingsModal';
 import { AudioWarningBanner } from '../features/settings/AudioWarningBanner';
@@ -74,6 +77,8 @@ export function App() {
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const chat = useChat(selectedId);
+  // V08 — post-call Gladia insights for the selected meeting (null for others).
+  const insightsCtl = useInsights(selectedId);
 
   // Cross-meeting querying (ROADMAP_07 Phase 2): a full-pane view, plus a deferred
   // highlight so a citation can open another meeting and flash the line once loaded.
@@ -91,7 +96,7 @@ export function App() {
 
   const [enhanced, setEnhanced] = useState<EnhancedNotes | null>(null);
   const [degraded, setDegraded] = useState(false);
-  const [view, setView] = useState<'original' | 'enhanced'>('original');
+  const [view, setView] = useState<'original' | 'enhanced' | 'insights'>('original');
   // V072 block 02: the note window's primary surface — notes (Original/Enhanced)
   // or per-meeting chat. Chat used to live as a tab in the right column; it now
   // takes over the notes pane when active.
@@ -103,6 +108,9 @@ export function App() {
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  // V08 — surface a failed start (e.g. selected provider has no key) instead of
+  // the previous silent rollback.
+  const [startError, setStartError] = useState<string | null>(null);
 
   const [showSettings, setShowSettings] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
@@ -177,7 +185,16 @@ export function App() {
 
   const running = capture.state === 'running' && activeId !== null;
   const showingActive = running && selectedId === activeId;
-  const error = transcription.error ?? capture.error ?? exportError;
+  const error = transcription.error ?? capture.error ?? exportError ?? startError;
+  // V08 — the transcription key the *selected* provider needs (Whisper needs none).
+  const sttKeyMissing =
+    settings == null
+      ? false
+      : settings.transcriptionProvider === 'gladia'
+        ? !settings.gladiaKeySet
+        : settings.transcriptionProvider === 'whisper'
+          ? false
+          : !settings.deepgramKeySet;
 
   useEffect(() => {
     if (selectedId === null) {
@@ -249,6 +266,9 @@ export function App() {
   // (transcript hidden), and the narrow layout so the three never diverge.
   const renderNotes = () => {
     if (!detail) return null;
+    if (view === 'insights') {
+      return <InsightsView insights={insightsCtl.insights} speakerNames={speakerNames} />;
+    }
     return view === 'enhanced' && enhanced ? (
       <EnhancedPane
         key={`enhanced-${detail.id}`}
@@ -283,6 +303,7 @@ export function App() {
           folders={org.folders}
           tags={org.tags}
           hasEnhanced={hasEnhanced}
+          hasInsights={insightsCtl.insights !== null}
           view={view}
           surface={noteSurface}
           exporting={exporting}
@@ -371,6 +392,7 @@ export function App() {
   const start = async (targetId: number | null = selectedId): Promise<void> => {
     if (targetId === null) return;
     setBusy(true);
+    setStartError(null);
     setDetectedLang(null); // reset for new session
     try {
       transcription.reset();
@@ -386,10 +408,11 @@ export function App() {
       await capture.start({ outputChannels: channels });
       setActiveId(targetId);
       await meetings.refresh();
-    } catch {
+    } catch (e) {
       await capture.stop();
       await transcription.stop();
       setActiveId(null);
+      setStartError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
@@ -511,6 +534,12 @@ export function App() {
   const finals = showingActive ? transcription.finals : loadedSegments;
   const interims = showingActive ? transcription.interims : [];
   const hasEnhanced = enhanced !== null;
+  // V08 — overlay Gladia entities/sentiment onto the displayed (ended-meeting)
+  // segments for the inline weave. No-op for live or non-Gladia meetings.
+  const segmentInsights = useMemo(
+    () => mergeInsightsIntoSegments(loadedSegments, insightsCtl.insights),
+    [loadedSegments, insightsCtl.insights],
+  );
   // Chat is grounded in a finished transcript — available for an ended meeting, not
   // while recording (ROADMAP_07 Phase 1).
   const chatAvailable = !running && loadedSegments.length > 0;
@@ -728,7 +757,7 @@ export function App() {
             description="Pick a note from the sidebar, or start a new one to capture a meeting."
             action={{ label: 'New note', onClick: () => onNewNote() }}
             secondaryAction={
-              settings && (!settings.anthropicKeySet || !settings.deepgramKeySet)
+              settings && (!settings.anthropicKeySet || sttKeyMissing)
                 ? { label: 'Connect API keys', onClick: () => setShowSettings(true) }
                 : undefined
             }
@@ -868,6 +897,7 @@ export function App() {
                       onRenameSpeaker={onRenameSpeaker}
                       onReassignSegment={onReassignSegment}
                       distinctRawLabels={distinctRawLabels}
+                      segmentInsights={segmentInsights}
                     />
                   </div>
                   <details className="mt-4 text-xs text-muted-foreground">

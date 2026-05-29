@@ -122,7 +122,9 @@ export function SettingsModal({
 
 
   // Transcription provider + Whisper model manager (ROADMAP_05)
-  const [provider, setProvider] = useState<'deepgram' | 'whisper'>(settings.transcriptionProvider);
+  const [provider, setProvider] = useState<'deepgram' | 'whisper' | 'gladia'>(
+    settings.transcriptionProvider,
+  );
   const [whisperModel, setWhisperModel] = useState(settings.whisperModel);
   const [modelStatuses, setModelStatuses] = useState<WhisperModelStatus[]>([]);
   const [activeDownload, setActiveDownload] = useState<string | null>(null);
@@ -147,7 +149,7 @@ export function SettingsModal({
     return unsub;
   }, []);
 
-  const handleSetProvider = (p: 'deepgram' | 'whisper'): void => {
+  const handleSetProvider = (p: 'deepgram' | 'whisper' | 'gladia'): void => {
     setProvider(p);
     void window.api.settings.setTranscriptionProvider(p).then(onChanged);
   };
@@ -289,6 +291,7 @@ export function SettingsModal({
       <section className="space-y-3">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">API keys</h3>
         <KeyRow label="Deepgram" provider="deepgram" isSet={settings.deepgramKeySet} onSaved={onChanged} />
+        <KeyRow label="Gladia" provider="gladia" isSet={settings.gladiaKeySet} onSaved={onChanged} />
         <KeyRow label="Anthropic" provider="anthropic" isSet={settings.anthropicKeySet} onSaved={onChanged} />
         <p className="text-[11px] text-muted-foreground">
           Keys are encrypted with your OS secure storage and never leave this machine.
@@ -474,14 +477,24 @@ export function SettingsModal({
           variant="outline"
           size="sm"
           value={provider}
-          onValueChange={(v) => { if (v) handleSetProvider(v as 'deepgram' | 'whisper'); }}
+          onValueChange={(v) => {
+            if (v) handleSetProvider(v as 'deepgram' | 'whisper' | 'gladia');
+          }}
         >
           <ToggleGroupItem value="deepgram">Deepgram (cloud)</ToggleGroupItem>
+          <ToggleGroupItem value="gladia">Gladia (cloud)</ToggleGroupItem>
           <ToggleGroupItem value="whisper">Local (Whisper)</ToggleGroupItem>
         </ToggleGroup>
         {provider === 'deepgram' && (
           <p className="text-[11px] text-muted-foreground">
             Streams audio to Deepgram&apos;s cloud API. Requires a Deepgram key (set above).
+          </p>
+        )}
+        {provider === 'gladia' && (
+          <p className="text-[11px] text-muted-foreground">
+            Streams audio to Gladia&apos;s cloud API (solaria-1). Requires a Gladia key (set
+            above). Adds post-call <strong>Insights</strong> — speaker diarization, named entities,
+            and sentiment — shown once a meeting ends.
           </p>
         )}
         {provider === 'whisper' && (
@@ -669,7 +682,7 @@ export function SettingsModal({
               {t.deepgramAudioMs > 0 && (
                 <div className="flex items-center justify-between px-3 py-2">
                   <span className="text-muted-foreground">
-                    Deepgram transcription
+                    Transcription
                     <span className="ml-1.5 text-muted-foreground">
                       {formatAudioDuration(t.deepgramAudioMs)}
                     </span>
@@ -744,7 +757,12 @@ export function SettingsModal({
     <section className="space-y-3">
       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Privacy</h3>
       <p className="text-[11px] leading-relaxed text-muted-foreground">
-        No audio is ever stored. Audio is streamed to Deepgram for transcription and dropped;
+        No audio is ever stored.{' '}
+        {provider === 'whisper'
+          ? 'Audio is transcribed on-device (Whisper) and never leaves your machine;'
+          : provider === 'gladia'
+            ? 'Audio is streamed to Gladia for transcription (and post-call diarization, named entities, and sentiment) and dropped;'
+            : 'Audio is streamed to Deepgram for transcription and dropped;'}{' '}
         transcript text and notes go to Anthropic only when you enhance a meeting. Everything
         else stays local.
       </p>

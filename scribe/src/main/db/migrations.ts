@@ -476,6 +476,31 @@ Distinguish clearly between what the prospect actually said and what remains unk
       ALTER TABLE transcript_segments ADD COLUMN word_spans_json       TEXT;
     `,
   },
+  {
+    version: 14,
+    name: 'gladia-insights',
+    // V08 — Gladia provider's post-call audio intelligence (diarization + NER +
+    // sentiment). One additive table for the normalized, per-meeting insights and
+    // one additive column to remember which STT provider a meeting used (so cost
+    // estimation can price each meeting at the right rate; NULL = legacy/deepgram).
+    //   - status: 'processing' (job running) | 'ready' (insights_json populated) | 'error'
+    //   - insights_json: normalized MeetingInsights (utterances + summary); NULL until ready
+    //   - session_ids_json: Gladia live session id(s) — multiple across a 3h handoff —
+    //     used to merge sub-sessions and to resume the fetch after an app restart.
+    // Both NULLable; existing meetings stay readable and simply show no Insights.
+    sql: `
+      CREATE TABLE meeting_insights (
+        meeting_id       INTEGER PRIMARY KEY REFERENCES meetings(id) ON DELETE CASCADE,
+        provider         TEXT    NOT NULL,
+        status           TEXT    NOT NULL,
+        insights_json    TEXT,
+        session_ids_json TEXT,
+        error            TEXT,
+        updated_at       INTEGER NOT NULL
+      );
+      ALTER TABLE meetings ADD COLUMN stt_provider TEXT;
+    `,
+  },
 ];
 
 export function runMigrations(db: Database): void {

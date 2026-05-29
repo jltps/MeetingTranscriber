@@ -102,6 +102,38 @@ export function meetingToMarkdown(data: BackupMeeting): string {
     }
   }
 
+  // ── Insights section (V08, Gladia) ───────────────────────────────────────
+  const ins = data.insights;
+  if (ins && ins.status === 'ready' && ins.utterances.length > 0) {
+    const resolve = (label: string): string =>
+      data.speakerNames.find((n) => n.rawLabel === label)?.displayName ?? label;
+    parts.push('');
+    parts.push('---');
+    parts.push('');
+    parts.push('## Insights');
+    parts.push('');
+    if (ins.summary.speakers.length > 0) {
+      parts.push(
+        `**Speakers:** ${ins.summary.speakers
+          .map((sp) => `${resolve(sp.label)} (${formatAudioDuration(sp.talkMs)})`)
+          .join(', ')}`,
+      );
+    }
+    if (ins.summary.topEntities.length > 0) {
+      parts.push(
+        `**Entities:** ${ins.summary.topEntities.map((e) => `${e.text} (${e.kind})`).join(', ')}`,
+      );
+    }
+    parts.push(
+      `**Sentiment:** ${ins.summary.sentiment.positive} positive · ${ins.summary.sentiment.neutral} neutral · ${ins.summary.sentiment.negative} negative`,
+    );
+    parts.push('');
+    for (const u of ins.utterances) {
+      const sentiment = u.sentiment ? ` _[${u.sentiment.label}]_` : '';
+      parts.push(`**${resolve(u.speakerLabel)}** (${formatTime(u.startMs)})${sentiment}: ${u.text}`);
+    }
+  }
+
   return parts.join('\n');
 }
 

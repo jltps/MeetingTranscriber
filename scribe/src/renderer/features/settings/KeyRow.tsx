@@ -26,7 +26,11 @@ export function KeyRow({ label, provider, isSet, onSaved }: KeyRowProps) {
     setResult(null);
     try {
       await window.api.settings.setKeys(
-        provider === 'deepgram' ? { deepgram: value } : { anthropic: value },
+        provider === 'deepgram'
+          ? { deepgram: value }
+          : provider === 'gladia'
+            ? { gladia: value }
+            : { anthropic: value },
       );
       setValue('');
       onSaved();

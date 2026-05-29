@@ -15,6 +15,14 @@ export const PRICING = {
    * estimateCost(). V05 ROADMAP_02 drops to a single channel to halve it.
    */
   deepgramNovaPerMinutePerChannel: 0.0059,
+  /**
+   * Gladia solaria-1 live STT — per channel per minute (USD), approximate. V08.
+   * Gladia bills per audio minute × channels like Deepgram, and the audio-
+   * intelligence add-ons (diarization, NER, sentiment) are billed *separately*
+   * per minute — those add-ons are NOT itemized here, so this is a conservative
+   * transcription-only floor. Update when Gladia publishes new pricing.
+   */
+  gladiaSolariaPerMinutePerChannel: 0.0102,
   /** Claude Sonnet — per 1 million input tokens (USD). */
   claudeSonnetInputPer1MTokens: 3.0,
   /** Claude Sonnet — per 1 million output tokens (USD). */

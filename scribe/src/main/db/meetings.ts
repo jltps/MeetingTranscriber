@@ -8,6 +8,7 @@ import type {
   TranscriptSegment,
 } from '../../shared/types';
 import type { UsageTotals } from '../../shared/ipc-contract';
+import type { TranscriptionProvider } from './settings';
 import { estimateCost, PRICING } from '../enhancer/pricing';
 import type { EnhancerSegment } from '../enhancer/enhancer';
 import { tagsByMeeting, tagsForMeeting } from './organization';
@@ -139,15 +140,25 @@ export function getMeeting(id: number): MeetingDetail | null {
  * enhancement (Claude side). Called with partial updates — columns not in the
  * update are left untouched via column-specific UPDATEs.
  */
-export function saveDeepgramUsage(id: number, deepgramAudioMs: number, channels: number): void {
+export function saveDeepgramUsage(
+  id: number,
+  deepgramAudioMs: number,
+  channels: number,
+  provider: TranscriptionProvider = 'deepgram',
+): void {
+  // V08: the audio-ms/channels columns are provider-agnostic "STT minutes ×
+  // channels"; `stt_provider` records which provider billed them so usage
+  // aggregation can price each meeting at the right rate. Call once per meeting
+  // stop (channels is an overwrite, not an add).
   getDb()
     .prepare(
       `UPDATE meetings
        SET deepgram_audio_ms = deepgram_audio_ms + ?,
-           deepgram_channels = ?
+           deepgram_channels = ?,
+           stt_provider = ?
        WHERE id = ?`,
     )
-    .run(Math.round(deepgramAudioMs), channels, id);
+    .run(Math.round(deepgramAudioMs), channels, provider, id);
 }
 
 export function saveClaudeUsage(
@@ -173,22 +184,29 @@ export function getUsageTotals(): UsageTotals {
     .prepare(
       `SELECT
          COALESCE(SUM(deepgram_audio_ms),                      0) AS deepgramAudioMs,
-         COALESCE(SUM(deepgram_audio_ms * deepgram_channels),  0) AS deepgramChannelMs,
+         COALESCE(SUM(CASE WHEN stt_provider = 'gladia'
+                           THEN deepgram_audio_ms * deepgram_channels ELSE 0 END), 0) AS gladiaChannelMs,
+         COALESCE(SUM(CASE WHEN stt_provider IS NULL OR stt_provider = 'deepgram'
+                           THEN deepgram_audio_ms * deepgram_channels ELSE 0 END), 0) AS deepgramChannelMs,
          COALESCE(SUM(claude_input_tokens),                    0) AS claudeInputTokens,
          COALESCE(SUM(claude_output_tokens),                   0) AS claudeOutputTokens
        FROM meetings`,
     )
     .get() as {
     deepgramAudioMs: number;
+    gladiaChannelMs: number;
     deepgramChannelMs: number;
     claudeInputTokens: number;
     claudeOutputTokens: number;
   };
-  // Deepgram bills per channel, and meetings can have different channel counts
-  // (legacy 2-channel vs V05 mono), so cost is summed over billed channel-minutes
-  // rather than a single multiplier on the wall-clock total.
+  // Cloud STT bills per channel, and meetings can have different channel counts
+  // (legacy 2-channel vs V05 mono) and providers (V08 Gladia), so cost is summed
+  // over billed channel-minutes per provider rather than a single multiplier on
+  // the wall-clock total. Whisper (local) contributes nothing. The field name
+  // stays `deepgramCostUsd` for wire compat; it is the aggregate STT cost.
   const deepgramCostUsd =
-    (row.deepgramChannelMs / 1000 / 60) * PRICING.deepgramNovaPerMinutePerChannel;
+    (row.deepgramChannelMs / 1000 / 60) * PRICING.deepgramNovaPerMinutePerChannel +
+    (row.gladiaChannelMs / 1000 / 60) * PRICING.gladiaSolariaPerMinutePerChannel;
   const claudeCostUsd = estimateCost(0, row.claudeInputTokens, row.claudeOutputTokens);
   return {
     deepgramAudioMs: row.deepgramAudioMs,
