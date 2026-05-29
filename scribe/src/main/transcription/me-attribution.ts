@@ -17,6 +17,16 @@ import type { DeepgramWordView } from './parse';
 // via the normalised cross-correlation of the mic and system RMS envelopes
 // and raise the dominance bar in proportion. The user can also force the
 // regime via the AudioCaptureMode setting.
+//
+// V076: V073 left the *zero-bleed* baseline at 1.5×, which is too strict for
+// the common headphones case — a user speaking at normal volume over a
+// normal-volume remote routinely has mic/sys ratios between 1.0 and 1.4 and
+// fell into "Speaker N" runs. V076 re-orients the formula so the dominance
+// bar **interpolates** from 1.0× at bleed=0 up to the (user-overridable)
+// full-bleed cap at bleed=1. Mic floor scaling is unchanged. A second pass
+// inside `attributeWords` adds Me-run hysteresis so a brief mic-energy dip
+// between syllables (or behind a short remote backchannel) doesn't fracture
+// a coherent Me utterance.
 
 /** One per-frame energy reading, keyed to the audio offset (ms) it covers. */
 export type EnergySample = { tMs: number; mic: number; sys: number };
@@ -26,7 +36,12 @@ export type MeAttributionOptions = {
   windowPadMs?: number;
   /** Mic RMS floor — below this the user isn't really speaking (filters silence/noise). */
   micFloor?: number;
-  /** How much the mic must exceed the system level to count as the user. */
+  /**
+   * Mic-vs-system ratio required to call a window Me at **full bleed**
+   * (cross-correlation score = 1). V076 linearly interpolates from
+   * `DOMINANCE_AT_ZERO_BLEED` (1.0×, no leak — mic just needs to match sys)
+   * up to this cap at full bleed. Default `DOMINANCE_AT_FULL_BLEED_DEFAULT`.
+   */
   dominance?: number;
   /**
    * Audio capture regime (V073). 'auto' lets bleed score drive `dominance`
@@ -34,20 +49,39 @@ export type MeAttributionOptions = {
    * Defaults to 'auto'.
    */
   captureMode?: AudioCaptureMode;
+  /**
+   * V076 — internal: multiplier applied to the **final** effective dominance
+   * (after the bleed interpolation). The Me-run hysteresis pass uses this to
+   * relax the bar at both endpoints (zero and full bleed) without callers
+   * needing to know the interpolation shape. Default 1.0.
+   */
+  dominanceMultiplier?: number;
 };
 
-const DEFAULTS: Required<Omit<MeAttributionOptions, 'captureMode'>> = {
+/** V076 — mic-vs-system ratio at bleed=0. Lenient by design: mic just needs to
+ * match sys (combined with `micFloor`, this catches normal-volume Me speech
+ * that V073's 1.5× baseline flipped to "Speaker N"). */
+const DOMINANCE_AT_ZERO_BLEED = 1.0;
+
+/** V076 — default mic-vs-system ratio at bleed=1. Strict by design: under
+ * full mic/sys co-variation (laptop-speaker worst case) the mic must clearly
+ * dominate. Slightly less strict than V073's full-bleed extreme (4.5×, which
+ * was over-strict in practice) while preserving rejection on the existing
+ * borderline-bleed cases. */
+const DOMINANCE_AT_FULL_BLEED_DEFAULT = 4.0;
+
+const DEFAULTS: Required<
+  Omit<MeAttributionOptions, 'captureMode' | 'dominanceMultiplier'>
+> = {
   windowPadMs: 150,
   micFloor: 0.01,
-  dominance: 1.5,
+  dominance: DOMINANCE_AT_FULL_BLEED_DEFAULT,
 };
 
 // ─── Bleed score (V073) ────────────────────────────────────────────────────
 
 /** Rolling window (ms) used by `computeBleedScore`. ~10 s of context. */
 const BLEED_WINDOW_MS = 10_000;
-/** Bleed gain — at full bleed the effective dominance bar is `dominance * (1 + BLEED_GAIN)`. */
-const BLEED_GAIN = 2.0;
 /** At full bleed micFloor scales up by this much (max). */
 const BLEED_FLOOR_GAIN = 1.0;
 /** RMS floor below which a frame is considered silence and excluded from correlation. */
@@ -128,6 +162,11 @@ function applyCaptureMode(bleed: number, mode: AudioCaptureMode | undefined): nu
  *
  * V073: the effective dominance + micFloor are scaled up by the rolling bleed
  * score so a leaky speaker setup stops mis-classifying remote speech as "Me".
+ * V076: the dominance bar now **interpolates** from `DOMINANCE_AT_ZERO_BLEED`
+ * (1.0×) at bleed=0 up to `dominance` (the full-bleed cap, default 4.0×) at
+ * bleed=1, instead of starting at 1.5× and scaling up to 4.5×. The common
+ * headphones case (bleed≈0) is now lenient by design — mic just needs to
+ * match sys (plus exceed the floor).
  */
 export function micDominatedWindow(
   timeline: readonly EnergySample[],
@@ -157,7 +196,15 @@ export function micDominatedWindow(
     computeBleedScore(timeline, endMs),
     options.captureMode,
   );
-  const effDominance = dominance * (1 + BLEED_GAIN * bleed);
+  // V076: linear interpolation from the zero-bleed floor (lenient) to the
+  // full-bleed ceiling (strict). At bleed=0   → 1.0×; at bleed=1 → `dominance`.
+  // The hysteresis pass in `attributeWords` re-runs this check with a relaxed
+  // multiplier so the relaxation reaches the zero-bleed bar (1.0 × 0.7 = 0.7×)
+  // not just the full-bleed cap.
+  const baseEffDominance =
+    DOMINANCE_AT_ZERO_BLEED + (dominance - DOMINANCE_AT_ZERO_BLEED) * bleed;
+  const effDominance =
+    baseEffDominance * (options.dominanceMultiplier ?? 1.0);
   const effFloor = micFloor * (1 + BLEED_FLOOR_GAIN * bleed);
   return mic >= effFloor && mic >= sys * effDominance;
 }
@@ -191,6 +238,17 @@ export function attributeMe(
  * the dominance signal sharp while still absorbing word-boundary jitter. */
 const PER_WORD_WINDOW_PAD_MS = 60;
 
+/** V076 — time window (ms) after a Me word during which the next non-Me word
+ * gets a relaxed dominance bar. 1.5 s comfortably spans inter-syllable gaps
+ * and short remote backchannels ("yeah", "right") without bridging a real
+ * speaker change. */
+const HYSTERESIS_WINDOW_MS = 1500;
+
+/** V076 — multiplier applied to the dominance bar during the hysteresis
+ * window. 0.7 ≈ "30 % more lenient"; mic floor is unchanged so silence still
+ * wins and a true loud remote run still flips off Me cleanly. */
+const HYSTERESIS_DOMINANCE_FACTOR = 0.7;
+
 /** A Deepgram word with its per-word "Me" decision attached. */
 export type AttributedWord = DeepgramWordView & { isMe: boolean };
 
@@ -209,10 +267,17 @@ export function attributeWords(
     windowPadMs: PER_WORD_WINDOW_PAD_MS,
     ...options,
   };
-  const attributed = words.map((w) => ({
+  const attributed: AttributedWord[] = words.map((w) => ({
     ...w,
     isMe: micDominatedWindow(timeline, w.startMs, w.endMs, effective),
   }));
+  // V076: Me-run hysteresis. Once a word is Me, the next ≤ HYSTERESIS_WINDOW_MS
+  // of borderline words get a relaxed dominance bar so a brief mic-energy dip
+  // (between syllables, behind a remote backchannel) doesn't fracture a coherent
+  // Me utterance. Runs *before* the filler-inherit + median-filter passes so
+  // they see the hysteresis-corrected sequence (V075 ROADMAP_03 invariant:
+  // fillers inherit from a coherent non-filler run).
+  applyMeRunHysteresis(attributed, timeline, effective);
   // V075 ROADMAP_03: short isolated fillers (≤ FILLER_INHERIT_MAX_MS) are
   // unreliable per-word dominance subjects — a 100 ms "uh" has too little
   // energy info to classify cleanly. Override their isMe to match the
@@ -220,6 +285,42 @@ export function attributeWords(
   // median filter sees a coherent run.
   inheritShortFillerAttribution(attributed);
   return medianFilterIsMe(attributed);
+}
+
+/**
+ * V076 — Me-run hysteresis. For each non-Me word that starts within
+ * `HYSTERESIS_WINDOW_MS` of the previous Me word's end, re-evaluate it with a
+ * `HYSTERESIS_DOMINANCE_FACTOR`-relaxed dominance bar. If the relaxed check
+ * passes, flip it to Me and slide the cursor forward — so a chain of
+ * marginal words can be rescued from one initial Me anchor, but a true
+ * 2-second remote run breaks the chain (cursor goes stale). Mutates in place.
+ *
+ * The mic floor + bleed scaling are *not* relaxed: silence still loses and a
+ * mic-quiet-system-loud remote run is still rejected by the floor check.
+ */
+function applyMeRunHysteresis(
+  words: AttributedWord[],
+  timeline: readonly EnergySample[],
+  effective: MeAttributionOptions,
+): void {
+  let lastMeEndMs = -Infinity;
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    if (w.isMe) {
+      lastMeEndMs = w.endMs;
+      continue;
+    }
+    if (w.startMs - lastMeEndMs > HYSTERESIS_WINDOW_MS) continue;
+    const relaxed = micDominatedWindow(timeline, w.startMs, w.endMs, {
+      ...effective,
+      dominanceMultiplier:
+        (effective.dominanceMultiplier ?? 1.0) * HYSTERESIS_DOMINANCE_FACTOR,
+    });
+    if (relaxed) {
+      words[i] = { ...w, isMe: true };
+      lastMeEndMs = w.endMs;
+    }
+  }
 }
 
 /** V075 ROADMAP_03 — duration ceiling for the filler-inherit pass (ms). */

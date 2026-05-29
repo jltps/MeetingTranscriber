@@ -38,9 +38,15 @@ describe('micDominatedWindow', () => {
     expect(micDominatedWindow(timeline(500, 0.3, 0.0), 5000, 6000)).toBe(false);
   });
 
-  it('respects the dominance ratio (mic just above system is not enough)', () => {
-    // mic 0.1 vs sys 0.09 → ratio < 1.5 → not dominant.
-    expect(micDominatedWindow(timeline(3000, 0.1, 0.09), 1000, 2000)).toBe(false);
+  it('respects the dominance ratio: mic below sys is not dominant (zero bleed)', () => {
+    // V076: at zero bleed the bar is 1.0× — mic must at least match sys.
+    // mic 0.08 vs sys 0.09 → ratio 0.89 → not dominant.
+    expect(micDominatedWindow(timeline(3000, 0.08, 0.09), 1000, 2000)).toBe(false);
+  });
+
+  it('accepts a mic-at-sys window as Me at zero bleed (V076 lenient baseline)', () => {
+    // V076: 1.0× baseline. mic 0.1 vs sys 0.09 → ratio 1.11 → Me (V073 rejected).
+    expect(micDominatedWindow(timeline(3000, 0.1, 0.09), 1000, 2000)).toBe(true);
   });
 });
 

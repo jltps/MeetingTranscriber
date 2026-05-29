@@ -115,8 +115,12 @@ describe('attributeWords median filter', () => {
     // Long remote stretch, mic-energy-wise.
     const tl: EnergySample[] = [];
     for (let t = 0; t < 4000; t += 100) tl.push({ tMs: t, mic: 0.02, sys: 0.3 });
-    // Inject one tiny mic burst that would falsely flag word w3.
-    for (let t = 1200; t < 1400; t += 100) tl.push({ tMs: t, mic: 0.6, sys: 0.05 });
+    // V076: concentrate the burst on a single frame *inside* the "yes" word
+    // window only, so adjacent words ("plan", "looks") don't see enough
+    // mic energy to flip Me under the new 1.0× zero-bleed bar. This keeps the
+    // median filter as the sole rescue mechanism (hysteresis can't chain
+    // because there is no prior Me anchor).
+    tl.push({ tMs: 1300, mic: 0.8, sys: 0.02 });
     tl.sort((a, b) => a.tMs - b.tMs);
     const words = [
       word('the', 1000, 1150, 4),
