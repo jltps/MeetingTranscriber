@@ -27,6 +27,7 @@ import {
   getSetting,
   getNotesCardView,
   getOnboardingDone,
+  getTranscriptIncludeFillers,
   getTranscriptionProvider,
   getWhisperModel,
   setAudioCaptureMode,
@@ -36,6 +37,7 @@ import {
   setOpenAiBaseUrl,
   setOpenAiModel,
   setQualityMode,
+  setTranscriptIncludeFillers,
   setTranscriptionProvider,
   setWhisperModel,
   setSetting,
@@ -82,6 +84,7 @@ export function registerSettingsIpc(): void {
     theme: themeView(),
     notesCardView: getNotesCardView(),
     audioCaptureMode: getAudioCaptureMode(),
+    transcriptIncludeFillers: getTranscriptIncludeFillers(),
   }));
 
   ipcMain.handle(IPC.settingsSetKeys, (_event, raw) => {
@@ -150,6 +153,10 @@ export function registerSettingsIpc(): void {
 
   ipcMain.handle(IPC.settingsSetAudioCaptureMode, (_event, raw) => {
     setAudioCaptureMode(AudioCaptureModeSchema.parse(raw));
+  });
+
+  ipcMain.handle(IPC.settingsSetTranscriptIncludeFillers, (_event, raw) => {
+    setTranscriptIncludeFillers(z.boolean().parse(raw));
   });
 
   ipcMain.handle(IPC.settingsAcceptPrivacy, () => {

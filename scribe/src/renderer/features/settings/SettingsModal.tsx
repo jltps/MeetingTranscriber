@@ -467,6 +467,29 @@ export function SettingsModal({
         )}
       </div>
 
+      {/* V075 ROADMAP_03 — filler-words capture */}
+      <div className="space-y-1.5">
+        <label className="text-sm text-muted-foreground">Filler words</label>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          value={settings.transcriptIncludeFillers ? 'on' : 'off'}
+          onValueChange={(v) => {
+            if (v) void window.api.settings
+              .setTranscriptIncludeFillers(v === 'on')
+              .then(onChanged);
+          }}
+        >
+          <ToggleGroupItem value="on">Include (uh, um, mm…)</ToggleGroupItem>
+          <ToggleGroupItem value="off">Strip</ToggleGroupItem>
+        </ToggleGroup>
+        <p className="text-[11px] text-muted-foreground">
+          When on, the transcript preserves the seven canonical fillers and renders them
+          subdued. English-only on the Deepgram side. Changes apply on the next recording.
+        </p>
+      </div>
+
       {/* Local Whisper model manager */}
       {provider === 'whisper' && (
         <div className="space-y-3">

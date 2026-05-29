@@ -57,10 +57,11 @@ describe('parseDeepgramWords', () => {
     // No `paragraphs` block in the message → all words get the -1 sentinel
     // (V075 ROADMAP_01) so the V075 grouping/auto-merge fast-path is skipped
     // and V073 behaviour is preserved on responses without paragraphs.
+    // V075 ROADMAP_03: isFiller=false on every non-filler word.
     expect(out.words).toEqual([
-      { text: 'Hi', startMs: 100, endMs: 200, deepgramSpeaker: 3, paragraphIndex: -1 },
-      { text: 'there', startMs: 200, endMs: 400, deepgramSpeaker: 3, paragraphIndex: -1 },
-      { text: 'friend.', startMs: 400, endMs: 700, deepgramSpeaker: 4, paragraphIndex: -1 },
+      { text: 'Hi', startMs: 100, endMs: 200, deepgramSpeaker: 3, paragraphIndex: -1, isFiller: false },
+      { text: 'there', startMs: 200, endMs: 400, deepgramSpeaker: 3, paragraphIndex: -1, isFiller: false },
+      { text: 'friend.', startMs: 400, endMs: 700, deepgramSpeaker: 4, paragraphIndex: -1, isFiller: false },
     ]);
   });
 
@@ -171,6 +172,69 @@ describe('parseDeepgramWords', () => {
       },
     });
     expect(out.words[0].paragraphIndex).toBe(0);
+  });
+
+  // ─── V075 ROADMAP_03 — filler detection ──────────────────────────────────
+
+  it('tags the seven canonical fillers with isFiller=true (case + punctuation tolerant)', () => {
+    const fillers = ['uh', 'Um', 'mhmm.', 'mm-mm,', 'UH-HUH', 'uh-uh!', 'nuh-uh'];
+    const out = parseDeepgramWords({
+      type: 'Results',
+      is_final: true,
+      channel: {
+        alternatives: [
+          {
+            transcript: fillers.join(' '),
+            words: fillers.map((w, i) => ({ word: w, start: i * 0.1, end: i * 0.1 + 0.05 })),
+          },
+        ],
+      },
+    });
+    expect(out.words.map((w) => w.isFiller)).toEqual([true, true, true, true, true, true, true]);
+  });
+
+  it('non-filler tokens with filler substrings stay isFiller=false', () => {
+    const out = parseDeepgramWords({
+      type: 'Results',
+      is_final: true,
+      channel: {
+        alternatives: [
+          {
+            transcript: 'umbrella umm',
+            words: [
+              { word: 'umbrella', start: 0, end: 0.5 },
+              { word: 'umm', start: 0.5, end: 0.7 },
+            ],
+          },
+        ],
+      },
+    });
+    expect(out.words[0].isFiller).toBe(false);
+    expect(out.words[1].isFiller).toBe(false); // 'umm' is not in the canonical set
+  });
+
+  it('drops filler tokens at parse time when includeFillers=false', () => {
+    const out = parseDeepgramWords(
+      {
+        type: 'Results',
+        is_final: true,
+        channel: {
+          alternatives: [
+            {
+              transcript: 'I uh think',
+              words: [
+                { word: 'i', start: 0.0, end: 0.1 },
+                { word: 'uh', start: 0.1, end: 0.2 },
+                { word: 'think', start: 0.2, end: 0.5 },
+              ],
+            },
+          ],
+        },
+      },
+      { includeFillers: false },
+    );
+    expect(out.words.map((w) => w.text)).toEqual(['i', 'think']);
+    expect(out.words.every((w) => !w.isFiller)).toBe(true);
   });
 
   it('word past the last paragraph end → last paragraph index', () => {

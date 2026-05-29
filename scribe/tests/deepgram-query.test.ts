@@ -31,6 +31,28 @@ describe('buildDeepgramQuery', () => {
     expect(buildDeepgramQuery(base, { mode: 'auto' }).has('diarize_model')).toBe(false);
   });
 
+  // V075 ROADMAP_03 — filler_words is English-only per Deepgram.
+  it('sets filler_words=true for English fixed', () => {
+    expect(buildDeepgramQuery(base, { mode: 'fixed', bcp47: 'en' }).get('filler_words')).toBe('true');
+    expect(buildDeepgramQuery(base, { mode: 'fixed', bcp47: 'en-US' }).get('filler_words')).toBe('true');
+  });
+
+  it('sets filler_words=true for auto language (nova-3 multilingual mode)', () => {
+    expect(buildDeepgramQuery(base, { mode: 'auto' }).get('filler_words')).toBe('true');
+  });
+
+  it('omits filler_words for non-English fixed languages', () => {
+    expect(buildDeepgramQuery(base, { mode: 'fixed', bcp47: 'pt-PT' }).has('filler_words')).toBe(false);
+    expect(buildDeepgramQuery(base, { mode: 'fixed', bcp47: 'es' }).has('filler_words')).toBe(false);
+  });
+
+  it('omits filler_words when includeFillers=false regardless of language', () => {
+    expect(
+      buildDeepgramQuery(base, { mode: 'fixed', bcp47: 'en' }, false).has('filler_words'),
+    ).toBe(false);
+    expect(buildDeepgramQuery(base, { mode: 'auto' }, false).has('filler_words')).toBe(false);
+  });
+
   // Regression guard: nova-3 streaming rejects detect_language with HTTP 400 (V05).
   it('NEVER uses detect_language', () => {
     expect(buildDeepgramQuery(base, { mode: 'auto' }).has('detect_language')).toBe(false);

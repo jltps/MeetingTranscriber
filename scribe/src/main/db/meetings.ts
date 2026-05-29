@@ -253,11 +253,14 @@ export function insertTranscriptSegment(meetingId: number, seg: TranscriptSegmen
     seg.paragraphBreaks && seg.paragraphBreaks.length > 0
       ? JSON.stringify(seg.paragraphBreaks)
       : null;
+  const wordSpansJson =
+    seg.wordSpans && seg.wordSpans.length > 0 ? JSON.stringify(seg.wordSpans) : null;
   getDb()
     .prepare(
       `INSERT INTO transcript_segments
-         (meeting_id, channel, speaker_label, text, start_ms, end_ms, paragraph_breaks_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         (meeting_id, channel, speaker_label, text, start_ms, end_ms,
+          paragraph_breaks_json, word_spans_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       meetingId,
@@ -267,6 +270,7 @@ export function insertTranscriptSegment(meetingId: number, seg: TranscriptSegmen
       Math.round(seg.startMs),
       Math.round(seg.endMs),
       paragraphBreaksJson,
+      wordSpansJson,
     );
 }
 
@@ -306,7 +310,8 @@ export function getEnhancerSegments(meetingId: number): EnhancerSegment[] {
 export function getTranscript(meetingId: number): PersistedSegment[] {
   const rows = getDb()
     .prepare(
-      `SELECT id, channel, speaker_label, text, start_ms, end_ms, paragraph_breaks_json
+      `SELECT id, channel, speaker_label, text, start_ms, end_ms,
+              paragraph_breaks_json, word_spans_json
        FROM transcript_segments WHERE meeting_id = ? ORDER BY start_ms, id`,
     )
     .all(meetingId) as Array<SegmentRow & { id: number }>;
@@ -329,6 +334,26 @@ export function getTranscript(meetingId: number): PersistedSegment[] {
         }
       } catch {
         // Corrupt JSON shouldn't break a transcript read — fall through.
+      }
+    }
+    // V075 ROADMAP_03 — wordSpans (currently filler spans) for muted renderer styling.
+    if (r.word_spans_json) {
+      try {
+        const parsed = JSON.parse(r.word_spans_json);
+        if (
+          Array.isArray(parsed) &&
+          parsed.every(
+            (s) =>
+              s &&
+              typeof s.start === 'number' &&
+              typeof s.end === 'number' &&
+              typeof s.isFiller === 'boolean',
+          )
+        ) {
+          base.wordSpans = parsed;
+        }
+      } catch {
+        // Corrupt JSON shouldn't break a transcript read.
       }
     }
     return base;

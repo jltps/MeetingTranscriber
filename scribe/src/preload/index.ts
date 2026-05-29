@@ -116,6 +116,8 @@ const api: ScribeApi = {
     setNotesCardView: (view) => ipcRenderer.invoke(IPC.settingsSetNotesCardView, view),
     setAudioCaptureMode: (mode) =>
       ipcRenderer.invoke(IPC.settingsSetAudioCaptureMode, mode),
+    setTranscriptIncludeFillers: (include) =>
+      ipcRenderer.invoke(IPC.settingsSetTranscriptIncludeFillers, include),
     test: (provider, key) => ipcRenderer.invoke(IPC.settingsTest, { provider, key }),
     acceptPrivacy: () => ipcRenderer.invoke(IPC.settingsAcceptPrivacy),
     completeOnboarding: () => ipcRenderer.invoke(IPC.settingsCompleteOnboarding),

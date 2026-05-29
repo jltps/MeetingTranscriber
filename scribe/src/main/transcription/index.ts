@@ -1,7 +1,12 @@
 import { DeepgramSession } from './deepgram';
 import { WhisperSession } from './whisper';
 import { getDeepgramKey } from '../secrets/api-keys';
-import { getLanguage, getTranscriptionProvider, getWhisperModel } from '../db/settings';
+import {
+  getLanguage,
+  getTranscriptIncludeFillers,
+  getTranscriptionProvider,
+  getWhisperModel,
+} from '../db/settings';
 import type { TranscriptionSession } from './session';
 import type { DeepgramWordView } from './parse';
 import type { TranscriptSegment } from '../../shared/types';
@@ -41,10 +46,13 @@ export function createTranscriptionSession(
     return session;
   }
 
-  // Default: Deepgram (existing path, unchanged).
+  // Default: Deepgram (existing path, unchanged besides V075 ROADMAP_03's
+  // includeFillers gate — snapshotted on session start so mid-meeting toggles
+  // require Stop/Start, matching the V073 captureMode pattern).
   const session = new DeepgramSession({
     apiKey: getDeepgramKey() ?? '',
     languageSetting: getLanguage(),
+    includeFillers: getTranscriptIncludeFillers(),
     onLanguageDetected: config.onLanguageDetected,
     onStatus: config.onStatus,
   });

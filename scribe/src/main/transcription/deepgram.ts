@@ -23,6 +23,12 @@ export type DeepgramConfig = {
    * mode uses `multi` — nova-3's multilingual/code-switching mode.
    */
   languageSetting?: LanguageSetting;
+  /**
+   * V075 ROADMAP_03 — whether to send `filler_words=true`. Defaults to true; the
+   * IPC layer snapshots the `transcript_include_fillers` setting on session
+   * start and passes it through.
+   */
+  includeFillers?: boolean;
   /** Called once when the first detected_language is returned by Deepgram. */
   onLanguageDetected?: (bcp47: string) => void;
   /**
@@ -49,6 +55,9 @@ export type DeepgramConfig = {
 //     block whose boundaries are influenced by speaker changes; the per-word
 //     attribution + grouping layer (V075 ROADMAP_02) uses it to collapse
 //     fragmented remote-speaker runs.
+//   - `filler_words=true` (V075 ROADMAP_03) — preserves the seven canonical
+//     fillers Deepgram otherwise strips. English only per Deepgram docs, so
+//     we gate it on `language=en*` or `auto` (nova-3 multilingual mode).
 //
 // nova-3 streaming language rules (developers.deepgram.com/docs):
 //   - `detect_language` is NOT supported on streaming — using it returns HTTP 400.
@@ -57,6 +66,12 @@ export type DeepgramConfig = {
 export function buildDeepgramQuery(
   opts: { sampleRate: number; channels: number },
   languageSetting?: LanguageSetting,
+  /**
+   * V075 ROADMAP_03 — when true (the default), sends `filler_words=true` for
+   * English/auto streams so Deepgram preserves uh/um/mhmm/etc. instead of
+   * stripping them. When false, the param is omitted regardless of language.
+   */
+  includeFillers: boolean = true,
 ): URLSearchParams {
   const params = new URLSearchParams({
     model: 'nova-3',
@@ -83,6 +98,14 @@ export function buildDeepgramQuery(
 
   const setting = languageSetting ?? { mode: 'fixed', bcp47: 'en' };
   params.set('language', setting.mode === 'auto' ? 'multi' : setting.bcp47);
+  // V075 ROADMAP_03 — filler_words is English-only per Deepgram. For 'auto'
+  // (nova-3 multilingual mode) we still set it because Deepgram tolerates
+  // the param and only surfaces fillers on English finals.
+  if (includeFillers) {
+    const isEnglishOrAuto =
+      setting.mode === 'auto' || setting.bcp47.toLowerCase().startsWith('en');
+    if (isEnglishOrAuto) params.set('filler_words', 'true');
+  }
   return params;
 }
 
@@ -184,7 +207,11 @@ export class DeepgramSession implements TranscriptionSession {
 
   /** Open (or re-open) a WebSocket connection with the given audio parameters. */
   private openSocket(opts: { sampleRate: number; channels: number }): Promise<void> {
-    const params = buildDeepgramQuery(opts, this.config.languageSetting);
+    const params = buildDeepgramQuery(
+      opts,
+      this.config.languageSetting,
+      this.config.includeFillers ?? true,
+    );
 
     return new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(`${DEEPGRAM_URL}?${params.toString()}`, {
@@ -233,8 +260,14 @@ export class DeepgramSession implements TranscriptionSession {
         // own-voice doesn't get scattered across Deepgram speaker IDs. The IPC layer
         // owns the energy timeline and does attribution + regrouping there. Interim
         // results and the legacy 2-channel path keep using parseDeepgramMessage.
+        // V075 ROADMAP_03: even when filler_words=true isn't sent on the wire,
+        // Deepgram still returns 5 of the 7 fillers (only uh/um are stripped by
+        // default). Strip them at the parser when the user opted out so the UX
+        // matches "no fillers anywhere".
         if (opts.channels === 1 && this.wordsCb) {
-          const { words, isFinal } = parseDeepgramWords(parsed);
+          const { words, isFinal } = parseDeepgramWords(parsed, {
+            includeFillers: this.config.includeFillers ?? true,
+          });
           if (isFinal && words.length > 0) {
             this.wordsCb(words);
             return;

@@ -213,7 +213,48 @@ export function attributeWords(
     ...w,
     isMe: micDominatedWindow(timeline, w.startMs, w.endMs, effective),
   }));
+  // V075 ROADMAP_03: short isolated fillers (≤ FILLER_INHERIT_MAX_MS) are
+  // unreliable per-word dominance subjects — a 100 ms "uh" has too little
+  // energy info to classify cleanly. Override their isMe to match the
+  // nearest non-filler neighbour BEFORE the median filter runs so the
+  // median filter sees a coherent run.
+  inheritShortFillerAttribution(attributed);
   return medianFilterIsMe(attributed);
+}
+
+/** V075 ROADMAP_03 — duration ceiling for the filler-inherit pass (ms). */
+const FILLER_INHERIT_MAX_MS = 200;
+
+/**
+ * V075 ROADMAP_03 — short fillers inherit their nearest non-filler neighbour's
+ * `isMe`. Walks once, preferring the previous non-filler word; falls back to
+ * the next. Mutates in place — runs on the array `attributeWords` is about
+ * to return, so the median-filter pass after sees the cleaned-up run.
+ */
+function inheritShortFillerAttribution(words: AttributedWord[]): void {
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    if (!w.isFiller) continue;
+    if (w.endMs - w.startMs > FILLER_INHERIT_MAX_MS) continue;
+    // Previous non-filler.
+    let donor: AttributedWord | null = null;
+    for (let j = i - 1; j >= 0; j--) {
+      if (!words[j].isFiller) {
+        donor = words[j];
+        break;
+      }
+    }
+    // Fall back to next non-filler.
+    if (!donor) {
+      for (let j = i + 1; j < words.length; j++) {
+        if (!words[j].isFiller) {
+          donor = words[j];
+          break;
+        }
+      }
+    }
+    if (donor && donor.isMe !== w.isMe) words[i] = { ...w, isMe: donor.isMe };
+  }
 }
 
 /**
@@ -278,6 +319,8 @@ export function groupAttributedWords(
     parts: string[];
     /** Character offsets into the joined text where paragraphIndex increased. */
     paragraphBreaks: number[];
+    /** V075 ROADMAP_03 — filler spans inside the joined text (char offsets). */
+    fillerSpans: { start: number; end: number }[];
     /** Running character length of `parts.join(' ')` — kept in sync as parts grows. */
     joinedLength: number;
     startMs: number;
@@ -304,6 +347,9 @@ export function groupAttributedWords(
           isFinal: true,
         };
     if (r.paragraphBreaks.length > 0) base.paragraphBreaks = r.paragraphBreaks;
+    if (r.fillerSpans.length > 0) {
+      base.wordSpans = r.fillerSpans.map((s) => ({ ...s, isFiller: true }));
+    }
     segments.push(base);
     meta.push({ firstParagraph: r.firstParagraph, lastParagraph: r.lastParagraph });
   };
@@ -317,6 +363,7 @@ export function groupAttributedWords(
         lastParagraph: w.paragraphIndex,
         parts: [w.text],
         paragraphBreaks: [],
+        fillerSpans: w.isFiller ? [{ start: 0, end: w.text.length }] : [],
         joinedLength: w.text.length,
         startMs: w.startMs,
         endMs: w.endMs,
@@ -335,6 +382,7 @@ export function groupAttributedWords(
         lastParagraph: w.paragraphIndex,
         parts: [w.text],
         paragraphBreaks: [],
+        fillerSpans: w.isFiller ? [{ start: 0, end: w.text.length }] : [],
         joinedLength: w.text.length,
         startMs: w.startMs,
         endMs: w.endMs,
@@ -348,9 +396,13 @@ export function groupAttributedWords(
         run.paragraphBreaks.push(run.joinedLength + 1);
         run.lastParagraph = w.paragraphIndex;
       }
+      const wordStart = run.joinedLength + 1; // skip the space separator
       run.parts.push(w.text);
       run.joinedLength += 1 + w.text.length; // space + word
       run.endMs = w.endMs;
+      if (w.isFiller) {
+        run.fillerSpans.push({ start: wordStart, end: wordStart + w.text.length });
+      }
     }
   }
   if (run) flush(run);
@@ -416,7 +468,9 @@ function autoMergeAdjacentSpeakers(
         // a new fragmented segment. Keep prev's `speakerLabel` (the earlier one).
         // paragraphBreaks: keep prev's; if the seg crosses a paragraph boundary
         // relative to prev's end, record a break at the join offset (where seg's
-        // text starts inside the merged text).
+        // text starts inside the merged text). wordSpans (V075 ROADMAP_03):
+        // shift seg's spans by the offset and concatenate so filler positions
+        // stay correct across the merge.
         const mergedText = `${prev.text} ${seg.text}`.trim();
         const breaks = prev.paragraphBreaks ? [...prev.paragraphBreaks] : [];
         if (
@@ -430,12 +484,21 @@ function autoMergeAdjacentSpeakers(
           const offset = prev.text.length + 1;
           for (const b of seg.paragraphBreaks) breaks.push(b + offset);
         }
+        const spans = prev.wordSpans ? [...prev.wordSpans] : [];
+        if (seg.wordSpans) {
+          const offset = prev.text.length + 1;
+          for (const s of seg.wordSpans) {
+            spans.push({ start: s.start + offset, end: s.end + offset, isFiller: s.isFiller });
+          }
+        }
         const merged: TranscriptSegment = {
           ...prev,
           text: mergedText,
           endMs: seg.endMs,
         };
         if (breaks.length > 0) merged.paragraphBreaks = breaks;
+        if (spans.length > 0) merged.wordSpans = spans;
+        else delete merged.wordSpans;
         out[out.length - 1] = merged;
         if (segMeta) {
           outMeta[outMeta.length - 1] = {

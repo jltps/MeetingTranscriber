@@ -26,6 +26,14 @@ export type TranscriptSegment = {
    * DB column stays NULL on the vast majority of rows).
    */
   paragraphBreaks?: number[];
+  /**
+   * V075 ROADMAP_03: optional per-word character spans for renderer-side
+   * styling. Currently only carries filler-word ranges; the renderer wraps
+   * each `isFiller: true` span in a muted/italic style so transcript
+   * fidelity wins without filler tokens stealing visual focus. Ascending,
+   * non-overlapping. Absent when the segment has no fillers.
+   */
+  wordSpans?: { start: number; end: number; isFiller: boolean }[];
 };
 
 /** A persisted transcript segment (carries its DB id, for source linking §8.4). */

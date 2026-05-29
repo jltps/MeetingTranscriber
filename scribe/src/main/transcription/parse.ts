@@ -34,6 +34,11 @@ type DeepgramWord = {
  *             exactly on responses without paragraphs (and on the legacy
  *             multichannel path).
  * Always-present field (not optional) so consumers don't need `undefined` checks.
+ *
+ * V075 ROADMAP_03: `isFiller` flags one of the seven canonical fillers
+ * Deepgram preserves under `filler_words=true`. Always present (false on
+ * non-fillers). Used by attribution + grouping to keep short isolated
+ * fillers from polluting the dominance heuristic.
  */
 export type DeepgramWordView = {
   text: string;
@@ -41,7 +46,31 @@ export type DeepgramWordView = {
   endMs: number;
   deepgramSpeaker: number;
   paragraphIndex: number;
+  isFiller: boolean;
 };
+
+/**
+ * V075 ROADMAP_03 — the seven canonical fillers Deepgram preserves under
+ * `filler_words=true`. Lowercased, no punctuation. Detection runs on the
+ * *unpunctuated* `word` field so trailing commas/periods don't break the match.
+ */
+export const FILLER_TOKENS: ReadonlySet<string> = new Set([
+  'uh',
+  'um',
+  'mhmm',
+  'mm-mm',
+  'uh-uh',
+  'uh-huh',
+  'nuh-uh',
+]);
+
+function detectFiller(rawWord: string): boolean {
+  const normalized = rawWord
+    .toLowerCase()
+    // strip leading/trailing punctuation but keep internal hyphens (mm-mm etc.)
+    .replace(/^[^\p{L}\p{N}-]+|[^\p{L}\p{N}-]+$/gu, '');
+  return FILLER_TOKENS.has(normalized);
+}
 
 /**
  * V075 ROADMAP_01: shape of one entry inside `alternative.paragraphs.paragraphs`
@@ -118,8 +147,16 @@ export function parseDeepgramMessage(
  * for non-`Results` messages, results with no alternatives, empty transcripts,
  * and interim results (the per-word path is final-only). `channel_index` is
  * intentionally ignored — only the legacy multichannel parser cares about it.
+ *
+ * V075 ROADMAP_03 — when `includeFillers` is false, filler tokens are dropped
+ * at the parser stage so they never reach attribution or the DB. This matches
+ * Deepgram's default-strip behaviour exactly, independent of whether the wire
+ * actually sent `filler_words=true`.
  */
-export function parseDeepgramWords(message: unknown): {
+export function parseDeepgramWords(
+  message: unknown,
+  opts?: { includeFillers?: boolean },
+): {
   words: DeepgramWordView[];
   isFinal: boolean;
 } {
@@ -132,17 +169,24 @@ export function parseDeepgramWords(message: unknown): {
   const transcript = alternative?.transcript?.trim();
   if (!alternative || !transcript) return { words: [], isFinal };
 
+  const includeFillers = opts?.includeFillers ?? true;
   const rawWords = alternative.words ?? [];
   // V075 ROADMAP_01: extract paragraph boundaries (start/end in seconds, same
-  // origin as `word.start`). When absent, every word gets `paragraphIndex=0`.
+  // origin as `word.start`). When absent, every word gets `paragraphIndex=-1`.
   const paragraphs: DeepgramParagraph[] = alternative.paragraphs?.paragraphs ?? [];
-  const words: DeepgramWordView[] = rawWords.map((w) => ({
-    text: w.punctuated_word ?? w.word,
-    startMs: w.start * 1000,
-    endMs: w.end * 1000,
-    deepgramSpeaker: w.speaker ?? 0,
-    paragraphIndex: assignParagraphIndex(w.start, paragraphs),
-  }));
+  const words: DeepgramWordView[] = [];
+  for (const w of rawWords) {
+    const isFiller = detectFiller(w.word);
+    if (isFiller && !includeFillers) continue;
+    words.push({
+      text: w.punctuated_word ?? w.word,
+      startMs: w.start * 1000,
+      endMs: w.end * 1000,
+      deepgramSpeaker: w.speaker ?? 0,
+      paragraphIndex: assignParagraphIndex(w.start, paragraphs),
+      isFiller,
+    });
+  }
   return { words, isFinal };
 }
 

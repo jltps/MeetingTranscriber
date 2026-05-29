@@ -207,6 +207,23 @@ export function setAudioCaptureMode(m: AudioCaptureMode): void {
   setSetting('audio_capture_mode', AudioCaptureModeSchema.parse(m));
 }
 
+// ── Filler-words capture (V075 ROADMAP_03) ─────────────────────────────────
+
+/**
+ * V075 ROADMAP_03 — whether the transcript preserves the seven canonical
+ * fillers Deepgram otherwise strips. Defaults to true (Deepgram's default
+ * stripping is reversed under V075). Persisted as '1' / '0' in KV settings.
+ */
+export function getTranscriptIncludeFillers(): boolean {
+  const raw = getSetting('transcript_include_fillers');
+  if (raw === null) return true; // default on
+  return raw !== '0';
+}
+
+export function setTranscriptIncludeFillers(include: boolean): void {
+  setSetting('transcript_include_fillers', include ? '1' : '0');
+}
+
 // Leaves nothing behind (PRODUCT_SPEC.md §7): meetings + children + FTS + every
 // setting, including the encrypted API keys.
 export function wipeAllData(): void {

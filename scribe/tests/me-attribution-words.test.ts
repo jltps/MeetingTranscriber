@@ -23,8 +23,9 @@ function word(
   // the Deepgram response has no `paragraphs` block). Tests that don't care
   // about paragraphs use this default so grouping falls back to V073 behaviour.
   paragraphIndex: number = -1,
+  isFiller: boolean = false,
 ): DeepgramWordView {
-  return { text, startMs, endMs, deepgramSpeaker, paragraphIndex };
+  return { text, startMs, endMs, deepgramSpeaker, paragraphIndex, isFiller };
 }
 
 describe('attributeWords', () => {
@@ -61,7 +62,8 @@ describe('groupAttributedWords', () => {
     deepgramSpeaker: number,
     isMe: boolean,
     paragraphIndex: number = -1,
-  ): AttributedWord => ({ text, startMs, endMs, deepgramSpeaker, isMe, paragraphIndex });
+    isFiller: boolean = false,
+  ): AttributedWord => ({ text, startMs, endMs, deepgramSpeaker, isMe, paragraphIndex, isFiller });
 
   it('returns [] for empty input', () => {
     expect(groupAttributedWords([])).toEqual([]);
@@ -149,7 +151,8 @@ describe('groupAttributedWords + V075 paragraph hints', () => {
     deepgramSpeaker: number,
     isMe: boolean,
     paragraphIndex: number = 0,
-  ): AttributedWord => ({ text, startMs, endMs, deepgramSpeaker, isMe, paragraphIndex });
+    isFiller: boolean = false,
+  ): AttributedWord => ({ text, startMs, endMs, deepgramSpeaker, isMe, paragraphIndex, isFiller });
 
   it('same-paragraph remote fragments auto-merge even when V073 word-rate heuristic would reject', () => {
     // Two ch1 segments from different Deepgram speakers, same paragraph index.
@@ -237,5 +240,67 @@ describe('groupAttributedWords + V075 paragraph hints', () => {
     const ws = [attr('hello', 0, 100, 0, true, 0)];
     const segs = groupAttributedWords(ws);
     expect(segs[0].paragraphBreaks).toBeUndefined();
+  });
+
+  // ─── V075 ROADMAP_03 — filler handling in grouping ───────────────────────
+
+  it('records wordSpans for filler tokens at the correct character offsets', () => {
+    // "I uh think" — "uh" is a filler at offset 2..4 in the joined text.
+    const ws = [
+      attr('I', 0, 100, 0, true, -1, false),
+      attr('uh', 100, 200, 0, true, -1, true),
+      attr('think', 200, 400, 0, true, -1, false),
+    ];
+    const segs = groupAttributedWords(ws);
+    expect(segs).toHaveLength(1);
+    expect(segs[0].text).toBe('I uh think');
+    expect(segs[0].wordSpans).toEqual([{ start: 2, end: 4, isFiller: true }]);
+  });
+
+  it('wordSpans is omitted when no fillers exist', () => {
+    const ws = [attr('hello there', 0, 200, 0, true)];
+    const segs = groupAttributedWords([
+      attr('hello', 0, 100, 0, true),
+      attr('there', 100, 200, 0, true),
+    ]);
+    expect(segs[0].wordSpans).toBeUndefined();
+    expect(ws).toHaveLength(1); // unused; quiet the linter
+  });
+});
+
+describe('attributeWords + V075 filler-inherit pass', () => {
+  it('short isolated filler (<200 ms) inherits the previous non-filler word’s isMe', () => {
+    // Wide-apart words with explicit single samples to keep the 60 ms windowPad
+    // from bleeding into adjacent regions. "I" + "think" land in mic-dominant
+    // samples; "uh" lands in a sys-dominant sample (would classify not-Me on
+    // its own — the inherit pass must flip it back to true).
+    const tl: EnergySample[] = [
+      { tMs: 500, mic: 0.5, sys: 0.05 },   // "I" window [440, 660]
+      { tMs: 1500, mic: 0.02, sys: 0.5 },  // "uh" window [1440, 1660] — sys dominant
+      { tMs: 2500, mic: 0.5, sys: 0.05 },  // "think" window [2440, 2660]
+    ];
+    const words: DeepgramWordView[] = [
+      { text: 'I', startMs: 500, endMs: 600, deepgramSpeaker: 0, paragraphIndex: -1, isFiller: false },
+      { text: 'uh', startMs: 1500, endMs: 1600, deepgramSpeaker: 0, paragraphIndex: -1, isFiller: true },
+      { text: 'think', startMs: 2500, endMs: 2600, deepgramSpeaker: 0, paragraphIndex: -1, isFiller: false },
+    ];
+    const out = attributeWords(words, tl);
+    expect(out.map((w) => w.isMe)).toEqual([true, true, true]);
+  });
+
+  it('long filler (>200 ms) runs through the dominance check normally (no inherit)', () => {
+    // 400 ms "uh" exceeds the FILLER_INHERIT_MAX_MS ceiling — keeps its
+    // dominance result (false here).
+    const tl: EnergySample[] = [
+      { tMs: 500, mic: 0.5, sys: 0.05 },   // "yes" window [440, 660] — Me
+      { tMs: 1700, mic: 0.02, sys: 0.5 },  // "uh" window [1440, 1960] — not Me
+    ];
+    const words: DeepgramWordView[] = [
+      { text: 'yes', startMs: 500, endMs: 600, deepgramSpeaker: 0, paragraphIndex: -1, isFiller: false },
+      // 400 ms duration — over the inherit ceiling.
+      { text: 'uh', startMs: 1500, endMs: 1900, deepgramSpeaker: 0, paragraphIndex: -1, isFiller: true },
+    ];
+    const out = attributeWords(words, tl);
+    expect(out.map((w) => w.isMe)).toEqual([true, false]);
   });
 });

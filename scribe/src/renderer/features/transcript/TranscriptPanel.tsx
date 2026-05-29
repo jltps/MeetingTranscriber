@@ -23,29 +23,54 @@ function formatTime(ms: number): string {
 }
 
 /**
- * V075 ROADMAP_02: render `seg.text` with internal paragraph breaks at
- * `seg.paragraphBreaks` (character offsets, ascending). Each break inserts a
- * blank-line gap inside the segment so long single-speaker monologues are
- * readable. When `paragraphBreaks` is absent or empty, returns the plain text.
+ * V075 ROADMAP_02 + ROADMAP_03: render `seg.text` with:
+ *   - internal paragraph breaks at `seg.paragraphBreaks` (block 02) — each
+ *     offset inserts a blank-line gap so long single-speaker monologues are
+ *     readable;
+ *   - filler tokens at `seg.wordSpans` rendered in a muted/italic style
+ *     (block 03) so transcript fidelity wins without filler tokens stealing
+ *     visual focus.
+ * When neither is present, returns the plain text.
  */
 function renderSegmentText(seg: DisplaySegment): React.ReactNode {
-  const breaks = seg.paragraphBreaks;
-  if (!breaks || breaks.length === 0) return seg.text;
-  const parts: string[] = [];
-  let start = 0;
+  const breaks = seg.paragraphBreaks ?? [];
+  const fillerSpans = (seg.wordSpans ?? []).filter((s) => s.isFiller);
+  if (breaks.length === 0 && fillerSpans.length === 0) return seg.text;
+  // Split text into paragraph chunks first.
+  const chunks: { start: number; end: number }[] = [];
+  let cursor = 0;
   for (const offset of breaks) {
-    if (offset > start && offset <= seg.text.length) {
-      parts.push(seg.text.slice(start, offset).trimEnd());
-      start = offset;
+    if (offset > cursor && offset <= seg.text.length) {
+      chunks.push({ start: cursor, end: offset });
+      cursor = offset;
     }
   }
-  parts.push(seg.text.slice(start));
-  return parts.map((p, i) => (
-    <span key={i}>
-      {i > 0 && <span className="mt-2 block" aria-hidden="true" />}
-      {p}
-    </span>
-  ));
+  chunks.push({ start: cursor, end: seg.text.length });
+  // Within each chunk, weave non-filler + filler runs from fillerSpans.
+  return chunks.map((chunk, i) => {
+    const nodes: React.ReactNode[] = [];
+    let pos = chunk.start;
+    for (const span of fillerSpans) {
+      if (span.end <= chunk.start) continue;
+      if (span.start >= chunk.end) break;
+      const fillerStart = Math.max(span.start, chunk.start);
+      const fillerEnd = Math.min(span.end, chunk.end);
+      if (fillerStart > pos) nodes.push(seg.text.slice(pos, fillerStart));
+      nodes.push(
+        <span key={`f-${i}-${fillerStart}`} className="italic text-muted-foreground">
+          {seg.text.slice(fillerStart, fillerEnd)}
+        </span>,
+      );
+      pos = fillerEnd;
+    }
+    if (pos < chunk.end) nodes.push(seg.text.slice(pos, chunk.end));
+    return (
+      <span key={i}>
+        {i > 0 && <span className="mt-2 block" aria-hidden="true" />}
+        {nodes}
+      </span>
+    );
+  });
 }
 
 // Memoized so React skips re-rendering unchanged rows during rapid segment arrival.

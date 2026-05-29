@@ -94,6 +94,7 @@ export const IPC = {
   settingsSetWhisperModel:          'settings:setWhisperModel',
   settingsSetNotesCardView:         'settings:setNotesCardView', // sidebar meeting-card density (V072 block 05)
   settingsSetAudioCaptureMode:      'settings:setAudioCaptureMode', // V073 — headphones/speakers/auto bias for "Me" attribution
+  settingsSetTranscriptIncludeFillers: 'settings:setTranscriptIncludeFillers', // V075 ROADMAP_03 — preserve uh/um/etc.
   whisperModelsGet:             'whisper:modelsGet',             // → WhisperModelStatus[]
   whisperModelDownload:         'whisper:modelDownload',         // name → void (async)
   whisperModelCancel:           'whisper:modelCancel',           // → void
@@ -170,6 +171,17 @@ export const TranscriptSegmentSchema = z.object({
   // fall inside a single-speaker segment. Optional + ascending; the renderer
   // shows a blank-line break at each offset.
   paragraphBreaks: z.array(z.number().int().nonnegative()).optional(),
+  // V075 ROADMAP_03 — per-word character spans (currently filler-word ranges)
+  // used by the renderer to style filler tokens muted/italic.
+  wordSpans: z
+    .array(
+      z.object({
+        start: z.number().int().nonnegative(),
+        end: z.number().int().nonnegative(),
+        isFiller: z.boolean(),
+      }),
+    )
+    .optional(),
 }) satisfies z.ZodType<TranscriptSegment>;
 
 export const TranscriptionStatusSchema = z.object({
@@ -354,6 +366,12 @@ export type SettingsView = {
    * assumes constant bleed. Defaults to 'auto'.
    */
   audioCaptureMode: AudioCaptureMode;
+  /**
+   * V075 ROADMAP_03 — whether the transcript preserves the seven canonical
+   * fillers (uh, um, mhmm, mm-mm, uh-uh, uh-huh, nuh-uh). English-only on
+   * the Deepgram side. Defaults to true; toggle in Settings → Transcription.
+   */
+  transcriptIncludeFillers: boolean;
 };
 export type TestResult = { ok: boolean; message?: string };
 
@@ -465,6 +483,7 @@ export interface SettingsApi {
   setWhisperModel(model: string): Promise<void>;
   setNotesCardView(view: NotesCardView): Promise<void>;
   setAudioCaptureMode(mode: AudioCaptureMode): Promise<void>;
+  setTranscriptIncludeFillers(include: boolean): Promise<void>;
   test(provider: TestProvider, key?: string): Promise<TestResult>;
   acceptPrivacy(): Promise<void>;
   completeOnboarding(): Promise<void>;
