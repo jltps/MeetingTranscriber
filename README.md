@@ -481,6 +481,7 @@ a one-time OAuth client setup; see [`scribe/docs/CALENDAR_SETUP.md`](scribe/docs
 |---|---|
 | `PRODUCT_SPEC.md` | What v1 was — product vision, flows, audio/transcription design. Historical reference now that v1 ships. |
 | `CLAUDE.md` | **How** the code should look and behave: the §1 invariants, stack, structure, IPC/DB/LLM rules. Auto-loaded by Claude Code. |
+| `SHIPPED_HISTORY.md` | Per-roadmap changelog (V04 → V076 + V0.7.1) — what was built post-v1 and why. Moved out of CLAUDE.md when it crossed the 40 KB soft limit; the "Already shipped beyond v1" runbook step now appends here. |
 | `BUILD_GUIDE.md` | The build *process* — milestone discipline for v1 and the roadmap-driven flow for extensions. |
 | `roadmap/v02/…` | Language, enhancement-prompt control, and templates (shipped). |
 | `roadmap/v03/…` | Reliability, speaker naming, quality, data, Whisper, calendar, cross-meeting (see `ROADMAP_00_INDEX.md`). |
